@@ -1,0 +1,311 @@
+# Völundr: build proposal
+
+*Status: proposal, 2026-09-20. Nothing below is locked until the open
+questions at the end are answered.*
+
+A single-player mazing tower defense in the Warcraft III "maul" tradition
+(Pokemon Maul, Wintermaul, Burbenog): the towers **are** the walls, the
+player draws the maze, and the maze is most of the skill. One codebase,
+three targets: browser (served from our own servers), iOS and Android
+(no network, ever).
+
+The name: *Völundarhús*, "Völundr's house", is the Old Norse word for a
+labyrinth. Working title; easy to change while nothing ships.
+
+## 1. What the game is
+
+The loop, per run:
+
+1. An empty plot. A spawn, one or more **checkpoints**, an exit. Creeps
+   must visit them in order, so a good maze makes them cross the plot
+   several times.
+2. A **build phase**: buy towers with gold, place them on the grid. Every
+   placement is checked so the maze can never be sealed. Send the wave
+   early for a bonus, or let the timer run out.
+3. A **wave**: creeps walk the shortest open path. Towers shoot. Each leak
+   costs a life. Kills pay gold.
+4. Upgrade (evolve) towers in place, sell and rebuild to reshape the maze,
+   repeat for ~50 waves. Lives at zero is defeat; wave 50 cleared is a win.
+
+What makes it *this* genre rather than Kingdom Rush:
+
+- **The path is the player's, not the map's.** Pathing recomputes on every
+  build and sell. Creeps re-route mid-wave.
+- **Waves punish a one-tower strategy.** Flying waves ignore the maze
+  entirely; armored waves shrug off splash; an element chart means each
+  creep wave has towers that hurt it and towers that don't. "Utilizing
+  specific towers" is the second half of the skill.
+- **Gold is tight.** Bounties, wave bonuses and sell refunds are the whole
+  economy. Every tower placed as a wall is gold not spent on damage.
+
+## 2. The two requirements that shape everything
+
+| requirement | consequence |
+| --- | --- |
+| Mobile plays with **no network in any form** | The game must be complete on-device: rules, content, saves, progression. The server cannot own anything the game needs. |
+| Web plays **off our servers** | The web build is the same game plus optional server features (cloud save, leaderboards). The server is *additive*, never *required*. |
+
+So the architecture is **local-first, server-optional**. The single most
+important design rule that follows: the game simulation is a pure,
+deterministic library with no I/O. It runs identically in a phone
+WebView, in a browser tab, and headless on a server verifying a replay.
+
+## 3. Engine recommendation: Phaser 3 + Capacitor, in TypeScript
+
+| option | web | iOS/Android | offline by construction | fit for us |
+| --- | --- | --- | --- | --- |
+| **Phaser 3 + Capacitor** (recommended) | first-class, ~1 MB | WebView shell with bundled assets | yes | One language end to end; the sim runs on the server too; deploys as a static site like every other homelab stack. |
+| Godot 4 (GDScript or C#) | export, 30 MB+ wasm, historically fragile on iOS Safari | native exports, good | yes | Real editor, better for particle-heavy visuals. Web is the weakest target and it is our primary one. |
+| Defold (Lua) | small web builds | native, good | yes | Solid and small; smaller ecosystem, Lua only, no sim sharing with a TS server. |
+| Unity | poor on mobile browsers | excellent | yes | Heavy, licensing churn, web is an afterthought. |
+| Flutter + Flame (Dart) | acceptable | excellent | yes | Fine choice; Dart is a second language for everything else we run. |
+
+Why Phaser + Capacitor wins for this project specifically:
+
+- **The web target is not an export, it is the native home.** Everything
+  else on that list treats the browser as a secondary output.
+- **One language, one sim.** The simulation package is plain TypeScript
+  with no engine dependency. The server re-runs it to verify leaderboard
+  submissions. A Godot sim could not do that without a second
+  implementation.
+- **Offline is the default, not a setting.** Capacitor packages the built
+  web bundle into the app. Nothing is fetched at runtime unless code asks
+  for it, and the mobile app will not contain that code (section 6).
+- **It matches the existing toolchain**: Vite, vitest, Docker, one
+  container behind cloudflared on beelink. No new build farm.
+- **Grid TD does not need an editor.** The content is tables (towers,
+  creeps, waves, maps). A scene editor would be idle.
+
+Known costs, and the mitigation for each:
+
+- *Performance ceiling.* WebGL 2D on a modern phone comfortably handles
+  the target (up to ~300 live creeps, ~250 towers, a few hundred
+  projectiles). Object pooling, sprite batching, and a fixed sim tick keep
+  it there. A profiling gate runs on a mid-range Android before M3 ends.
+- *WebView variance.* iOS uses WKWebView (Safari's engine); Android uses
+  the system WebView, updated through Play. Both are current-generation
+  browsers. We test on the oldest OS we ship to (proposal: iOS 16+,
+  Android 10+).
+- *No engine-level scene tooling.* Accepted; see above.
+
+Runner-up if visuals ever outgrow this: Godot 4 for the mobile builds,
+keeping the sim and web as they are. The sim/renderer split (section 4)
+is what keeps that door open.
+
+## 4. Architecture
+
+```
+            commands (build, sell, upgrade, send wave)
+   input ─────────────────────────────────────────────▶ ┌────────────────┐
+                                                        │  @volundr/sim  │  pure TS
+   render ◀──────────────────────────────────────────── │  fixed 20 Hz   │  no DOM, no I/O
+            state snapshot (plain data), events         │  seeded RNG    │  no Math.random
+                                                        └────────────────┘
+                     ▲                                          ▲
+        @volundr/game (Phaser)                          @volundr/content (data)
+        draws state, interpolates between ticks         towers, creeps, waves, maps
+                     ▲                                  schema-validated at build
+        ┌────────────┴─────────────┐
+   apps/web                   apps/mobile
+   Vite static bundle         Capacitor iOS + Android
+   + @volundr/net             (no net package at all)
+        │
+   apps/server (web only): cloud save, leaderboards, replay verification
+```
+
+### 4.1 The simulation (`@volundr/sim`)
+
+- **Fixed tick, 20 Hz** (WC3 ran its game loop at a similar rate). The
+  renderer runs at the display's rate and interpolates. Game speed 1x/2x/3x
+  is just more ticks per frame.
+- **Deterministic by construction.** Seeded PRNG (already in the repo).
+  Integer math for anything that accumulates: positions in 1/1000ths of a
+  cell, distances in integer step costs, damage as integers. No
+  `Math.sin`/`Math.pow` in the sim; lookup tables where needed.
+  IEEE-754 `+ - * / sqrt` are exact across engines, transcendental
+  functions are not.
+- **Commands in, state out.** The only way to change the game is a command
+  with a tick number. A run is fully described by `(seed, content version,
+  command log)`, which is a few KB. That is the save file *and* the replay
+  *and* the anti-cheat.
+- **Pathing is a flow field**, one per lane leg, recomputed on every build
+  or sell (sub-millisecond on a 30x40 grid). Creeps carry no path; each
+  tick they step to the lowest-distance neighbour. Re-routing when the
+  maze changes is free. Eight directions, no corner cutting, so two towers
+  touching at a corner form a wall exactly as in WC3. **Already
+  implemented and tested** in `packages/sim/src/flowfield.ts` and
+  `lane.ts`, including the exact "would this tower seal the maze" check.
+
+### 4.2 Content as data (`@volundr/content`)
+
+Towers, creeps, waves, the element chart and maps live in JSON validated
+by a schema at build time. Balance changes are data changes. A headless
+**balance harness** runs thousands of seeded games against scripted mazes
+and reports leak rates per wave, so "wave 23 is a wall" is a number in CI,
+not a Reddit thread.
+
+### 4.3 The client (`@volundr/game`)
+
+Phaser 3 scenes for board, HUD, tower sheet, wave preview, results. It
+holds no rules. Platform services (save storage, and on web only the
+network client) are injected at startup by the app shell, never imported
+by the game package. That injection point is what lets the mobile shell
+prove it has no network code.
+
+### 4.4 Saves and progression
+
+One versioned JSON save format, identical on every platform: profile
+(stars, unlocks, settings), and an in-progress run as `(seed, command
+log)` so a phone can be closed mid-wave and resumed exactly. Migrations
+are a numbered list. Mobile stores it through Capacitor's filesystem API;
+web stores it in IndexedDB and, when signed in, syncs it.
+
+## 5. Game design, v1 scope
+
+Enough to answer "is this fun on a phone", not the whole vision.
+
+**Board.** Portrait. A 20-wide by 28-tall build grid fits a phone with the
+HUD below. Spawn top, exit bottom, two checkpoints on alternating sides so
+the natural maze is a long S. One map for v1; the map format supports
+terrain cells that can never be built on.
+
+**Towers.** 1x1 cells (touch-friendly; a 2x2 WC3 footprint on a phone
+makes gaps too fiddly to place, and drag-to-paint gives the same "wall
+fast" feel). Six element lines, three tiers each, upgraded in place. Each
+line has a role beyond its element:
+
+| line | element | role |
+| --- | --- | --- |
+| Ember | fire | splash damage |
+| Tide | water | slow |
+| Bloom | grass | poison over time, cheap wall |
+| Volt | electric | chain lightning, anti-air |
+| Stone | rock | high single-target, armor shred |
+| Wraith | ghost | hits stealth, true damage, expensive |
+
+Element chart: each element does 2x to one, 0.5x to one, 1x otherwise.
+Small enough to learn in a run, big enough that no line carries alone.
+(Names are placeholders, and deliberately not Pokemon's: no Nintendo
+names, sprites or type chart.)
+
+**Creeps.** Eight archetypes, each also carrying an element: normal,
+fast, tank, flying (ignores the maze, straight line spawn to exit, only
+anti-air towers can target), swarm (many, weak), splitter (dies into two),
+regenerator, shielded (first N hits do nothing). A boss every tenth wave.
+
+**Economy.** Starting gold; a bounty per kill; a wave-clear bonus; an
+early-send bonus that scales with the seconds left on the build timer.
+Selling refunds 80% during a build phase and 60% during a wave. No
+interest, no passive income: v1 rewards killing, not banking. Upgrades
+cost roughly 1.5x the previous tier.
+
+**Lives.** 20. A leak costs 1, a boss leak costs 5.
+
+**Wave flow.** Build phase with a 30-second timer and a "send now" button.
+Waves do not overlap in v1. Fifty waves, the wave list visible one wave
+ahead with element and archetype shown, so the player can prepare the
+right towers.
+
+**Juggling** (selling and rebuilding to bounce creeps back and forth) is
+allowed in v1. The block check keeps it honest and the 60% in-wave refund
+makes it cost something. It is a classic maul skill and the flow field
+makes it work exactly as in WC3. Easy to restrict later by locking cells
+within N of a creep during a wave.
+
+**Controls.** Tap a cell with a tower selected to place a ghost, tap
+again to confirm; drag to paint the cheapest tower along a line; tap a
+tower for its sheet (upgrade, sell, range, stats); long-press to sell;
+pinch to zoom; free undo of the last placement during a build phase.
+Web adds hotkeys and mouse hover ranges.
+
+**Meta.** Stars per run (lives kept, waves cleared, gold unspent) unlock
+tower lines and, later, builders (curated rosters like Pokemon Maul's
+starter choice), an endless mode, and a daily seeded run that the web
+build can put on a leaderboard.
+
+## 6. Platform contracts
+
+### Mobile: no network, provably
+
+- `apps/mobile` does not depend on `@volundr/net`. The game package
+  cannot import it either; the network client is injected by the web shell
+  only.
+- CI builds the mobile bundle and **fails if the output references**
+  `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, or
+  `navigator.sendBeacon`. Phaser's own loader uses XHR for assets, so the
+  mobile build loads assets from a preloaded manifest embedded at build
+  time instead, and the check is exact rather than a grep with exceptions.
+- No analytics, no crash reporter, no ads, no remote config, no update
+  prompts. Capacitor's `server.url` is unset, `allowNavigation` is empty.
+  The iOS app declares no network entitlements it does not need.
+- Every asset ships in the binary. Target size under 40 MB.
+
+### Web: served from our servers, works without them
+
+- Static bundle, one container behind cloudflared on beelink, deployed by
+  the same Komodo path as every other stack. A service worker makes it a
+  PWA so a dropped connection mid-run changes nothing.
+- `apps/server` (Hono on Node, Postgres): anonymous device identity first,
+  accounts later if wanted; cloud save; daily-seed leaderboard; replay
+  verification by re-running the sim on the submitted command log and
+  comparing the final state hash. The client's claimed score is never
+  trusted.
+
+### Store submission
+
+Capacitor generates the Xcode and Android Studio projects; they are
+checked in. Signing keys, provisioning profiles and store credentials
+live outside the repo. TestFlight and Play's internal track are the M3
+exit criteria.
+
+## 7. Repository layout
+
+```
+volundr/
+  docs/               proposals and design decisions, numbered
+  packages/sim/       the deterministic simulation (started, tested)
+  packages/content/   game data + schemas
+  packages/game/      Phaser client
+  apps/web/           Vite site + net client
+  apps/mobile/        Capacitor iOS/Android shell
+  apps/server/        web-only API
+```
+
+npm workspaces, TypeScript strict, vitest. `npm run check` is the gate.
+
+## 8. Milestones
+
+| milestone | done when | proves |
+| --- | --- | --- |
+| **M0 Scaffold** (this PR) | repo, sim core (grid, flow field, lane rules, RNG), tests green | the sim can be built and tested with no engine at all |
+| **M1 Playable prototype** | one map, 3 tower lines, 10 waves, gold, lives, build phase, Phaser render, playable in a phone browser | *is mazing fun at phone size?* Answer this before touching Capacitor |
+| **M2 Content and feel** | 6 lines x 3 tiers, 8 archetypes, element chart, 50 waves, balance harness, first real art and audio | a full run is worth finishing |
+| **M3 Mobile** | Capacitor shells, touch polish, saves, the no-network CI gate, TestFlight + Play internal | ships offline, provably |
+| **M4 Web server** | server stack deployed, cloud save, daily seed leaderboard, replay verification | web plays off our servers |
+| **M5 Meta** | stars, unlocks, builders, endless | there is a reason to come back |
+
+M1 is deliberately small: the whole bet is that drag-to-build mazing
+feels good on a touchscreen. If it does not, M1 is where we find out.
+
+## 9. Open questions (your call)
+
+1. **Name.** Keep Völundr as the working title?
+2. **Orientation.** Portrait as proposed, or landscape like the WC3
+   original? Portrait wins one-handed play; landscape wins a wider maze.
+3. **Tower footprint.** 1x1 as proposed, or WC3's 2x2 with 1-cell gaps?
+4. **Juggling.** Allowed (proposed), or lock cells near creeps mid-wave?
+5. **Art direction.** Pixel art keeps assets small and the offline
+   binary lean; hand-drawn vector reads better on retina. Either works
+   with the plan.
+6. **Web identity.** Anonymous device IDs only, or accounts (email or
+   OAuth) from the start?
+7. **Monetization.** Assumed none. Say so if that changes; it affects
+   the store setup and the no-network rule on mobile.
+
+## 10. Decisions taken so far
+
+- 2026-09-20: separate repo from arbor; deploys on its own path.
+- 2026-09-20: TypeScript monorepo, npm workspaces (pnpm is a one-line
+  swap if preferred; nothing depends on it).
+- 2026-09-20: simulation is a pure library; eight-direction pathing with
+  no corner cutting; exact block checking; integer costs.

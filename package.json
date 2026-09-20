@@ -1,0 +1,25 @@
+{
+  "name": "volundr",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A single-player mazing tower defense in the WC3 maul tradition. Web plays off servers; iOS and Android play fully offline.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b packages/sim",
+    "check": "npm run typecheck && npm test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}
