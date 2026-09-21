@@ -46,13 +46,20 @@ export interface DinoDef {
   /** milli-cell radius; every invader within it of the target takes full damage */
   readonly splash?: number;
   readonly slow?: { readonly percent: number; readonly ticks: number };
+  /** the target cannot move for this many ticks */
+  readonly stun?: { readonly ticks: number };
+  /** attack this many invaders per cooldown (default 1) */
+  readonly targetCount?: number;
   readonly growsTo?: string;
 }
+
+export type Archetype = "normal" | "fast" | "tank" | "flying" | "swarm" | "splitter" | "regenerator" | "shielded" | "boss";
 
 export interface InvaderDef {
   readonly id: string;
   readonly name: string;
   readonly kind: Kind;
+  readonly archetype: Archetype;
   readonly hp: number;
   /** milli-cells per tick */
   readonly speed: number;
@@ -60,7 +67,12 @@ export interface InvaderDef {
   readonly bounty: number;
   /** eggs eaten on a leak */
   readonly eggs: number;
-  readonly boss?: boolean;
+  /** hp restored per second, applied once a second */
+  readonly regen?: number;
+  /** attacks absorbed before any damage or effect lands */
+  readonly shield?: number;
+  /** on death, spawn these where it died */
+  readonly splitsInto?: { readonly invader: string; readonly count: number };
 }
 
 export interface MigrationGroup {

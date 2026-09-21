@@ -196,7 +196,7 @@ collection:
 | Raptor | Velociraptor → Deinonychus → Utahraptor | fast single-target, leaps at fliers, cheapest wall |
 | Tyrant | Tarbosaurus → Daspletosaurus → Tyrannosaurus | heavy single-target bite, shreds armor |
 | Armored | Nodosaurus → Euoplocephalus → Ankylosaurus | tail-club splash damage |
-| Horned | Protoceratops → Styracosaurus → Triceratops | charge: knockback, short stun |
+| Horned | Protoceratops → Styracosaurus → Triceratops | charge: stops the target cold for a moment |
 | Longneck | Diplodocus → Brachiosaurus → Argentinosaurus | stomp: slows everything in range, long range |
 | Flier | Rhamphorhynchus → Pteranodon → Quetzalcoatlus | the anti-air line; dives on two targets |
 
@@ -304,7 +304,7 @@ npm workspaces, TypeScript strict, vitest. `npm run check` is the gate.
 | --- | --- | --- |
 | **M0 Scaffold** | repo, sim core (grid, flow field, lane rules, RNG), tests green | the sim can be built and tested with no engine at all |
 | **M1 Playable prototype** | one valley, 3 kinds, 10 migrations, meat, eggs, build phase, Phaser render, playable in a phone browser | *is mazing fun at phone size?* Answer this before touching Capacitor |
-| **M2 Content and feel** | 6 kinds x 3 stages, 8 archetypes, kind chart, 50 migrations, balance harness, first real art and audio | a full run is worth finishing |
+| **M2 Content and feel** | 6 kinds x 3 stages, 8 archetypes, kind chart, 50 migrations, balance harness (all done, as shapes), then first real art and audio | a full run is worth finishing |
 | **M3 Mobile** | Capacitor shells, touch polish, saves, the no-network CI gate, TestFlight + Play internal | ships offline, provably |
 | **M4 Web server** | server stack deployed, cloud save, daily seed leaderboard, replay verification | web plays off our servers |
 | **M5 Meta** | fossils, unlocks, packs, endless | there is a reason to come back |
@@ -338,3 +338,10 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   exposure (real genus names, original art, no franchise inventions).
   Working name **Mazeosaur**. Towers are the player's pack; invaders are
   rival migrations; meat is the currency; eggs are lives.
+- 2026-09-21: proceeding on the proposed defaults until overridden:
+  portrait, 1x1 footprint, juggling allowed, anonymous web identity, no
+  monetization. Art direction still open; M2 content ships as shapes.
+- 2026-09-21: invader hp compounds at 10% a migration and bounty at 7%,
+  so late meat still buys late dinosaurs. The balance harness (a scripted
+  player in `packages/content/test`) must survive at least 35 of 50;
+  it reached 46 at this tuning, losing eggs mostly to bosses.

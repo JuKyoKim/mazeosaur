@@ -53,8 +53,8 @@ export const fixture: Content = {
     },
   },
   invaders: {
-    compy: { id: "compy", name: "Compsognathus", kind: "raptor", hp: 10, speed: 250, flying: false, bounty: 3, eggs: 1 },
-    ptero: { id: "ptero", name: "Pteranodon", kind: "flier", hp: 10, speed: 250, flying: true, bounty: 4, eggs: 1 },
+    compy: { id: "compy", name: "Compsognathus", kind: "raptor", archetype: "normal", hp: 10, speed: 250, flying: false, bounty: 3, eggs: 1 },
+    ptero: { id: "ptero", name: "Pteranodon", kind: "flier", archetype: "flying", hp: 10, speed: 250, flying: true, bounty: 4, eggs: 1 },
   },
   migrations: [
     { id: "m1", name: "Compies", groups: [{ invader: "compy", count: 2, spacing: 5 }], clearBonus: 7 },

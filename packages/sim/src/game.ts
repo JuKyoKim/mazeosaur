@@ -39,6 +39,9 @@ export interface Invader {
   next: Point | null;
   slowUntil: number;
   slowPercent: number;
+  stunUntil: number;
+  /** attacks still absorbed */
+  shield: number;
   /** higher = closer to the nest; used for "first" targeting */
   progress: number;
 }
@@ -80,6 +83,7 @@ export type GameEvent =
   | { type: "grown"; dino: Dino }
   | { type: "attack"; dinoId: number; invaderId: number; damage: number }
   | { type: "killed"; invaderId: number; bounty: number; at: Point }
+  | { type: "split"; invaderId: number; into: number[] }
   | { type: "leaked"; invaderId: number; eggs: number }
   | { type: "migration-started"; index: number; bonus: number }
   | { type: "migration-cleared"; index: number; bonus: number }
@@ -310,21 +314,30 @@ export class Game {
       const { defId } = s.spawnQueue.shift() as { defId: string };
       const def = this.content.invaders[defId];
       if (!def) continue;
-      s.invaders.push({
-        id: s.nextId++,
-        defId: def.id,
-        px: lane.spawn.x * CELL + CELL / 2,
-        py: lane.spawn.y * CELL + CELL / 2,
-        hp: def.hp,
-        maxHp: def.hp,
-        flying: def.flying,
-        leg: 0,
-        next: null,
-        slowUntil: 0,
-        slowPercent: 0,
-        progress: 0,
-      });
+      this.spawnInvader(def, lane.spawn.x * CELL + CELL / 2, lane.spawn.y * CELL + CELL / 2, 0);
     }
+  }
+
+  private spawnInvader(def: InvaderDef, px: number, py: number, leg: number): Invader {
+    const s = this.state;
+    const inv: Invader = {
+      id: s.nextId++,
+      defId: def.id,
+      px,
+      py,
+      hp: def.hp,
+      maxHp: def.hp,
+      flying: def.flying,
+      leg,
+      next: null,
+      slowUntil: 0,
+      slowPercent: 0,
+      stunUntil: 0,
+      shield: def.shield ?? 0,
+      progress: 0,
+    };
+    s.invaders.push(inv);
+    return inv;
   }
 
   private moveInvaders(): void {
@@ -332,15 +345,18 @@ export class Game {
     const nest = this.content.valley.lane.exit;
     const nestX = nest.x * CELL + CELL / 2;
     const nestY = nest.y * CELL + CELL / 2;
+    const regenTick = s.tick % TICKS_PER_SECOND === 0;
     for (let i = s.invaders.length - 1; i >= 0; i--) {
       const inv = s.invaders[i] as Invader;
       const def = this.invaderDef(inv);
+      if (regenTick && def.regen && inv.hp < inv.maxHp) inv.hp = Math.min(inv.maxHp, inv.hp + def.regen);
       let speed = def.speed;
       if (inv.slowUntil > s.tick) speed = Math.floor((speed * (100 - inv.slowPercent)) / 100);
       if (speed < 1) speed = 1;
+      if (inv.stunUntil > s.tick) speed = 0;
 
       if (inv.flying) {
-        const arrived = this.moveToward(inv, nestX, nestY, speed);
+        const arrived = speed > 0 && this.moveToward(inv, nestX, nestY, speed);
         inv.progress = 100_000_000 - Math.abs(nestX - inv.px) - Math.abs(nestY - inv.py);
         if (arrived) this.leak(i);
         continue;
@@ -435,27 +451,33 @@ export class Game {
       const cx = dino.x * CELL + CELL / 2;
       const cy = dino.y * CELL + CELL / 2;
       const r2 = def.range * def.range;
-      let target: Invader | null = null;
+      const inRange: Invader[] = [];
       for (const inv of s.invaders) {
         if (!this.canTarget(def, inv)) continue;
         const dx = inv.px - cx;
         const dy = inv.py - cy;
         if (dx * dx + dy * dy > r2) continue;
-        if (target === null || inv.progress > target.progress) target = inv;
+        inRange.push(inv);
       }
-      if (target === null) continue;
+      if (inRange.length === 0) continue;
+      // "first": furthest along the trail. Ties by id so every client agrees.
+      inRange.sort((a, b) => b.progress - a.progress || a.id - b.id);
+      const targets = inRange.slice(0, def.targetCount ?? 1);
       dino.cooldown = def.cooldown;
-      if (def.splash) {
-        const sr2 = def.splash * def.splash;
-        const victims = s.invaders.filter((inv) => {
-          if (!this.canTarget(def, inv)) return false;
-          const dx = inv.px - target.px;
-          const dy = inv.py - target.py;
-          return dx * dx + dy * dy <= sr2;
-        });
-        for (const v of victims) this.hit(dino, def, v);
-      } else {
-        this.hit(dino, def, target);
+      for (const target of targets) {
+        if (target.hp <= 0) continue; // already killed by splash from an earlier target this tick
+        if (def.splash) {
+          const sr2 = def.splash * def.splash;
+          const victims = s.invaders.filter((inv) => {
+            if (!this.canTarget(def, inv)) return false;
+            const dx = inv.px - target.px;
+            const dy = inv.py - target.py;
+            return dx * dx + dy * dy <= sr2;
+          });
+          for (const v of victims) this.hit(dino, def, v);
+        } else {
+          this.hit(dino, def, target);
+        }
       }
     }
   }
@@ -468,6 +490,12 @@ export class Game {
   private hit(dino: Dino, def: DinoDef, inv: Invader): void {
     const s = this.state;
     const idef = this.invaderDef(inv);
+    if (inv.shield > 0) {
+      // a shield eats the whole attack: damage, slow and stun alike
+      inv.shield--;
+      this.events.push({ type: "attack", dinoId: dino.id, invaderId: inv.id, damage: 0 });
+      return;
+    }
     let damage = Math.floor((def.damage * kindMultiplier(def.kind, idef.kind)) / 100);
     if (damage < 1) damage = 1;
     inv.hp -= damage;
@@ -475,6 +503,7 @@ export class Game {
       inv.slowUntil = s.tick + def.slow.ticks;
       inv.slowPercent = def.slow.percent;
     }
+    if (def.stun && !inv.flying) inv.stunUntil = Math.max(inv.stunUntil, s.tick + def.stun.ticks);
     this.events.push({ type: "attack", dinoId: dino.id, invaderId: inv.id, damage });
     if (inv.hp <= 0) {
       const idx = s.invaders.indexOf(inv);
@@ -486,6 +515,17 @@ export class Game {
         bounty: idef.bounty,
         at: { x: inv.px, y: inv.py },
       });
+      if (idef.splitsInto) {
+        const child = this.content.invaders[idef.splitsInto.invader];
+        if (child) {
+          const into: number[] = [];
+          for (let i = 0; i < idef.splitsInto.count; i++) {
+            const c = this.spawnInvader(child, inv.px, inv.py, inv.leg);
+            into.push(c.id);
+          }
+          this.events.push({ type: "split", invaderId: inv.id, into });
+        }
+      }
     }
   }
 
@@ -517,7 +557,7 @@ export class Game {
     const s = this.state;
     const parts: number[] = [s.tick, s.phase.length, s.migration, s.buildTimer, s.meat, s.eggs, s.nextId];
     for (const d of s.dinos) parts.push(d.id, d.x, d.y, d.cooldown, d.invested, d.defId.length);
-    for (const i of s.invaders) parts.push(i.id, i.px, i.py, i.hp, i.leg, i.slowUntil);
+    for (const i of s.invaders) parts.push(i.id, i.px, i.py, i.hp, i.leg, i.slowUntil, i.stunUntil, i.shield);
     let h = 0x811c9dc5;
     for (const p of parts) {
       h ^= p & 0xffff;

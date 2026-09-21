@@ -32,6 +32,7 @@ export {
   kindMultiplier,
   type Kind,
   type Stage,
+  type Archetype,
   type Targets,
   type DinoDef,
   type InvaderDef,

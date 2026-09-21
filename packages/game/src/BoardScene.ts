@@ -278,7 +278,7 @@ export class BoardScene extends Phaser.Scene {
       const py = prev ? prev.y + (inv.py - prev.y) * alpha : inv.py;
       const p = this.worldFromMilli(px, py);
       const def = g.invaderDef(inv);
-      const r = def.boss ? 15 : inv.flying ? 9 : 11;
+      const r = def.archetype === "boss" ? 15 : inv.flying ? 9 : def.archetype === "swarm" ? 8 : 11;
       gfx.fillStyle(KIND_COLOR[def.kind], 1);
       if (inv.flying) {
         gfx.fillTriangle(p.x, p.y - r, p.x - r, p.y + r * 0.7, p.x + r, p.y + r * 0.7);
@@ -288,6 +288,14 @@ export class BoardScene extends Phaser.Scene {
       if (inv.slowUntil > g.state.tick) {
         gfx.lineStyle(2, 0x74b9ff, 1);
         gfx.strokeCircle(p.x, p.y, r + 2);
+      }
+      if (inv.stunUntil > g.state.tick) {
+        gfx.lineStyle(2, 0xf1c40f, 1);
+        gfx.strokeCircle(p.x, p.y, r + 5);
+      }
+      if (inv.shield > 0) {
+        gfx.lineStyle(3, 0xecf0f1, 0.9);
+        gfx.strokeCircle(p.x, p.y, r + 3);
       }
       const w = r * 2 + 4;
       const frac = Math.max(0, inv.hp / inv.maxHp);
@@ -338,22 +346,23 @@ export class BoardScene extends Phaser.Scene {
     const y0 = HUD_Y;
     this.add.rectangle(0, y0, CANVAS_W, CANVAS_H - y0, COLORS.hud).setOrigin(0, 0);
 
-    // row 1: numbers
-    this.meatText = this.add.text(16, y0 + 12, "", text(24, COLORS.meat));
-    this.eggsText = this.add.text(200, y0 + 12, "", text(24, COLORS.eggs));
-    this.waveText = this.add.text(360, y0 + 12, "", text(24));
-    this.timerText = this.add.text(560, y0 + 12, "", text(24, COLORS.textDim));
+    // row 1: numbers, then send and speed at the right
+    this.meatText = this.add.text(16, y0 + 16, "", text(22, COLORS.meat));
+    this.eggsText = this.add.text(150, y0 + 16, "", text(22, COLORS.eggs));
+    this.waveText = this.add.text(272, y0 + 16, "", text(22));
+    this.timerText = this.add.text(420, y0 + 16, "", text(22, COLORS.textDim));
+    this.sendButton = this.button(496, y0 + 8, 144, 42, "Send", () => this.send(), 19);
+    this.speedButton = this.button(648, y0 + 8, 56, 42, "1x", () => this.cycleSpeed(), 19);
 
-    // row 2: palette + send + speed
-    const py = y0 + 56;
+    // row 2: one button per kind
+    const py = y0 + 58;
+    const bw = Math.floor((CANVAS_W - 32 - (hatchlings.length - 1) * 4) / hatchlings.length);
     hatchlings.forEach((def, i) => {
-      const b = this.button(16 + i * 132, py, 124, 64, "", () => this.selectDef(def), 17);
+      const b = this.button(16 + i * (bw + 4), py, bw, 62, "", () => this.selectDef(def), 14);
       b.bg.setFillStyle(KIND_COLOR[def.kind], 0.25);
       b.label.setText(`${def.name}\n${def.cost} meat`).setAlign("center");
       this.paletteButtons.push({ def, button: b });
     });
-    this.sendButton = this.button(16 + hatchlings.length * 132 + 8, py, 160, 64, "Send", () => this.send(), 20);
-    this.speedButton = this.button(CANVAS_W - 88, py, 72, 64, "1x", () => this.cycleSpeed(), 20);
 
     // row 3: status + next migration
     this.statusText = this.add.text(16, y0 + 132, "", text(18, COLORS.textDim));
@@ -405,7 +414,7 @@ export class BoardScene extends Phaser.Scene {
       const desc = m.groups
         .map((gr) => {
           const inv = content.invaders[gr.invader];
-          return inv ? `${gr.count}× ${inv.name} (${inv.kind}${inv.flying ? ", flying" : ""}${inv.boss ? ", boss" : ""})` : gr.invader;
+          return inv ? `${gr.count}× ${inv.name} · ${inv.archetype} ${inv.kind}` : gr.invader;
         })
         .join(", ");
       this.previewText.setText(`${s.phase === "migration" ? "Now" : "Next"}: ${m.name} — ${desc}`);
@@ -428,8 +437,14 @@ export class BoardScene extends Phaser.Scene {
         const stage = ["", "hatchling", "juvenile", "adult"][def.stage];
         this.panelName.setText(`${def.name}  ·  ${def.kind} ${stage}`);
         const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(1);
+        const extras = [
+          def.splash ? "splash" : "",
+          def.slow ? `slow ${def.slow.percent}%` : "",
+          def.stun ? `stun ${(def.stun.ticks / TICKS_PER_SECOND).toFixed(1)}s` : "",
+          def.targetCount && def.targetCount > 1 ? `${def.targetCount} targets` : "",
+        ].filter(Boolean);
         this.panelStats.setText(
-          `${def.damage} dmg every ${(def.cooldown / TICKS_PER_SECOND).toFixed(2)}s (${dps}/s) · range ${(def.range / CELL).toFixed(1)} · hits ${def.targets}${def.splash ? " · splash" : ""}`,
+          `${def.damage} dmg every ${(def.cooldown / TICKS_PER_SECOND).toFixed(2)}s (${dps}/s) · range ${(def.range / CELL).toFixed(1)} · hits ${def.targets}${extras.length ? " · " + extras.join(", ") : ""}`,
         );
         const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
         this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "Fully grown").setAlign("center");
