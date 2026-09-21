@@ -60,3 +60,10 @@ Two things that produced false conclusions once:
 - **Wait a frame before screenshotting after an input.** The renderer
   draws on the next animation frame; a capture in the same instant shows
   the state before the click and looks like a bug that is not there.
+- **The in-app browser's console log survives reloads.** An error read
+  after a fix may be the one from before it. Judge a fix by state and
+  by the canvas still updating, or reopen the pane for a clean log.
+- **A frozen canvas with a Phaser renderer error means a destroyed
+  display object is still referenced.** `scene.restart()` re-runs
+  `create()` on the same instance; every field that holds a display
+  object or per-run state is reset there, and any new one must be too.

@@ -106,7 +106,23 @@ export class BoardScene extends Phaser.Scene {
   }
 
   create(): void {
+    // scene.restart() re-runs create() on the same instance: every field
+    // that refers to a display object or to the previous run must reset
+    // here, or the HUD keeps touching destroyed objects.
     this.game_ = new Game(content, this.seed);
+    this.acc = 0;
+    this.speed = 1;
+    this.prevPos.clear();
+    this.effects = [];
+    this.towersDirty = true;
+    this.selectedDef = null;
+    this.selectedDino = null;
+    this.painting = false;
+    this.lastPaint = null;
+    this.hoverCell = null;
+    this.paletteButtons = [];
+    this.overlay = null;
+    this.statusUntil = 0;
     this.cameras.main.setBackgroundColor(COLORS.bg);
 
     this.staticGfx = this.add.graphics();
