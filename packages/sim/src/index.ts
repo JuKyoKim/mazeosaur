@@ -25,3 +25,30 @@ export {
   laneIsOpen,
   buildRefusal,
 } from "./lane.js";
+export {
+  CELL,
+  TICKS_PER_SECOND,
+  KIND_CYCLE,
+  kindMultiplier,
+  type Kind,
+  type Stage,
+  type Targets,
+  type DinoDef,
+  type InvaderDef,
+  type MigrationGroup,
+  type MigrationDef,
+  type ValleyDef,
+  type Rules,
+  type Content,
+} from "./content-types.js";
+export {
+  Game,
+  type Phase,
+  type Dino,
+  type Invader,
+  type GameState,
+  type Command,
+  type Refusal,
+  type GameEvent,
+  type LoggedCommand,
+} from "./game.js";

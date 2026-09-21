@@ -303,7 +303,7 @@ npm workspaces, TypeScript strict, vitest. `npm run check` is the gate.
 | milestone | done when | proves |
 | --- | --- | --- |
 | **M0 Scaffold** | repo, sim core (grid, flow field, lane rules, RNG), tests green | the sim can be built and tested with no engine at all |
-| **M1 Playable prototype** | one valley, 3 kinds, 10 migrations, meat, eggs, build phase, Phaser render, playable in a phone browser | *is mazing fun at phone size?* Answer this before touching Capacitor |
+| **M1 Playable prototype** (built 2026-09-20, awaiting the owner's verdict) | one valley, 3 kinds, 10 migrations, meat, eggs, build phase, Phaser render, playable in a phone browser | *is mazing fun at phone size?* Answer this before touching Capacitor |
 | **M2 Content and feel** | 6 kinds x 3 stages, 8 archetypes, kind chart, 50 migrations, balance harness, first real art and audio | a full run is worth finishing |
 | **M3 Mobile** | Capacitor shells, touch polish, saves, the no-network CI gate, TestFlight + Play internal | ships offline, provably |
 | **M4 Web server** | server stack deployed, cloud save, daily seed leaderboard, replay verification | web plays off our servers |

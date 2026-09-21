@@ -41,6 +41,8 @@ tests run in well under a second; keep it that way.
 
 ## Status
 
-M0 done, M1 in progress. The simulation core exists and is tested: grid,
-eight-way flow-field pathing without corner cutting, lane rules including
-the exact "this placement would seal the maze" refusal, and a seeded RNG.
+M1 prototype is playable in a browser (`npm run dev`, then open it on a
+phone over the LAN to feel the mazing). One valley, three kinds with three
+growth stages, ten migrations, meat, eggs, build timer with early-send
+bonus, drag-to-paint walls, grow and sell. Placeholder shapes, no audio.
+The sim is fully tested; the client is verified by hand so far.

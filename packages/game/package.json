@@ -1,0 +1,17 @@
+{
+  "name": "@mazeosaur/game",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Phaser client. Draws sim state and sends it commands; owns no rules.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@mazeosaur/content": "*",
+    "@mazeosaur/sim": "*",
+    "phaser": "^3.90.0"
+  }
+}

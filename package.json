@@ -10,9 +10,11 @@
     "apps/*"
   ],
   "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b packages/sim",
+    "typecheck": "tsc --noEmit -p packages/sim && tsc --noEmit -p packages/content && tsc --noEmit -p packages/game && tsc --noEmit -p apps/web",
     "check": "npm run typecheck && npm test"
   },
   "engines": {
