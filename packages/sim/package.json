@@ -1,5 +1,5 @@
 {
-  "name": "@volundr/sim",
+  "name": "@mazeosaur/sim",
   "version": "0.0.0",
   "private": true,
   "description": "Deterministic, headless game simulation. No DOM, no rendering, no I/O.",

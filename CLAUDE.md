@@ -1,4 +1,4 @@
-# volundr: orientation for a fresh agent
+# mazeosaur: orientation for a fresh agent
 
 Read [README.md](README.md), then [docs/00-proposal.md](docs/00-proposal.md).
 This file carries only what an agent needs before it knows where to look.
@@ -18,15 +18,27 @@ This file carries only what an agent needs before it knows where to look.
    `WebSocket`, `EventSource` or `sendBeacon`.
 3. **The server is additive.** Anything the game needs to be playable
    lives on the client. The server verifies and syncs; it never owns.
-4. **Content is data.** Tower, creep, wave and map changes are JSON edits
-   validated by schema. Do not hardcode a number in the sim that belongs
-   in content.
-5. **No Nintendo IP.** The reference is Pokemon Maul's *mechanics*. No
-   Pokemon names, sprites, or the Pokemon type chart.
+4. **Content is data.** Dinosaur, invader, wave and map changes are data
+   edits validated by schema. Do not hardcode a number in the sim that
+   belongs in content.
+5. **No franchise IP.** The theme is dinosaurs: real genus names, original
+   art. The mechanical reference is Pokemon Maul; nothing from Pokemon
+   (names, sprites, the type chart) and nothing invented by Jurassic Park
+   (venom-spitting Dilophosaurus, the raptor-pack-hunts-humans framing)
+   may appear. When in doubt, use the paleontology, not the movie.
+
+## Vocabulary
+
+Towers are **dinosaurs** (a **kind** is a tower line; stages are
+hatchling, juvenile, adult; upgrading is **growing**). Creeps are
+**invaders**; a wave is a **migration**. Gold is **meat**. Lives are
+**eggs**. The exit is the **nest**. Code uses these words too.
 
 ## Working here
 
 - `npm run check` is the gate. Keep sim tests under a second.
+- `npm run dev` serves the web prototype; `.claude/launch.json` has the
+  same server for the in-app browser preview.
 - This repo deploys separately from arbor. Nothing here touches the fleet
   until `apps/web` and `apps/server` exist (M1 and M4).
 - Decisions go in `docs/00-proposal.md` section 10 with a date, or in a

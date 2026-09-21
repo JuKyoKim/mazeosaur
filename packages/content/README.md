@@ -1,4 +1,4 @@
-# @volundr/content
+# @mazeosaur/content
 
 Game data, not code: tower lines, creep archetypes, the type chart, waves,
 maps. Each file is validated against a schema at build time so a typo in a

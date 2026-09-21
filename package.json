@@ -1,5 +1,5 @@
 {
-  "name": "volundr",
+  "name": "mazeosaur",
   "private": true,
   "version": "0.0.0",
   "description": "A single-player mazing tower defense in the WC3 maul tradition. Web plays off servers; iOS and Android play fully offline.",

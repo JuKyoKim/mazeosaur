@@ -1,4 +1,4 @@
-// @volundr/sim -- the deterministic, headless heart of the game.
+// @mazeosaur/sim -- the deterministic, headless heart of the game.
 //
 // Rules for this package (enforced by review, and later by lint):
 //   1. No DOM, no Phaser, no timers, no I/O, no Math.random.

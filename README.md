@@ -1,8 +1,10 @@
-# Völundr
+# Mazeosaur
 
-A single-player mazing tower defense in the Warcraft III maul tradition:
-the towers are the walls, the player draws the maze, waves punish anyone
-who leans on one tower type.
+A single-player mazing tower defense in the Warcraft III maul tradition,
+with dinosaurs. Your pack guards the nesting grounds; migrations of rival
+dinosaurs stampede toward the nest; the maze you build with your own
+dinosaurs is most of the skill. Kills pay meat, meat grows hatchlings
+into adults, every leak eats an egg.
 
 One codebase, three targets:
 
@@ -12,13 +14,13 @@ One codebase, three targets:
   in the mobile binaries, and CI proves it.
 
 Read [docs/00-proposal.md](docs/00-proposal.md) for what is being built,
-why Phaser + Capacitor, and the milestone plan.
+why Phaser + Capacitor, the v1 design, and the milestone plan.
 
 ## Layout
 
 ```
 packages/sim/       deterministic game simulation, no engine, no I/O
-packages/content/   towers, creeps, waves, maps as validated data
+packages/content/   dinosaurs, invaders, waves, maps as validated data
 packages/game/      Phaser client
 apps/web/           Vite site + web-only network client
 apps/mobile/        Capacitor shell for iOS and Android
@@ -31,15 +33,14 @@ docs/               proposals and decisions, numbered
 ```bash
 npm install
 npm run check      # typecheck + tests; the merge gate
-npm run test:watch
+npm run dev        # the web prototype on http://localhost:5173
 ```
 
 Node 22 or newer. The simulation package has no dependencies and its
-tests run in about 100 ms; keep it that way.
+tests run in well under a second; keep it that way.
 
 ## Status
 
-M0, scaffold. The simulation core exists and is tested: grid, eight-way
-flow-field pathing without corner cutting, lane rules including the exact
-"this tower would seal the maze" refusal, and a seeded RNG. Nothing
-renders yet.
+M0 done, M1 in progress. The simulation core exists and is tested: grid,
+eight-way flow-field pathing without corner cutting, lane rules including
+the exact "this placement would seal the maze" refusal, and a seeded RNG.
