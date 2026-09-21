@@ -16,8 +16,8 @@ Kills feed the pack; **meat** buys new hatchlings and grows them into
 juveniles and adults. Every invader that reaches the nest eats an **egg**.
 Lose all twenty and the season is over.
 
-The name is a portmanteau, chosen after checking the App Store, Google
-Play and the open web for collisions (none found on 2026-09-20). Every
+The name is a portmanteau; the App Store, Google Play and the open web
+were checked for collisions and none were found. Every
 dinosaur is a real genus; genus names are scientific and free to use.
 Nothing borrows from Jurassic Park's inventions (no venom-spitting
 Dilophosaurus, no "clever girl") or from any Pokemon name, sprite or type
@@ -303,7 +303,7 @@ npm workspaces, TypeScript strict, vitest. `npm run check` is the gate.
 | milestone | done when | proves |
 | --- | --- | --- |
 | **M0 Scaffold** | repo, sim core (grid, flow field, lane rules, RNG), tests green | the sim can be built and tested with no engine at all |
-| **M1 Playable prototype** (built 2026-09-20, awaiting the owner's verdict) | one valley, 3 kinds, 10 migrations, meat, eggs, build phase, Phaser render, playable in a phone browser | *is mazing fun at phone size?* Answer this before touching Capacitor |
+| **M1 Playable prototype** | one valley, 3 kinds, 10 migrations, meat, eggs, build phase, Phaser render, playable in a phone browser | *is mazing fun at phone size?* Answer this before touching Capacitor |
 | **M2 Content and feel** | 6 kinds x 3 stages, 8 archetypes, kind chart, 50 migrations, balance harness, first real art and audio | a full run is worth finishing |
 | **M3 Mobile** | Capacitor shells, touch polish, saves, the no-network CI gate, TestFlight + Play internal | ships offline, provably |
 | **M4 Web server** | server stack deployed, cloud save, daily seed leaderboard, replay verification | web plays off our servers |

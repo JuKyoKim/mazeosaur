@@ -43,3 +43,20 @@ hatchling, juvenile, adult; upgrading is **growing**). Creeps are
   until `apps/web` and `apps/server` exist (M1 and M4).
 - Decisions go in `docs/00-proposal.md` section 10 with a date, or in a
   new numbered doc when they outgrow a line.
+- **Session history does not live here.** After-action reports and
+  findings go to the Obsidian vault (`ai/aar/`). This repo keeps only
+  what is durably true, as a comment beside the code it explains or a
+  line in the docs, never as a dated aside.
+
+## Verifying the client
+
+The sim is tested; the client is not, so it is checked by driving it.
+Two things that produced false conclusions once:
+
+- **Drive drags at speed.** A fast pointer skips cells between move
+  events. Placement interpolates the line between events for that
+  reason; a change that drops the interpolation will pass a slow drag
+  and fail a real finger.
+- **Wait a frame before screenshotting after an input.** The renderer
+  draws on the next animation frame; a capture in the same instant shows
+  the state before the click and looks like a bug that is not there.
