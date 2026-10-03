@@ -17,6 +17,9 @@ const BUTTON_W = 440;
 const BUTTON_X = (CANVAS_W - BUTTON_W) / 2;
 const PANEL_X = 80;
 const PANEL_W = CANVAS_W - PANEL_X * 2;
+/** Top of the stats panel; its rows and the seed line key off this. */
+const PANEL_Y = 450;
+const ROW_H = 72;
 
 /**
  * How a run ended, and the seed that would run it again.
@@ -40,12 +43,12 @@ export class ResultsScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(COLORS.bg);
 
     this.add
-      .text(CANVAS_W / 2, 260, s.won ? "The nest holds" : "The nest is lost", text(58, s.won ? COLORS.text : COLORS.eggs))
+      .text(CANVAS_W / 2, 300, s.won ? "The nest holds" : "The nest is lost", text(58, s.won ? COLORS.text : COLORS.eggs))
       .setOrigin(0.5);
     this.add
       .text(
         CANVAS_W / 2,
-        326,
+        366,
         s.won
           ? `Every migration turned back with ${s.eggs} egg${s.eggs === 1 ? "" : "s"} still in the nest.`
           : `Migration ${Math.min(s.migrationsCleared + 1, s.totalMigrations)} broke through.`,
@@ -59,21 +62,23 @@ export class ResultsScene extends Phaser.Scene {
       ["Meat unspent", `${s.meat}`],
       ["Seed", `${s.seed}`],
     ];
-    const rowH = 72;
-    this.add.rectangle(PANEL_X, 410, PANEL_W, rows.length * rowH + 24, COLORS.hudPanel).setOrigin(0, 0);
+    this.add.rectangle(PANEL_X, PANEL_Y, PANEL_W, rows.length * ROW_H + 24, COLORS.hudPanel).setOrigin(0, 0);
     rows.forEach(([label, value], i) => {
-      const y = 410 + 12 + i * rowH + rowH / 2;
+      const y = PANEL_Y + 12 + i * ROW_H + ROW_H / 2;
       this.add.text(PANEL_X + 28, y, label, text(24, COLORS.textDim)).setOrigin(0, 0.5);
       this.add.text(PANEL_X + PANEL_W - 28, y, value, text(28)).setOrigin(1, 0.5);
     });
 
     this.add
-      .text(CANVAS_W / 2, 410 + rows.length * rowH + 60, "The same seed replays the same run.", text(18, COLORS.textDim))
+      .text(CANVAS_W / 2, PANEL_Y + rows.length * ROW_H + 60, "The same seed replays the same run.", text(18, COLORS.textDim))
       .setOrigin(0.5);
 
-    const again = makeButton(this, BUTTON_X, 860, BUTTON_W, 88, "Play again", () => this.playAgain(), { size: 30 });
+    // The report reads top-down; the two buttons are the only things on
+    // this screen a thumb has to reach, so they anchor to the bottom
+    // rather than sitting in the middle with dead space under them.
+    const again = makeButton(this, BUTTON_X, 1024, BUTTON_W, 88, "Play again", () => this.playAgain(), { size: 30 });
     again.bg.setFillStyle(COLORS.buttonActive);
-    makeButton(this, BUTTON_X, 968, BUTTON_W, 72, "Title screen", () => this.scene.start("title"), { size: 24 });
+    makeButton(this, BUTTON_X, 1132, BUTTON_W, 72, "Title screen", () => this.scene.start("title"), { size: 24 });
   }
 
   /** A new run, not a rewound one: the shell hands out the next seed. */
