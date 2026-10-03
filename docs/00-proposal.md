@@ -404,3 +404,53 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   changed underneath it. The sim never reads either field, and a malformed
   one is repaired rather than rejected — it is the only field in the format
   with that treatment, because it is the only one nothing depends on.
+- 2026-10-03: the HUD layout, sprite manifest, audio list and onboarding
+  are specified in [docs/01-art-hud-and-audio.md](01-art-hud-and-audio.md),
+  with the numbers shared with `tools/art/layout.ts` so the spec and the
+  sample frames cannot disagree. Three candidate directions for item 4
+  above are rendered as frames of the real board at real phone size in
+  `docs/art/`; the choice is the board's and nothing else waits on it.
+  Two findings that are independent of the choice: the M2 kind colours
+  fail a dichromat separation check and are replaced, and the M2 42px
+  HUD buttons are 22.8pt — half the 44pt floor — so the hit target
+  minimum is 82 logical pixels.
+- 2026-10-03: `tools/` joins the `tsc` gate (`tools/tsconfig.json`,
+  `types: ["node"]`, appended to `npm run typecheck`). This reverses the
+  call made reviewing the generator's own pull request, which was that two
+  provable non-bugs did not justify a `@types/node` devDependency. The
+  reversal is about what the code does rather than how much it costs:
+  `tools/art/layout.ts` is the single source of every layout number the
+  spec and the frames both read, so an unchecked edit there can only be
+  found by a human noticing a picture changed.
+- 2026-10-03: `apps/web` keeps its own `vite@7` while the root resolves
+  `vite@8`, and the two are deliberately left un-deduped. The root
+  declares no vite of its own, so npm hoists the highest major in vitest
+  5's peer range (`^6.4.0 || ^7.0.0 || ^8.0.0`) — nobody chose 8 for the
+  root; what is deliberate is leaving it. Aligning means one of two real
+  changes: move the shipped web shell to vite 8, a rolldown bundler
+  migration with no size or gameplay gain available today, or add a vite
+  devDependency to the root that nothing at the root uses, purely to
+  steer hoisting, which couples the repo to vitest's current peer floor.
+  Vitest 5 supports vite 7 — the same range appears in its peer and its
+  dev dependencies — so alignment is available; it is simply not worth
+  either cost while the skew has no consequence. Config that both majors
+  must typecheck is written to the intersection of their types instead —
+  see the comment on `manualChunks` in `apps/web/vite.config.ts`.
+  Revisit when `apps/web` moves to vite 8, or when a second field
+  diverges.
+- 2026-10-03: the committed art frames are guarded by pixel equality, not
+  byte equality, and the guard is enforced inside the generator rather
+  than in CI. `art:frames` decodes the PNG already on disk and skips the
+  write when the pixels match, so CI's existing regenerate-and-diff step
+  compares art and not compression. The reason is that PNG bytes are not
+  reproducible: `deflateSync(level: 9)` is a call into whichever zlib the
+  running Node links, and two builds disagree on the same scanlines —
+  measured, 12879 bytes against 12878 for one frame, per-frame rather
+  than uniform. Bytes were therefore pinning the toolchain, not the
+  pixels, and a `node-version` bump or an arm64 runner would have turned
+  the step red with no art change and read as the art having drifted.
+  Making the generator idempotent on pixels also disarms the trap without
+  a `check.yml` edit, which no agent can push; `art:verify` is the same
+  comparison as a read-only command. This retires the "regenerate frames
+  on Linux, never on a Mac" rule — the variable was never the OS. See
+  `docs/02-ci.md`.
