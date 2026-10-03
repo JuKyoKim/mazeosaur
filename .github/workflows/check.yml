@@ -17,6 +17,8 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      - name: bundle size budget
+        run: npm run check:bundle-size
       - name: no network code in the game bundle
         # Until apps/mobile exists this guards the same bundle the mobile
         # shell will wrap. Phaser's loader references XHR; it is allowed

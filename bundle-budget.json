@@ -1,0 +1,15 @@
+{
+  "$comment": "Gzip byte budgets per chunk group for apps/web/dist/assets/*.js. Checked by scripts/check-bundle-size.mjs after `npm run build`. Raise a budget only with a reason in the commit message; it exists so a regression fails CI instead of being noticed on a phone.",
+  "groups": [
+    {
+      "name": "vendor",
+      "match": "^phaser-.*\\.js$",
+      "gzipBudgetBytes": 360000
+    },
+    {
+      "name": "app",
+      "match": "^(?!phaser-).*\\.js$",
+      "gzipBudgetBytes": 60000
+    }
+  ]
+}
