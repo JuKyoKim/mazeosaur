@@ -359,10 +359,53 @@ Messages are short and say what, not why-not: `That would seal the maze`,
 | HUD glyphs | 4 | 34 square | meat, egg, speed, kind chip mask |
 | **total** | **88** | | |
 
-`spritePx` is 36 for Fossil Pixel and 48 for the two vector directions. The
-atlas is packed at the authored size and the renderer scales down into the
-36px cell, so a swarm invader is small because its *silhouette* is small,
-not because its sprite is.
+`spritePx` is 36 for Fossil Pixel, 48 for the two vector directions and 64
+for Toy Box. The atlas is packed at the authored size and the renderer scales
+down into the 36px cell, so a swarm invader is small because its *silhouette*
+is small, not because its sprite is.
+
+### 5.0 The anchor: a dinosaur occupies one cell and is drawn taller than one
+
+**Footprint and draw box are different things, and only the footprint is the
+sim's.** A dinosaur occupies exactly one cell — pathing, the block check,
+range and every balance number unchanged — and is *drawn* into a box taller
+than that cell.
+
+| | value | why |
+| --- | --- | --- |
+| footprint | 36 x 36 (1 cell) | the sim's, unchanged |
+| draw box | **36 x 54** (1 x 1.5 cells) | tall enough for a solid to stand proud of its tile |
+| anchor | bottom of the draw box on the **bottom edge of the cell**, horizontally centred | feet on the floor of the cell the sim thinks it is in |
+| draw order | **by row, increasing y** — a lower row is drawn after, and over, the row above | what makes the overlap read as depth rather than as a z-fight |
+
+Within a row there is no horizontal overlap, so order inside a row is free.
+
+**Why.** This is the mechanism by which the reference game reads as blocks:
+its subjects are taller than the tile they stand on. Without it a block
+dinosaur is a 19.5pt square on a phone, and solidity is the first thing that
+cell takes away — the finding in section 2. Enlarging the *cell* instead
+would buy the same look for a re-tune of all 50 migrations against a quarter
+of the board; this costs nothing the sim can see.
+
+**The real cost is occlusion, and it is bounded.** A 1.5-cell sprite reaches
+18px — half a cell — into the row behind it, and what it covers there is the
+*lower* half of that cell, where the dinosaur behind is standing. In a solid
+wall every dinosaur has its feet covered by the one in front, and only the
+upper half of each silhouette survives.
+
+That is survivable, and not by luck: every one of the six silhouettes is
+identified by its *top* — the tyrant's oversized head, the longneck's
+vertical neck, the horned frill, the armoured hump, the flier's span, the
+raptor's forward-carried head. Section 5.1's tells were written against the
+upper half of the animal before this question was asked. **1.5 cells is the
+cap for that reason**, and a direction wanting more height has to justify it
+against the row behind.
+
+**Still to be tested by driving the client, not by argument:** a dense wall —
+twenty adjacent occupied cells — at phone scale, checking that kind stays
+separable and that a placement preview stays legible under a neighbour's
+overhang. That is acceptance for the integration, not a precondition for the
+convention.
 
 ### 5.1 Dinosaurs — six silhouettes, learned in one run
 
