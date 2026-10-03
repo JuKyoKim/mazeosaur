@@ -1,5 +1,5 @@
 import type Phaser from "phaser";
-import type { BuildStamp, ProfileSave, RunSave, SaveDocument } from "@mazeosaur/sim";
+import type { BuildStamp, Game, ProfileSave, RunSave, SaveDocument } from "@mazeosaur/sim";
 
 /**
  * Save storage. Writes only: the shell reads the file, runs `loadSave`,
@@ -51,6 +51,12 @@ export interface MountOptions {
   readonly parent: string | HTMLElement;
   /** The save, already read and migrated by the shell. */
   readonly save: SaveDocument;
+  /**
+   * `LoadOutcome.resumed` for that save: the `Game` the load's replay
+   * already built, or null. Non-null exactly when `save.run` is non-null.
+   * Consumed by the first `create()` of `board` and not reused.
+   */
+  readonly resumed: Game | null;
   readonly services: PlatformServices;
   /** This build's identity, stamped into every save the game writes. */
   readonly build: BuildStamp;

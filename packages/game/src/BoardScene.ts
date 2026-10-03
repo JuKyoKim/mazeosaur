@@ -3,7 +3,6 @@ import {
   CELL,
   Game,
   TICKS_PER_SECOND,
-  replay,
   type BuildStamp,
   type DinoDef,
   type GameEvent,
@@ -15,6 +14,7 @@ import { content, hatchlings } from "@mazeosaur/content";
 import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
 import { services } from "./platform.js";
 import { runFinished, runStarted } from "./profile.js";
+import { gameForRun } from "./resume.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 const BOARD_H = content.valley.height * CELL_PX;
@@ -140,6 +140,11 @@ export class BoardScene extends Phaser.Scene {
 
   constructor(
     private readonly initialDoc: SaveDocument,
+    // `LoadOutcome.resumed`: the `Game` the mount-time load's own replay
+    // already built, or null. Read and cleared by the first create() --
+    // see the comment there -- so a later "Play again" restart can never
+    // hand back a Game the previous run already played to its end.
+    private resumed: Game | null,
     private readonly nextSeed: () => number,
     private readonly build: BuildStamp,
   ) {
@@ -170,11 +175,21 @@ export class BoardScene extends Phaser.Scene {
     const base = this.hasStarted ? this.doc : this.initialDoc;
     const run = base.run;
     this.doc = { ...base, run: null };
+    // Consumed and cleared in this same block, exactly once: `resumed` is
+    // only ever meaningful for the mount-time load's `create()`, and a
+    // later "Play again" restart must not receive it a second time even
+    // though by then `run` above is already null anyway (see the restart
+    // note above). Clearing it here, rather than gating it on
+    // `hasStarted`, makes that true by construction.
+    const resumed = this.resumed;
+    this.resumed = null;
     if (run) {
-      // The shell already validated this run through loadSave; replaying
-      // it here is how the game package turns saved data back into a
-      // live Game, since the document carries no live object.
-      this.game_ = replay(content, run);
+      // `resumed` is the Game the shell's loadSave already replayed to
+      // validate this run's hash; reuse it instead of replaying the same
+      // log a second time. A shell that gets this wrong and passes null
+      // for a non-null run still works -- replay is the fallback. See
+      // resume.ts for why that decision lives outside this file.
+      this.game_ = gameForRun(content, run, resumed);
       this.runSeed = run.seed;
       this.startedBy = run.startedBy;
       this.playedMsBase = run.playedMs;

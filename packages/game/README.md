@@ -19,8 +19,15 @@ ports themselves are section 2 of
   registry accessor, per section 2 of
   [docs/01-v1-architecture.md](../../docs/01-v1-architecture.md).
 - `src/BoardScene.ts` — the board, the HUD and all input. The only scene
-  that constructs a `Game`. Resumes a saved run by calling `@mazeosaur/sim`'s
-  `replay()`, and autosaves at phase boundaries through `services(this).saves`.
+  that constructs a `Game`. Resumes a saved run via `src/resume.ts`'s
+  `gameForRun()`, and autosaves at phase boundaries through
+  `services(this).saves`.
+- `src/resume.ts` — `gameForRun()`: reuses `MountOptions.resumed`
+  (`LoadOutcome.resumed` from the shell's `loadSave`) instead of replaying
+  the run a second time, falling back to `@mazeosaur/sim`'s `replay()` only
+  when `resumed` is null. Pure and Phaser-free on purpose, so it is unit
+  tested directly instead of through `BoardScene`, which cannot be
+  constructed outside a running `Phaser.Game`.
 - `src/profile.ts` — `runStarted` and `runFinished`, the `ProfileSave`
   accounting `flush()` calls on a fresh run and on a won/lost one. Pure and
   Phaser-free on purpose, so it is unit tested directly; the fossil award
@@ -57,10 +64,11 @@ the transitions between them — is section 5 of
 
 ## Verifying a change
 
-`test/profile.test.ts` covers the pure accounting in `src/profile.ts`.
-Everything else here is Phaser and has no tests; it is checked by driving
-it (`npm run dev`, then port 5173). Three things have produced false
-conclusions:
+`test/profile.test.ts` covers the pure accounting in `src/profile.ts`, and
+`test/resume.test.ts` covers the resume-vs-replay decision in
+`src/resume.ts`. Everything else here is Phaser and has no tests; it is
+checked by driving it (`npm run dev`, then port 5173). Three things have
+produced false conclusions:
 
 - **Drive drags at speed.** A fast pointer skips cells between move
   events, which is why placement interpolates the line between them. A

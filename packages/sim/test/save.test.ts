@@ -127,6 +127,7 @@ describe("loadSave", () => {
       expect(outcome.doc).toEqual(doc);
       expect(outcome.migratedFrom).toBeNull();
       expect(outcome.runDropped).toBeNull();
+      expect(outcome.resumed).toBeNull();
     }
   });
 
@@ -138,6 +139,27 @@ describe("loadSave", () => {
     if (outcome.ok) {
       expect(outcome.runDropped).toBeNull();
       expect(outcome.doc.run?.tick).toBe(live.state.tick);
+    }
+  });
+
+  it("resumed is the replay's own object: same hash and tick as the run it was built from", () => {
+    const live = playIntoMigration();
+    const doc: SaveDocument = { ...freshSave(BUILD), run: runSaveFrom(live) };
+    const outcome = loadSave(JSON.parse(JSON.stringify(doc)), fixture, "node");
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.resumed).not.toBeNull();
+      expect(outcome.resumed?.hash()).toBe(outcome.doc.run?.hash);
+      expect(outcome.resumed?.state.tick).toBe(outcome.doc.run?.tick);
+    }
+  });
+
+  it("resumed is null for a fresh document, which has no run to resume", () => {
+    const outcome = loadSave(JSON.parse(JSON.stringify(freshSave(BUILD))), fixture, "node");
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.doc.run).toBeNull();
+      expect(outcome.resumed).toBeNull();
     }
   });
 
@@ -183,6 +205,7 @@ describe("loadSave", () => {
       expect(outcome.runDropped).toBe("content-version");
       expect(outcome.doc.run).toBeNull();
       expect(outcome.doc.profile.fossilsEarned).toBe(7);
+      expect(outcome.resumed).toBeNull();
     }
   });
 
@@ -196,6 +219,7 @@ describe("loadSave", () => {
       expect(outcome.runDropped).toBe("replay-diverged");
       expect(outcome.doc.run).toBeNull();
       expect(outcome.doc.profile.fossilsEarned).toBe(7);
+      expect(outcome.resumed).toBeNull();
     }
   });
 });

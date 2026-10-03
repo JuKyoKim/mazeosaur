@@ -1,6 +1,6 @@
 import { mountGame, NULL_AUDIO_PORT, NULL_SAVE_STORE, type GameHandle, type PlatformServices } from "@mazeosaur/game";
 import { content } from "@mazeosaur/content";
-import { freshSave, loadSave, type BuildStamp, type SaveDocument } from "@mazeosaur/sim";
+import { freshSave, loadSave, type BuildStamp, type Game, type SaveDocument } from "@mazeosaur/sim";
 import { IndexedDbSaveStore, moveAsideCorruptSave, readRawSave } from "./save-store.js";
 
 // TODO(maze-release #8): once the `__BUILD_COMMIT__` define lands, read it
@@ -29,13 +29,13 @@ async function boot(): Promise<void> {
   // bytes for the rest of the session, including every later autosave.
   if (!outcome.ok && outcome.reason === "from-the-future") {
     console.warn("mazeosaur: this save was written by a newer version; starting a fresh run without touching it.");
-    void startGame(freshSave(build), NULL_SAVE_STORE);
+    void startGame(freshSave(build), null, NULL_SAVE_STORE);
     return;
   }
 
   if (!outcome.ok) {
     if (raw !== undefined) await moveAsideCorruptSave(raw);
-    void startGame(freshSave(build), new IndexedDbSaveStore());
+    void startGame(freshSave(build), null, new IndexedDbSaveStore());
     return;
   }
 
@@ -44,13 +44,14 @@ async function boot(): Promise<void> {
   } else if (outcome.runDropped === "replay-diverged") {
     console.warn("mazeosaur: the saved run did not replay cleanly; starting a fresh run on the same profile.");
   }
-  void startGame(outcome.doc, new IndexedDbSaveStore());
+  void startGame(outcome.doc, outcome.resumed, new IndexedDbSaveStore());
 }
 
-function startGame(save: SaveDocument, saves: PlatformServices["saves"]): void {
+function startGame(save: SaveDocument, resumed: Game | null, saves: PlatformServices["saves"]): void {
   const game = mountGame({
     parent: "game",
     save,
+    resumed,
     services: { saves, audio: NULL_AUDIO_PORT },
     build,
     nextSeed,
