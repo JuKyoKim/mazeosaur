@@ -195,9 +195,12 @@ export const ARCHETYPE_BLOCKS: Record<Archetype, () => Box[]> = {
   tank: () => [
     ...legs4(0.2, 0.76, 0.3, 0.7, 0.09),
     box(0.16, 0.08, 0.28, 0.6, 0.16, 0.44),
-    box(0.22, 0.24, 0.32, 0.12, 0.09, 0.36, "accent"),
-    box(0.38, 0.24, 0.32, 0.12, 0.09, 0.36, "accent"),
-    box(0.54, 0.24, 0.32, 0.12, 0.09, 0.36, "accent"),
+    // Four, because the tell the player is given says four and the 2D
+    // silhouette draws four. Three was a miscount, not a variation.
+    box(0.2, 0.24, 0.32, 0.11, 0.09, 0.36, "accent"),
+    box(0.33, 0.24, 0.32, 0.11, 0.09, 0.36, "accent"),
+    box(0.46, 0.24, 0.32, 0.11, 0.09, 0.36, "accent"),
+    box(0.59, 0.24, 0.32, 0.11, 0.09, 0.36, "accent"),
     box(0.7, 0.1, 0.42, 0.12, 0.1, 0.16, "dark"),
     ...eye(0.75, 0.14, 0.58, 0.045),
   ],

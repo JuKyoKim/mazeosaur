@@ -75,10 +75,23 @@ export function sharedSpan(models: readonly (readonly Box[])[]): number {
   return Math.max(...models.map((m) => fitOf([m]).span));
 }
 
-/** Centre on this model, size by the shared span. */
-export function fitFor(model: readonly Box[], span: number): Fit {
+/**
+ * Centre on this model, size by the shared span.
+ *
+ * `frames` is how many sprite frames wide the model's raster is — 2 for the
+ * boss, 1 for everything else. The shared span is multiplied by it so the
+ * *world* scale comes out identical for every model: a double-size frame
+ * then buys the boss twice the room rather than twice the drawing.
+ *
+ * Without it the boss was scaled as if its frame were normal, drew at 99.8%
+ * of the raster, and had its 2px ink dilation clipped off the top and bottom
+ * rows — the crown came out flat-topped. `FILL` leaves room for the ink, and
+ * this is what makes that true for the one model that does not share the
+ * frame size the span was measured against.
+ */
+export function fitFor(model: readonly Box[], span: number, frames = 1): Fit {
   const f = fitOf([model]);
-  return { cu: f.cu, cv: f.cv, span };
+  return { cu: f.cu, cv: f.cv, span: span * frames };
 }
 
 /** Measure the projected bounding box of a set of models. */
@@ -119,9 +132,25 @@ function quad(n: number, f: Fit, pts: [number, number, number][]): Shape {
   );
 }
 
-/** Depth key for the painter's pass: larger is nearer the camera. */
+/**
+ * Depth key for the painter's pass: larger is nearer the camera.
+ *
+ * All three axes weigh the same, because for this camera the view ray *is*
+ * `(1,1,1)` — it is the kernel of the projection:
+ *
+ *     project(1, 1, 1) = ((1-1)·COS, (1+1)·SIN - 1) = (0, 0) = project(0, 0, 0)
+ *
+ * Height is therefore depth here, exactly as much as x and z are. Treating
+ * y as a tiebreak instead sorts any box raised onto another *behind* it,
+ * which paints the body over the shoulder plates standing on it — the tank
+ * lost three of its four plates that way while its caption still promised
+ * four.
+ *
+ * Still a heuristic: centroids, not a BSP. It is exact for boxes that do not
+ * interpenetrate and close enough for the ones here that do.
+ */
 function depth(b: Box): number {
-  return b.x + b.w / 2 + (b.z + b.d / 2) + (b.y + b.h / 2) * 0.01;
+  return b.x + b.w / 2 + (b.y + b.h / 2) + (b.z + b.d / 2);
 }
 
 /**
@@ -172,9 +201,12 @@ function shade(c: Rgb, k: number): Rgb {
  * Render a model into an n-by-n sprite. `colour` maps a tone to an RGB, so
  * the same geometry can be painted in any direction's palette.
  *
- * Painter's algorithm on the box centroids. Correct for models whose boxes
- * do not interpenetrate, which is every model here by construction — a leg
- * is flush against a body, never inside it.
+ * Painter's algorithm on the box centroids: exact for boxes that do not
+ * interpenetrate, approximate for the ones that do. Some do, deliberately —
+ * `eye()` sinks into the head's face so it cannot z-fight with it, and the
+ * shielded invader's bracket overlaps itself at the corner. Both are small
+ * enough that the centroid order is still the right order; a new box that
+ * sits deep inside another is the case this will get wrong.
  */
 export function renderBoxes(model: readonly Box[], n: number, colour: (t: Box["tone"]) => Rgb, faces: FaceTones, f: Fit, samples = 2): Raster {
   const r = new Raster(n, n);

@@ -264,7 +264,7 @@ function compareSheet(): Raster {
   // footer's wrapped height before allocating, so adding a sentence can
   // never push it off the bottom edge.
   const width = colX(DIRECTIONS.length - 1) + colW + 10;
-  const proseCols = Math.floor((width - 16 * 2) / (6 * fontScale(TYPE.label)));
+  const proseCols = Math.floor((width - labelX * 2) / (6 * fontScale(TYPE.label)));
   const footLines = wrap(COST, proseCols, 99).length;
   const r = new Raster(width, stripY + 24 + stripH + 42 + footLines * 20 + 16);
   r.clear(BOARD.hud, 1);
@@ -478,6 +478,49 @@ function doCheck(): void {
   for (const row of layoutTable()) {
     if (!row.logical.includes("x") || row.what.startsWith("type")) continue;
     console.log(`  ${row.what.padEnd(22)} ${row.logical.padEnd(22)} ${row.points} pt`);
+  }
+
+  // A sprite touching its own frame border has been clipped, and what goes
+  // first is the ink dilation drawn *outside* the body — so the sprite still
+  // looks like a sprite and simply loses its outline on one edge. The boss
+  // did exactly that: 26 border pixels and a flat-topped crown, with nothing
+  // in any check that noticed. Cheap to assert, nearly invisible to the eye.
+  // Advisory, not a gate, and the reason is a real difference of intent.
+  // The 2D bestiary deliberately lets appendages — wing tips, tail clubs,
+  // horn tips — into a 6px overhang, so those three directions clip on
+  // purpose and have shipped that way. A block model has no such licence:
+  // `FILL` exists to reserve room for the ink, so any border pixel there is
+  // a scale bug. Until the three flat directions are either trimmed or
+  // explicitly exempted this prints rather than fails.
+  console.log("\nsprites clear of their frame border (advisory; clipping eats the ink first)");
+  const edge = (r: Raster): number => {
+    let n = 0;
+    for (let x = 0; x < r.w; x++) {
+      if (r.get(x, 0)[3] > 8) n++;
+      if (r.get(x, r.h - 1)[3] > 8) n++;
+    }
+    for (let y = 0; y < r.h; y++) {
+      if (r.get(0, y)[3] > 8) n++;
+      if (r.get(r.w - 1, y)[3] > 8) n++;
+    }
+    return n;
+  };
+  for (const d of DIRECTIONS) {
+    let worst = 0;
+    let worstName = "";
+    const note = (name: string, r: Raster): void => {
+      const n = edge(r);
+      if (n > worst) {
+        worst = n;
+        worstName = name;
+      }
+    };
+    for (const k of KINDS) for (const s of [1, 2, 3] as const) note(`${k}-${s}`, dinoSprite(k, s, d));
+    for (const a of ARCHETYPES) note(a, invaderSprite(a, "tyrant", d));
+    // Block directions are gated; the flat ones are reported (see above).
+    if (worst && d.model === "blocks") bad++;
+    const tag = !worst ? "ok  " : d.model === "blocks" ? "FAIL" : "warn";
+    console.log(`  ${tag} ${d.id.padEnd(20)} worst ${String(worst).padStart(3)} px${worst ? ` on ${worstName}` : ""}`);
   }
 
   console.log("\natlas bytes per direction");

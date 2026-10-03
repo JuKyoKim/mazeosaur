@@ -83,9 +83,13 @@ export function renderParts(parts: Part[], d: Direction, p: Palette, n: number):
 
 const FACES = { top: 1.1, front: 0.9, side: 0.7 };
 
-/** Render a block model in a direction's palette, with its ink outline. */
-function renderBlocks(model: Box[], d: Direction, p: Palette, n: number): Raster {
-  const body = renderBoxes(model, n, (t) => p[t], d.faces ?? FACES, fitFor(model, BLOCK_SPAN), d.samples);
+/**
+ * Render a block model in a direction's palette, with its ink outline.
+ * `frames` is the raster's width in sprite frames, so a double-size frame
+ * buys room rather than scale — see `fitFor`.
+ */
+function renderBlocks(model: Box[], d: Direction, p: Palette, n: number, frames = 1): Raster {
+  const body = renderBoxes(model, n, (t) => p[t], d.faces ?? FACES, fitFor(model, BLOCK_SPAN, frames), d.samples);
   return outlined(body, d.outline, p.ink);
 }
 
@@ -104,8 +108,9 @@ export function dinoSprite(kind: Kind, stage: 1 | 2 | 3, d: Direction): Raster {
  */
 export function invaderSprite(archetype: Archetype, kind: Kind, d: Direction): Raster {
   const p = d.palette(KIND_HUE[kind]);
-  const n = archetype === "boss" ? d.spritePx * 2 : d.spritePx;
-  if (d.model === "blocks") return renderBlocks(ARCHETYPE_BLOCKS[archetype](), d, p, n);
+  const frames = archetype === "boss" ? 2 : 1;
+  const n = d.spritePx * frames;
+  if (d.model === "blocks") return renderBlocks(ARCHETYPE_BLOCKS[archetype](), d, p, n, frames);
   const parts = ARCHETYPE_SILHOUETTE[archetype](d.proportions);
   return renderParts(parts, d, p, n);
 }
