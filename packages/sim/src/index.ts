@@ -39,6 +39,7 @@ export {
   type MigrationGroup,
   type MigrationDef,
   type ValleyDef,
+  type FossilWeights,
   type Rules,
   type Content,
 } from "./content-types.js";

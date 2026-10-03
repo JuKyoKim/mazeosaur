@@ -98,6 +98,19 @@ export interface ValleyDef {
   readonly rock: readonly Point[];
 }
 
+/**
+ * Weights for the fossil award a finished run pays out. The formula
+ * (eggs kept, migrations cleared, meat unspent) is balance, so only the
+ * weights live here; the arithmetic that applies them lives next to them
+ * in `@mazeosaur/content`, never as a number in the sim or in
+ * `packages/game` — rule 4.
+ */
+export interface FossilWeights {
+  readonly perEggKept: number;
+  readonly perMigrationCleared: number;
+  readonly perMeatUnspent: number;
+}
+
 export interface Rules {
   readonly startingMeat: number;
   readonly eggs: number;
@@ -106,6 +119,7 @@ export interface Rules {
   readonly earlyBonusPerSecond: number;
   readonly sellRefundBuildPercent: number;
   readonly sellRefundMigrationPercent: number;
+  readonly fossilWeights: FossilWeights;
 }
 
 export interface Content {
