@@ -3,7 +3,8 @@ import { BoardScene } from "./BoardScene.js";
 import { ResultsScene } from "./ResultsScene.js";
 import { TitleScene } from "./TitleScene.js";
 import { SERVICES_KEY, type SaveService, type Services } from "./platform.js";
-import { CANVAS_H, CANVAS_W, COLORS } from "./theme.js";
+import { CANVAS_H, CANVAS_W } from "./layout.js";
+import { COLORS } from "./theme.js";
 
 export interface MountOptions {
   /** element id or element to mount the canvas in */

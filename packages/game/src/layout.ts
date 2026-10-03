@@ -1,19 +1,85 @@
-import { CANVAS_H, CANVAS_W } from "./theme.js";
-
 /**
- * The HUD, as numbers. Every box here comes from `docs/01-art-hud-and-audio.md`
- * section 4, which is generated from `tools/art/layout.ts` so that the spec
- * and the sample frames cannot disagree. This file is the client's copy of
- * that geometry: `tools/art` is a build tool outside the packages, so
- * `packages/game` cannot import it. If a number moves there it moves here.
+ * The logical canvas and the HUD, as numbers. This file is the one home for
+ * that geometry: `docs/01-art-hud-and-audio.md` section 4 and the sample
+ * frames in `docs/art/` are generated from it by way of `tools/art/layout.ts`,
+ * which re-exports it. The mock is the evidence for the spec, and evidence
+ * that is allowed to disagree with the thing it attests to is not evidence —
+ * so the constant lives here and the tool imports it, never the reverse.
  *
  * Lengths are logical pixels on the 720x1280 canvas. `pt()` converts to the
  * CSS points a 390pt phone shows, which is the number that decides whether a
  * control can be hit and whether type can be read.
  */
 
-/** The reference phone: 390x844 CSS points. Phaser FIT scales uniformly. */
-export const REF_DEVICE = { w: 390, h: 844 } as const;
+/** Logical canvas. Portrait; scaled to fit whatever screen mounts it. */
+export const CANVAS_W = 720;
+export const CANVAS_H = 1280;
+/**
+ * Pixels per grid cell. Fixed in v1 by `CELL_PX = CANVAS_W / GRID_W = 36`,
+ * and a design constant rather than a number nobody parameterised: 36 is the
+ * cell every sprite in the atlas is authored at, so a valley of a different
+ * width would rescale every sprite and void the readability pass run at 36.
+ */
+export const CELL_PX = 36;
+export const GRID_W = 20;
+
+/**
+ * The HUD height is a primitive, not a remainder. It is spent exactly on
+ * three rows — 96 + 40 + 136 — which exist because of the 82px hit floor, and
+ * it does not get to shrink because a valley is short. So the HUD anchors to
+ * the bottom of the canvas and never to the bottom of the grid.
+ */
+export const HUD_H = 272;
+export const HUD_Y = CANVAS_H - HUD_H; // 1008
+
+/**
+ * The board *area*: everything above the HUD. The grid is drawn inside it and
+ * may be shorter than it. A 28-row valley fills it exactly, which is why
+ * `BOARD_H` and the grid's own height have been able to share one name
+ * without anything breaking yet.
+ */
+export const BOARD_H = HUD_Y;
+export const GRID_H_MAX = Math.floor(BOARD_H / CELL_PX); // 28
+
+/**
+ * Vertical offset of a grid of `gridH` cells, centred in the board area.
+ *
+ * This is 0 for the 28-row valley that ships, but it is **not** a multiple of
+ * `CELL_PX` in general — a 27-row valley gives 18. Anything converting a
+ * pointer position back to a cell must subtract it before dividing, or it is
+ * correct today and off by one row on the first valley that is not 28 rows,
+ * which presents as a drag-interpolation bug.
+ */
+export function gridTop(gridH: number): number {
+  return Math.round((BOARD_H - gridH * CELL_PX) / 2);
+}
+
+/**
+ * Canvas y to grid row, or null for a point outside the grid. The inset is
+ * subtracted before the divide, which is the whole point of this living here
+ * rather than being written out at the one call site: an integer divide alone
+ * is right for a 28-row valley and one row out for any other, and a cell that
+ * is one row from the finger reads as a drag-interpolation bug.
+ */
+export function rowAt(y: number, gridH: number): number | null {
+  const top = gridTop(gridH);
+  if (y < top || y >= top + gridH * CELL_PX) return null;
+  return Math.floor((y - top) / CELL_PX);
+}
+
+/** Canvas x to grid column, or null for a point outside the grid. */
+export function colAt(x: number, gridW: number): number | null {
+  if (x < 0 || x >= gridW * CELL_PX) return null;
+  return Math.floor(x / CELL_PX);
+}
+
+/**
+ * The reference phone: 390 x 844 CSS points, device pixel ratio 3 — an
+ * iPhone 12 through 16 and the middle of the Android range. Phaser's FIT mode
+ * scales the logical canvas uniformly, so the scale is set by whichever axis
+ * binds first; at 720x1280 into 390x844 the width binds.
+ */
+export const REF_DEVICE = { w: 390, h: 844, dpr: 3 } as const;
 export const SCALE = Math.min(REF_DEVICE.w / CANVAS_W, REF_DEVICE.h / CANVAS_H);
 
 /** Logical pixels to CSS points on the reference phone. */
@@ -28,16 +94,6 @@ export function pt(logical: number): number {
  * buttons, which is 22.8pt, half the floor.
  */
 export const MIN_HIT = Math.ceil(44 / SCALE); // 82
-
-/**
- * The HUD height is a primitive, not a remainder. It is spent exactly on
- * three rows — 96 + 40 + 136 — which exist because of the 82px floor, and it
- * does not get to shrink because a valley is short. So the HUD anchors to the
- * bottom of the canvas and never to the bottom of the grid; a 28-cell valley
- * puts the two edges in the same place, which is why nothing has broken yet.
- */
-export const HUD_H = 272;
-export const HUD_Y = CANVAS_H - HUD_H; // 1008
 
 export const GUTTER = 16;
 export const CONTENT_W = CANVAS_W - GUTTER * 2; // 688
@@ -126,7 +182,8 @@ export const ROW3 = {
   sheetName: { x: GUTTER + 4, y: HUD_Y + 146, w: 272 },
   sheetKind: { x: GUTTER + 4, y: HUD_Y + 174 },
   sheetStats: { x: GUTTER + 4, y: HUD_Y + 196 },
-  sheetRange: { x: GUTTER + 4, y: HUD_Y + 224 },
+  /** Range, and whatever else the kind does that a stat line cannot say. */
+  sheetExtras: { x: GUTTER + 4, y: HUD_Y + 224 },
   grow: { x: 300, y: HUD_Y + 163, w: 228, h: MIN_HIT },
   sell: { x: 540, y: HUD_Y + 163, w: 164, h: MIN_HIT },
 } as const;
@@ -154,22 +211,18 @@ export const TOAST = {
   pad: 14,
 } as const;
 
-/** Everything a reviewer should be able to check, as one table. */
-export function layoutTable(): { what: string; logical: string; points: string }[] {
-  const box = (b: { w: number; h: number }) => `${b.w}x${b.h}`;
-  const both = (b: { w: number; h: number }) => `${pt(b.w)}x${pt(b.h)}`;
-  return [
-    { what: "logical canvas", logical: `${CANVAS_W}x${CANVAS_H}`, points: `${pt(CANVAS_W)}x${pt(CANVAS_H)}` },
-    { what: "HUD", logical: `${CANVAS_W}x${HUD_H}`, points: `${pt(CANVAS_W)}x${pt(HUD_H)}` },
-    { what: "hit-target floor", logical: `${MIN_HIT}`, points: `${pt(MIN_HIT)}` },
-    { what: "Send", logical: box(ROW1.send), points: both(ROW1.send) },
-    { what: "speed toggle", logical: box(ROW1.speed), points: both(ROW1.speed) },
-    { what: "kind button", logical: box(ROW3.kindButton), points: both(ROW3.kindButton) },
-    { what: "Grow", logical: box(ROW3.grow), points: both(ROW3.grow) },
-    { what: "Sell", logical: box(ROW3.sell), points: both(ROW3.sell) },
-    { what: "type: vital", logical: `${TYPE.vital}`, points: `${pt(TYPE.vital)}` },
-    { what: "type: title", logical: `${TYPE.title}`, points: `${pt(TYPE.title)}` },
-    { what: "type: body", logical: `${TYPE.body}`, points: `${pt(TYPE.body)}` },
-    { what: "type: label (dim only)", logical: `${TYPE.label}`, points: `${pt(TYPE.label)}` },
-  ];
-}
+/**
+ * The results screen, over a scrim with the board still visible behind it.
+ * `again` sits in the HUD band at the same height as Send, so the thumb does
+ * not have to move between the run that ended and the next one.
+ */
+export const RESULTS = {
+  headline: { y: 360 },
+  cleared: { y: 440 },
+  eggsKept: { y: 520 },
+  meatUnspent: { y: 520 },
+  fossils: { y: 600 },
+  /** Every dinosaur grown to adult, as its sprite, in a row. */
+  pack: { x: GUTTER, y: 680, w: CONTENT_W, h: 180 },
+  again: { x: Math.round((CANVAS_W - 328) / 2), y: HUD_Y + 11, w: 328, h: MIN_HIT },
+} as const;

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { services } from "./platform.js";
-import { CANVAS_W, COLORS, text } from "./theme.js";
+import { CANVAS_W } from "./layout.js";
+import { COLORS, text } from "./theme.js";
 import { makeButton } from "./ui.js";
 
 /** What the board scene reports when a run ends. All of it read from the sim. */

@@ -3,8 +3,24 @@ import { CELL, Game, TICKS_PER_SECOND, type DinoDef, type GameEvent, type Refusa
 import { content, hatchlings } from "@mazeosaur/content";
 import type { ResumableRun } from "./platform.js";
 import type { RunSummary } from "./ResultsScene.js";
-import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
-import { CONTENT_RIGHT, HUD_H, HUD_Y, ROW1, ROW2, ROW3, TOAST, TYPE, kindButtonX } from "./layout.js";
+import { COLORS, KIND_COLOR, text } from "./theme.js";
+import {
+  CANVAS_H,
+  CANVAS_W,
+  CELL_PX,
+  CONTENT_RIGHT,
+  HUD_H,
+  HUD_Y,
+  ROW1,
+  ROW2,
+  ROW3,
+  TOAST,
+  TYPE,
+  colAt,
+  gridTop,
+  kindButtonX,
+  rowAt,
+} from "./layout.js";
 import { makeButton, type Button } from "./ui.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
@@ -12,13 +28,21 @@ const TICK_MS = 1000 / TICKS_PER_SECOND;
 const MEAT_RGB = Phaser.Display.Color.HexStringToColor(COLORS.meat).color;
 const EGGS_RGB = Phaser.Display.Color.HexStringToColor(COLORS.eggs).color;
 /**
- * The grid's own height. The HUD does not derive from it — it anchors to the
- * bottom of the canvas, because its 272px are spent on three rows that exist
- * because of the 82px hit floor and do not get to shrink for a short valley.
- * A 28-cell valley puts the two edges in the same place, which is why the
- * board and the HUD seam agree today.
+ * The grid's own pixel height, and where it starts. `BOARD_H` (from layout)
+ * is the board *area* — everything above the HUD — and is fixed, because the
+ * HUD anchors to the bottom of the canvas and does not shrink for a short
+ * valley. These two are content-derived: the grid lives inside the area and
+ * may be shorter than it, centred, with `GRID_TOP` of margin above.
+ *
+ * `GRID_TOP` is 0 for the 28-row valley that ships, so every pixel below
+ * lands where it landed before this split. It is not a multiple of `CELL_PX`
+ * in general, though — a 27-row valley gives 18 — which is why `cellAt`
+ * subtracts it before dividing rather than relying on the integer divide.
  */
-const BOARD_H = content.valley.height * CELL_PX;
+const GRID_PX_H = content.valley.height * CELL_PX;
+const GRID_TOP = gridTop(content.valley.height);
+/** Cell row to canvas y. The only place the grid's inset is applied. */
+const gy = (row: number): number => row * CELL_PX + GRID_TOP;
 /** How long the last kill or leak stays on screen before the results come up. */
 const END_DELAY_MS = 1100;
 
@@ -136,7 +160,7 @@ export class BoardScene extends Phaser.Scene {
   private sheetName!: Phaser.GameObjects.Text;
   private sheetKind!: Phaser.GameObjects.Text;
   private sheetStats!: Phaser.GameObjects.Text;
-  private sheetRange!: Phaser.GameObjects.Text;
+  private sheetExtras!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
   private sheetKey = "";
@@ -281,11 +305,11 @@ export class BoardScene extends Phaser.Scene {
   // ------------------------------------------------------------- drawing
 
   private cellCenter(x: number, y: number): { x: number; y: number } {
-    return { x: x * CELL_PX + CELL_PX / 2, y: y * CELL_PX + CELL_PX / 2 };
+    return { x: x * CELL_PX + CELL_PX / 2, y: gy(y) + CELL_PX / 2 };
   }
 
   private worldFromMilli(px: number, py: number): { x: number; y: number } {
-    return { x: (px * CELL_PX) / CELL, y: (py * CELL_PX) / CELL };
+    return { x: (px * CELL_PX) / CELL, y: (py * CELL_PX) / CELL + GRID_TOP };
   }
 
   private drawStatic(): void {
@@ -293,22 +317,22 @@ export class BoardScene extends Phaser.Scene {
     const v = content.valley;
     gfx.clear();
     gfx.fillStyle(COLORS.boardBg, 1);
-    gfx.fillRect(0, 0, CANVAS_W, BOARD_H);
+    gfx.fillRect(0, GRID_TOP, CANVAS_W, GRID_PX_H);
     gfx.lineStyle(1, COLORS.gridLine, 1);
-    for (let x = 0; x <= v.width; x++) gfx.lineBetween(x * CELL_PX, 0, x * CELL_PX, BOARD_H);
-    for (let y = 0; y <= v.height; y++) gfx.lineBetween(0, y * CELL_PX, CANVAS_W, y * CELL_PX);
+    for (let x = 0; x <= v.width; x++) gfx.lineBetween(x * CELL_PX, GRID_TOP, x * CELL_PX, GRID_TOP + GRID_PX_H);
+    for (let y = 0; y <= v.height; y++) gfx.lineBetween(0, gy(y), CANVAS_W, gy(y));
 
     const mark = (p: { x: number; y: number }, color: number, label: string) => {
       gfx.fillStyle(color, 1);
-      gfx.fillRect(p.x * CELL_PX + 2, p.y * CELL_PX + 2, CELL_PX - 4, CELL_PX - 4);
-      this.add.text(p.x * CELL_PX + CELL_PX / 2, p.y * CELL_PX + CELL_PX / 2, label, text(16, "#111")).setOrigin(0.5);
+      gfx.fillRect(p.x * CELL_PX + 2, gy(p.y) + 2, CELL_PX - 4, CELL_PX - 4);
+      this.add.text(p.x * CELL_PX + CELL_PX / 2, gy(p.y) + CELL_PX / 2, label, text(16, "#111")).setOrigin(0.5);
     };
     mark(v.lane.spawn, COLORS.spawn, "S");
     v.lane.checkpoints.forEach((c, i) => mark(c, COLORS.checkpoint, String(i + 1)));
     mark(v.lane.exit, COLORS.nest, "N");
     for (const r of v.rock) {
       gfx.fillStyle(0x4a4a4a, 1);
-      gfx.fillRect(r.x * CELL_PX, r.y * CELL_PX, CELL_PX, CELL_PX);
+      gfx.fillRect(r.x * CELL_PX, gy(r.y), CELL_PX, CELL_PX);
     }
   }
 
@@ -318,7 +342,7 @@ export class BoardScene extends Phaser.Scene {
     for (const d of this.game_.state.dinos) {
       const def = this.game_.dinoDef(d);
       const x = d.x * CELL_PX;
-      const y = d.y * CELL_PX;
+      const y = gy(d.y);
       gfx.fillStyle(KIND_COLOR[def.kind], 1);
       gfx.fillRoundedRect(x + 3, y + 3, CELL_PX - 6, CELL_PX - 6, 6);
       // growth stage as pips
@@ -342,7 +366,7 @@ export class BoardScene extends Phaser.Scene {
         gfx.lineStyle(2, 0xffffff, 0.5);
         gfx.strokeCircle(c.x, c.y, (def.range * CELL_PX) / CELL);
         gfx.lineStyle(3, 0xffffff, 0.9);
-        gfx.strokeRect(d.x * CELL_PX + 1, d.y * CELL_PX + 1, CELL_PX - 2, CELL_PX - 2);
+        gfx.strokeRect(d.x * CELL_PX + 1, gy(d.y) + 1, CELL_PX - 2, CELL_PX - 2);
       } else {
         this.selectedDino = null;
       }
@@ -350,7 +374,7 @@ export class BoardScene extends Phaser.Scene {
       const r = g.placeRefusal(this.selectedDef.id, this.hoverCell.x, this.hoverCell.y);
       const c = this.cellCenter(this.hoverCell.x, this.hoverCell.y);
       gfx.fillStyle(r ? COLORS.refusal : KIND_COLOR[this.selectedDef.kind], 0.45);
-      gfx.fillRoundedRect(this.hoverCell.x * CELL_PX + 3, this.hoverCell.y * CELL_PX + 3, CELL_PX - 6, CELL_PX - 6, 6);
+      gfx.fillRoundedRect(this.hoverCell.x * CELL_PX + 3, gy(this.hoverCell.y) + 3, CELL_PX - 6, CELL_PX - 6, 6);
       if (!r) {
         gfx.lineStyle(1, 0xffffff, 0.35);
         gfx.strokeCircle(c.x, c.y, (this.selectedDef.range * CELL_PX) / CELL);
@@ -539,7 +563,7 @@ export class BoardScene extends Phaser.Scene {
     this.sheetName = this.add.text(ROW3.sheetName.x, ROW3.sheetName.y, "", line(TYPE.title, w));
     this.sheetKind = this.add.text(ROW3.sheetKind.x, ROW3.sheetKind.y, "", line(TYPE.label, w, COLORS.textDim));
     this.sheetStats = this.add.text(ROW3.sheetStats.x, ROW3.sheetStats.y, "", line(TYPE.body, w));
-    this.sheetRange = this.add.text(ROW3.sheetRange.x, ROW3.sheetRange.y, "", line(TYPE.label, w, COLORS.textDim));
+    this.sheetExtras = this.add.text(ROW3.sheetExtras.x, ROW3.sheetExtras.y, "", line(TYPE.label, w, COLORS.textDim));
     this.growButton = this.button(ROW3.grow.x, ROW3.grow.y, ROW3.grow.w, ROW3.grow.h, "Grow", () => this.grow(), TYPE.label);
     this.sellButton = this.button(ROW3.sell.x, ROW3.sell.y, ROW3.sell.w, ROW3.sell.h, "Sell", () => this.sell(), TYPE.label);
     this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
@@ -568,7 +592,7 @@ export class BoardScene extends Phaser.Scene {
     this.sheetName.setVisible(v);
     this.sheetKind.setVisible(v);
     this.sheetStats.setVisible(v);
-    this.sheetRange.setVisible(v);
+    this.sheetExtras.setVisible(v);
     this.growButton.setVisible(v);
     this.sellButton.setVisible(v);
     for (const { button } of this.shopButtons) button.setVisible(!v);
@@ -673,7 +697,7 @@ export class BoardScene extends Phaser.Scene {
     // same thing as 77 dps of chip, and that difference is the reason to
     // grow a tyrant.
     this.sheetStats.setText(`${def.damage} dmg · ${dps} dps`);
-    this.sheetRange.setText(`range ${(def.range / CELL).toFixed(1)} cells · ${hits}`);
+    this.sheetExtras.setText(`range ${(def.range / CELL).toFixed(1)} cells · ${hits}`);
 
     const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
     // The price of the thing the player cannot buy yet is still shown; only
@@ -783,8 +807,10 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private cellAt(p: Phaser.Input.Pointer): { x: number; y: number } | null {
-    if (p.y >= BOARD_H || p.y < 0 || p.x < 0 || p.x >= CANVAS_W) return null;
-    return { x: Math.floor(p.x / CELL_PX), y: Math.floor(p.y / CELL_PX) };
+    const v = content.valley;
+    const x = colAt(p.x, v.width);
+    const y = rowAt(p.y, v.height);
+    return x === null || y === null ? null : { x, y };
   }
 
   private tryPlace(x: number, y: number, quiet = false): void {

@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { content } from "@mazeosaur/content";
 import { services } from "./platform.js";
-import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, text } from "./theme.js";
+import { CANVAS_H, CANVAS_W, CELL_PX } from "./layout.js";
+import { COLORS, text } from "./theme.js";
 import { makeButton } from "./ui.js";
 
 const BUTTON_W = 440;

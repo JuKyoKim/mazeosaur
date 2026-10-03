@@ -1,10 +1,8 @@
 import type { Kind } from "@mazeosaur/sim";
 
-/** Logical canvas. Portrait; scaled to fit whatever screen mounts it. */
-export const CANVAS_W = 720;
-export const CANVAS_H = 1280;
-/** Pixels per grid cell on the logical canvas: 20 cells * 36 = 720. */
-export const CELL_PX = 36;
+// Colour only. The logical canvas, the cell size and every HUD box live in
+// layout.ts, which is the single home for that geometry because tools/art
+// re-exports it to generate the spec and the sample frames.
 
 export const COLORS = {
   bg: 0x16211a,

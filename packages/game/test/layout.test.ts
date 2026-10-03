@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { hatchlings } from "@mazeosaur/content";
-import { CANVAS_H, CANVAS_W } from "../src/theme.js";
 import {
+  BOARD_H,
+  CANVAS_H,
+  CANVAS_W,
+  CELL_PX,
   CONTENT_RIGHT,
+  GRID_W,
   GUTTER,
   HUD_H,
   HUD_Y,
@@ -12,8 +16,11 @@ import {
   ROW3,
   TOAST,
   TYPE,
+  colAt,
+  gridTop,
   kindButtonX,
   pt,
+  rowAt,
 } from "../src/layout.js";
 
 /**
@@ -120,7 +127,7 @@ describe("row 3, the tray", () => {
       { y: ROW3.sheetName.y, size: TYPE.title },
       { y: ROW3.sheetKind.y, size: TYPE.label },
       { y: ROW3.sheetStats.y, size: TYPE.body },
-      { y: ROW3.sheetRange.y, size: TYPE.label },
+      { y: ROW3.sheetExtras.y, size: TYPE.label },
     ];
     for (let i = 1; i < lines.length; i++) {
       const prev = lines[i - 1];
@@ -171,5 +178,52 @@ describe("the type scale", () => {
     expect(TYPE.vital).toBeGreaterThan(TYPE.title);
     expect(TYPE.title).toBeGreaterThan(TYPE.body);
     expect(TYPE.body).toBeGreaterThan(TYPE.label);
+  });
+});
+
+/**
+ * The grid lives inside the board area; the HUD does not move to meet it.
+ * These two facts shared one name until the HUD was specified, and they are
+ * equal for the 28-row valley that ships — which is exactly why nothing had
+ * broken and why the split needs a test rather than a screenshot.
+ */
+describe("the grid inside the board area", () => {
+  it("does not move the HUD when the valley is short", () => {
+    for (const gridH of [20, 24, 27, 28]) {
+      expect(gridTop(gridH) * 2 + gridH * CELL_PX).toBeGreaterThanOrEqual(BOARD_H - 1);
+      expect(HUD_Y).toBe(CANVAS_H - HUD_H);
+    }
+  });
+
+  it("centres the grid, and is a no-op for the shipping valley", () => {
+    expect(gridTop(28)).toBe(0);
+    expect(gridTop(24)).toBe(72);
+    // Not a multiple of CELL_PX: this is the case an integer divide gets wrong.
+    expect(gridTop(27)).toBe(18);
+  });
+
+  it("maps a pointer back to the row under it, for every valley height", () => {
+    for (const gridH of [20, 24, 27, 28]) {
+      const top = gridTop(gridH);
+      for (let row = 0; row < gridH; row++) {
+        // the top edge, the middle and the last pixel of the row all belong
+        // to that row, and nothing outside the grid belongs to any row
+        expect(rowAt(top + row * CELL_PX, gridH)).toBe(row);
+        expect(rowAt(top + row * CELL_PX + CELL_PX / 2, gridH)).toBe(row);
+        expect(rowAt(top + row * CELL_PX + CELL_PX - 1, gridH)).toBe(row);
+      }
+      expect(rowAt(top - 1, gridH)).toBeNull();
+      expect(rowAt(top + gridH * CELL_PX, gridH)).toBeNull();
+      expect(rowAt(HUD_Y, gridH)).toBeNull();
+    }
+  });
+
+  it("maps a pointer back to the column under it", () => {
+    for (let col = 0; col < GRID_W; col++) {
+      expect(colAt(col * CELL_PX, GRID_W)).toBe(col);
+      expect(colAt(col * CELL_PX + CELL_PX - 1, GRID_W)).toBe(col);
+    }
+    expect(colAt(-1, GRID_W)).toBeNull();
+    expect(colAt(CANVAS_W, GRID_W)).toBeNull();
   });
 });
