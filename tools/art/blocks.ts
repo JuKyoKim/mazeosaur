@@ -64,12 +64,16 @@ function eye(x: number, y: number, zFace: number, s = 0.055): Box[] {
 /** A low horizontal dash: stiff tail out behind, head carried forward. */
 function raptor(stage: 1 | 2 | 3): Box[] {
   const m: Box[] = [
-    ...legs2(0.42, 0.22),
-    box(0.32, 0.2, 0.4, 0.3, 0.2, 0.2), // body
-    box(0.1, 0.25, 0.43, 0.24, 0.08, 0.13), // tail, horizontal and stiff
-    box(0.58, 0.26, 0.41, 0.17, 0.15, 0.18), // head carried forward
-    box(0.73, 0.27, 0.43, 0.11, 0.08, 0.13, "dark"), // snout
-    ...eye(0.63, 0.34, 0.59),
+    // Long and low. The first pass was a tall box with a stub behind it and
+    // read as a lump: the dash is the whole tell, so the mass runs the full
+    // width of the model and the body is shorter than it is long.
+    ...legs2(0.4, 0.2),
+    box(0.3, 0.2, 0.41, 0.28, 0.15, 0.18), // body, low
+    box(0.12, 0.23, 0.43, 0.2, 0.07, 0.12), // tail, stiff and horizontal
+    box(0.02, 0.24, 0.44, 0.12, 0.05, 0.09, "dark"), // and carried out past it
+    box(0.56, 0.24, 0.41, 0.16, 0.13, 0.17), // head, forward and level
+    box(0.71, 0.25, 0.43, 0.15, 0.07, 0.12, "dark"), // snout, long
+    ...eye(0.61, 0.31, 0.58),
   ];
   if (stage === 3) m.push(box(0.6, 0.4, 0.44, 0.12, 0.05, 0.05, "accent")); // crest
   if (stage >= 2) m.push(box(0.56, 0.18, 0.42, 0.06, 0.04, 0.05, "accent")); // sickle claw
@@ -95,13 +99,19 @@ function tyrant(stage: 1 | 2 | 3): Box[] {
 /** A wide low hump with a detached-looking ball on the tail. */
 function armored(stage: 1 | 2 | 3): Box[] {
   const m: Box[] = [
-    ...legs4(0.28, 0.66, 0.3, 0.7, 0.11),
-    box(0.26, 0.1, 0.28, 0.4, 0.16, 0.44), // wide low body
-    box(0.32, 0.26, 0.34, 0.28, 0.11, 0.32, "light"), // the hump
-    box(0.62, 0.1, 0.42, 0.14, 0.12, 0.17, "dark"), // small low head
-    box(0.14, 0.14, 0.44, 0.14, 0.07, 0.1), // tail
-    box(0.02, 0.1, 0.42, 0.13, 0.14, 0.14, "accent"), // the club, reading detached
-    ...eye(0.68, 0.16, 0.59, 0.045),
+    ...legs4(0.3, 0.68, 0.3, 0.7, 0.1),
+    box(0.28, 0.09, 0.28, 0.4, 0.15, 0.44), // wide low body
+    // A dome, not a slab: two courses stepped in on all four sides. One
+    // course read as a lid on a box and the hump is half the tell.
+    box(0.33, 0.24, 0.33, 0.3, 0.1, 0.34, "light"),
+    box(0.38, 0.34, 0.38, 0.2, 0.08, 0.24, "light"),
+    box(0.64, 0.09, 0.42, 0.14, 0.11, 0.17, "dark"), // small low head
+    // The club has to look detached, so the tail that carries it is thin
+    // enough to disappear at 20px and the ball is nearly head-sized. At the
+    // first pass the club was smaller than the tail and merged into the body.
+    box(0.17, 0.13, 0.45, 0.13, 0.05, 0.07),
+    box(0.0, 0.08, 0.41, 0.17, 0.17, 0.17, "accent"),
+    ...eye(0.7, 0.15, 0.59, 0.045),
   ];
   if (stage >= 2) {
     m.push(box(0.3, 0.36, 0.36, 0.08, 0.06, 0.07, "accent"), box(0.52, 0.36, 0.36, 0.08, 0.06, 0.07, "accent"));
