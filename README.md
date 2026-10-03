@@ -14,7 +14,10 @@ One codebase, three targets:
   in the mobile binaries, and CI proves it.
 
 Read [docs/00-proposal.md](docs/00-proposal.md) for what is being built,
-why Phaser + Capacitor, the v1 design, and the milestone plan.
+why Phaser + Capacitor, the v1 design, and the milestone plan, then
+[docs/01-art-hud-and-audio.md](docs/01-art-hud-and-audio.md) for the HUD
+layout, the sprite manifest, the audio list and how the first migration
+teaches mazing.
 
 ## Layout
 
