@@ -363,3 +363,19 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   `tools/art/layout.ts` is the single source of every layout number the
   spec and the frames both read, so an unchecked edit there can only be
   found by a human noticing a picture changed.
+- 2026-10-03: `apps/web` keeps its own `vite@7` while the root resolves
+  `vite@8`, and the two are deliberately left un-deduped. The root
+  declares no vite of its own, so npm hoists the highest major in vitest
+  5's peer range (`^6.4.0 || ^7.0.0 || ^8.0.0`) — nobody chose 8 for the
+  root; what is deliberate is leaving it. Aligning means one of two real
+  changes: move the shipped web shell to vite 8, a rolldown bundler
+  migration with no size or gameplay gain available today, or add a vite
+  devDependency to the root that nothing at the root uses, purely to
+  steer hoisting, which couples the repo to vitest's current peer floor.
+  Vitest 5 supports vite 7 — the same range appears in its peer and its
+  dev dependencies — so alignment is available; it is simply not worth
+  either cost while the skew has no consequence. Config that both majors
+  must typecheck is written to the intersection of their types instead —
+  see the comment on `manualChunks` in `apps/web/vite.config.ts`.
+  Revisit when `apps/web` moves to vite 8, or when a second field
+  diverges.
