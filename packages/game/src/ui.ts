@@ -4,6 +4,14 @@ import { COLORS, text } from "./theme.js";
 export interface Button {
   bg: Phaser.GameObjects.Rectangle;
   label: Phaser.GameObjects.Text;
+  /**
+   * Extra display objects that belong to this button — a silhouette, a cost
+   * line — so that showing or hiding it is one call and a new part cannot be
+   * forgotten at the call site. The tray swaps twelve of these at a time.
+   */
+  parts: Phaser.GameObjects.Components.Visible[];
+  add<T extends Phaser.GameObjects.Components.Visible>(part: T): T;
+  setVisible(v: boolean): void;
 }
 
 export interface ButtonOptions {
@@ -43,5 +51,22 @@ export function makeButton(
       p.event.preventDefault?.();
     });
   }
-  return { bg, label: t };
+  const button: Button = {
+    bg,
+    label: t,
+    parts: [],
+    add(part) {
+      this.parts.push(part);
+      return part;
+    },
+    setVisible(v) {
+      bg.setVisible(v);
+      // A hidden button must also stop taking the pointer, or the invisible
+      // shop keeps swallowing taps meant for the sheet on top of it.
+      if (bg.input) bg.input.enabled = v;
+      t.setVisible(v);
+      for (const part of this.parts) part.setVisible(v);
+    },
+  };
+  return button;
 }

@@ -4,30 +4,30 @@ import { content, hatchlings } from "@mazeosaur/content";
 import type { ResumableRun } from "./platform.js";
 import type { RunSummary } from "./ResultsScene.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
+import { CONTENT_RIGHT, HUD_H, HUD_Y, ROW1, ROW2, ROW3, TOAST, TYPE, kindButtonX } from "./layout.js";
 import { makeButton, type Button } from "./ui.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
+/** The two vitals' hues as numbers, so an icon and its count cannot drift. */
+const MEAT_RGB = Phaser.Display.Color.HexStringToColor(COLORS.meat).color;
+const EGGS_RGB = Phaser.Display.Color.HexStringToColor(COLORS.eggs).color;
+/**
+ * The grid's own height. The HUD does not derive from it — it anchors to the
+ * bottom of the canvas, because its 272px are spent on three rows that exist
+ * because of the 82px hit floor and do not get to shrink for a short valley.
+ * A 28-cell valley puts the two edges in the same place, which is why the
+ * board and the HUD seam agree today.
+ */
 const BOARD_H = content.valley.height * CELL_PX;
-const HUD_Y = BOARD_H;
 /** How long the last kill or leak stays on screen before the results come up. */
 const END_DELAY_MS = 1100;
 
 /**
  * Nothing in the HUD is positioned by the measured width of a variable
- * string: a changing string is either left-anchored with a wrap width
- * equal to the gap it is allowed to fill, or right-anchored to a fixed
- * edge. These three numbers are what the gaps are measured against, so
- * moving a button means moving one of them too.
+ * string: a changing string is either left-anchored with a wrap width equal
+ * to the gap it is allowed to fill, or right-anchored to a fixed edge. The
+ * gaps themselves live in layout.ts, so moving a button moves them together.
  */
-/** Right edge of the build timer: 16px of air before Send at x=496. */
-const TIMER_RIGHT = 480;
-/** Left edge of the sheet's Grow button; the text column ends 12px short of it. */
-const GROW_X = CANVAS_W - 336;
-/** The sheet's text column: x=20 to the Grow button's 12px gutter. */
-const SHEET_WRAP = GROW_X - 12 - 20;
-/** Full-width HUD lines: x=16 to a 16px right margin. */
-const HUD_WRAP = CANVAS_W - 32;
-
 /** A one-line HUD label: wraps inside its column instead of overflowing it. */
 function line(size: number, wrap: number, color?: string): Phaser.Types.GameObjects.Text.TextStyle {
   return { ...text(size, color), wordWrap: { width: wrap }, maxLines: 1 };
@@ -83,7 +83,7 @@ const REFUSAL_TEXT: Record<Refusal, string> = {
   "unknown-dino": "Unknown dinosaur",
   "no-meat": "Not enough meat",
   "invader-in-the-way": "An invader is in the way",
-  rock: "Solid rock",
+  rock: "Rock",
   "not-yours": "No dinosaur there",
   "fully-grown": "Fully grown",
   "wrong-phase": "Not now",
@@ -115,21 +115,37 @@ export class BoardScene extends Phaser.Scene {
   private lastPaint: { x: number; y: number } | null = null;
   private hoverCell: { x: number; y: number } | null = null;
 
+  /** Row 1. The timer is a bar, so it is sized rather than written. */
+  private hudGfx!: Phaser.GameObjects.Graphics;
+  private timerBar!: Phaser.GameObjects.Rectangle;
   private meatText!: Phaser.GameObjects.Text;
   private eggsText!: Phaser.GameObjects.Text;
-  private waveText!: Phaser.GameObjects.Text;
-  private timerText!: Phaser.GameObjects.Text;
-  private statusText!: Phaser.GameObjects.Text;
-  private statusUntil = 0;
-  private previewText!: Phaser.GameObjects.Text;
-  private paletteButtons: { def: DinoDef; button: Button }[] = [];
+  private migrationValue!: Phaser.GameObjects.Text;
   private sendButton!: Button;
   private speedButton!: Button;
-  private panelName!: Phaser.GameObjects.Text;
-  private panelStats!: Phaser.GameObjects.Text;
-  private panelTraits!: Phaser.GameObjects.Text;
+
+  /** Row 2: the next migration, information only and never tappable. */
+  private previewChip!: Phaser.GameObjects.Rectangle;
+  private previewText!: Phaser.GameObjects.Text;
+  private previewMeta!: Phaser.GameObjects.Text;
+  private previewKey = "";
+
+  /** Row 3: one tray at a time — the shop, or the selected dinosaur's sheet. */
+  private shopButtons: { def: DinoDef; button: Button; cost: Phaser.GameObjects.Text }[] = [];
+  private sheetPanel!: Phaser.GameObjects.Rectangle;
+  private sheetName!: Phaser.GameObjects.Text;
+  private sheetKind!: Phaser.GameObjects.Text;
+  private sheetStats!: Phaser.GameObjects.Text;
+  private sheetRange!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
+  private sheetKey = "";
+
+  /** The toast, over the bottom of the board rather than in a HUD row. */
+  private toastPanel!: Phaser.GameObjects.Rectangle;
+  private toastBar!: Phaser.GameObjects.Rectangle;
+  private toastText!: Phaser.GameObjects.Text;
+  private toastUntil = 0;
 
   constructor() {
     super("board");
@@ -158,8 +174,10 @@ export class BoardScene extends Phaser.Scene {
     this.painting = false;
     this.lastPaint = null;
     this.hoverCell = null;
-    this.paletteButtons = [];
-    this.statusUntil = 0;
+    this.shopButtons = [];
+    this.toastUntil = 0;
+    this.previewKey = "";
+    this.sheetKey = "";
     this.cameras.main.setBackgroundColor(COLORS.bg);
 
     if (this.resume) this.replay(this.resume);
@@ -404,140 +422,291 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private buildHud(): void {
-    const y0 = HUD_Y;
-    this.add.rectangle(0, y0, CANVAS_W, CANVAS_H - y0, COLORS.hud).setOrigin(0, 0);
+    this.add.rectangle(0, HUD_Y, CANVAS_W, HUD_H, COLORS.hud).setOrigin(0, 0);
+    this.hudGfx = this.add.graphics();
 
-    // row 1: the numbers that change every second, then send and speed.
-    // The migration counter is not one of those — it changes once a
-    // migration and it is the same fact as the migration's name, so it
-    // lives in row 3 and the timer gets the room.
-    this.meatText = this.add.text(16, y0 + 14, "", text(22, COLORS.meat));
-    this.eggsText = this.add.text(168, y0 + 14, "", text(22, COLORS.eggs));
-    // Right-aligned to a 16px gutter in front of Send at x=496: neither
-    // "45s" nor "24 left" can reach the button, whatever the digits do.
-    this.timerText = this.add.text(TIMER_RIGHT, y0 + 14, "", text(22, COLORS.textDim)).setOrigin(1, 0);
-    this.sendButton = this.button(496, y0 + 6, 144, 42, "Send", () => this.send(), 19);
-    this.speedButton = this.button(648, y0 + 6, 56, 42, "1x", () => this.cycleSpeed(), 19);
+    this.buildRow1();
+    this.buildRow2();
+    this.buildRow3();
+    this.buildToast();
 
-    // row 2: one button per kind
-    const py = y0 + 54;
-    const bw = Math.floor((CANVAS_W - 32 - (hatchlings.length - 1) * 4) / hatchlings.length);
-    hatchlings.forEach((def, i) => {
-      const b = this.button(16 + i * (bw + 4), py, bw, 58, "", () => this.selectDef(def), 14);
-      b.bg.setFillStyle(KIND_COLOR[def.kind], 0.25);
-      b.label.setText(`${def.name}\n${def.cost} meat`).setAlign("center");
-      this.paletteButtons.push({ def, button: b });
-    });
-
-    // row 3: what just happened, which migration, and what is in it. All
-    // three are variable-width, so all three wrap at the full HUD width
-    // rather than trusting the content to stay short.
-    this.statusText = this.add.text(16, y0 + 118, "", line(18, HUD_WRAP, COLORS.textDim));
-    this.waveText = this.add.text(16, y0 + 142, "", line(18, HUD_WRAP));
-    this.previewText = this.add.text(16, y0 + 166, "", line(15, HUD_WRAP, COLORS.textDim));
-
-    // row 4: selected dino panel, flush to the bottom edge of the canvas
-    const panelY = y0 + 192;
-    this.add.rectangle(8, panelY, CANVAS_W - 16, CANVAS_H - panelY, COLORS.hudPanel).setOrigin(0, 0);
-    this.panelName = this.add.text(20, panelY + 8, "", line(20, SHEET_WRAP));
-    this.panelStats = this.add.text(20, panelY + 34, "", line(15, SHEET_WRAP, COLORS.textDim));
-    this.panelTraits = this.add.text(20, panelY + 54, "", line(15, SHEET_WRAP, COLORS.textDim));
-    this.growButton = this.button(GROW_X, panelY + 14, 190, 52, "Grow", () => this.grow(), 17);
-    this.sellButton = this.button(CANVAS_W - 136, panelY + 14, 120, 52, "Sell", () => this.sell(), 17);
-    this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
-    this.setPanelVisible(false);
-
+    this.showSheet(false);
     if (hatchlings[0]) this.selectDef(hatchlings[0]);
   }
 
-  private setPanelVisible(v: boolean): void {
-    this.panelName.setVisible(v);
-    this.panelStats.setVisible(v);
-    this.panelTraits.setVisible(v);
-    this.growButton.bg.setVisible(v);
-    this.growButton.label.setVisible(v);
-    this.sellButton.bg.setVisible(v);
-    this.sellButton.label.setVisible(v);
+  /**
+   * Row 1: the build timer as a draining bar along the seam, then meat,
+   * eggs, which migration, Send and the speed toggle. The timer shows no
+   * digits on purpose — during a build phase the player is looking at the
+   * grid, and a full-width bar is legible without being read. Send and the
+   * speed toggle are both 82px, which is the 44pt hit floor.
+   */
+  private buildRow1(): void {
+    const bar = ROW1.timerBar;
+    this.add.rectangle(bar.x, bar.y, bar.w, bar.h, COLORS.hudPanel).setOrigin(0, 0);
+    this.timerBar = this.add.rectangle(bar.x, bar.y, bar.w, bar.h, COLORS.buttonActive).setOrigin(0, 0);
+
+    // Meat and eggs are an icon plus a count, not a labelled field: 214 and
+    // 14 are read as shapes. The icons are flat placeholders until the
+    // atlas lands; the sprite drops into the same box.
+    this.hudGfx.fillStyle(MEAT_RGB, 1);
+    this.hudGfx.fillRoundedRect(ROW1.meatIcon.x, ROW1.meatIcon.y, ROW1.meatIcon.w, ROW1.meatIcon.h, 8);
+    this.hudGfx.fillStyle(EGGS_RGB, 1);
+    this.hudGfx.fillEllipse(
+      ROW1.eggIcon.x + ROW1.eggIcon.w / 2,
+      ROW1.eggIcon.y + ROW1.eggIcon.h / 2,
+      ROW1.eggIcon.w,
+      ROW1.eggIcon.h,
+    );
+    // Each count wraps inside the gap to the next element, so four digits
+    // of meat still cannot reach the egg icon.
+    this.meatText = this.add.text(ROW1.meatValue.x, ROW1.meatValue.y, "", line(TYPE.vital, 124, COLORS.meat));
+    this.eggsText = this.add.text(ROW1.eggValue.x, ROW1.eggValue.y, "", line(TYPE.vital, 78, COLORS.eggs));
+
+    this.add.text(ROW1.migrationLabel.x, ROW1.migrationLabel.y, "MIGRATION", text(TYPE.label, COLORS.textDim));
+    this.migrationValue = this.add.text(
+      ROW1.migrationValue.x,
+      ROW1.migrationValue.y,
+      "",
+      line(TYPE.body, ROW1.migrationWrap),
+    );
+
+    this.sendButton = this.button(ROW1.send.x, ROW1.send.y, ROW1.send.w, ROW1.send.h, "Send", () => this.send(), TYPE.body);
+    this.speedButton = this.button(ROW1.speed.x, ROW1.speed.y, ROW1.speed.w, ROW1.speed.h, "1x", () => this.cycleSpeed(), TYPE.body);
+  }
+
+  /**
+   * Row 2: the one line that says what is coming. A kind chip carries the
+   * hue, then the count and genus, then the archetype and kind dim and
+   * right-aligned. Information only — nothing here takes a pointer, which
+   * is why 40px is allowed to sit under the hit floor.
+   */
+  private buildRow2(): void {
+    this.previewChip = this.add
+      .rectangle(ROW2.chip.x, ROW2.chip.y, ROW2.chip.w, ROW2.chip.h, COLORS.hudPanel)
+      .setOrigin(0, 0);
+    // Two variable strings facing each other: the left wraps inside the gap
+    // it may fill, the right is anchored to the content edge.
+    const leftWrap = CONTENT_RIGHT - ROW2.metaW - 12 - ROW2.text.x;
+    this.previewText = this.add.text(ROW2.text.x, ROW2.text.y, "", line(TYPE.body, leftWrap));
+    this.previewMeta = this.add
+      .text(ROW2.meta.right, ROW2.meta.y, "", line(TYPE.label, ROW2.metaW, COLORS.textDim))
+      .setOrigin(1, 0);
+  }
+
+  /**
+   * Row 3: one tray at a time. Six hatchling buttons while nothing is
+   * selected, the dinosaur sheet while something is. Swapping rather than
+   * stacking is what buys the hit targets — the palette is 128px and the
+   * sheet 107px, and stacked they are 235px into a 136px row — and the
+   * player discovers growing by watching the shop become a sheet.
+   */
+  private buildRow3(): void {
+    const kb = ROW3.kindButton;
+    hatchlings.forEach((def, i) => {
+      const x = kindButtonX(i);
+      const cx = x + kb.w / 2;
+      const hue = KIND_COLOR[def.kind];
+      const b = this.button(x, kb.y, kb.w, kb.h, "", () => this.selectDef(def), TYPE.label);
+      b.bg.setFillStyle(hue, 0.22);
+
+      // The silhouette. A flat shape in the kind's hue stands in for the
+      // sprite and occupies the box the sprite will occupy.
+      const art = this.add.graphics();
+      art.fillStyle(hue, 1);
+      art.fillRoundedRect(cx - ROW3.kindArt.w / 2, kb.y + ROW3.kindArt.dy, ROW3.kindArt.w, ROW3.kindArt.h, 10);
+      b.add(art);
+
+      b.label.setText(def.kind).setPosition(cx, kb.y + ROW3.kindName.dy).setOrigin(0.5, 0);
+
+      // The cost, as a meat pip and a number. Both are constant per button,
+      // so centring them on fixed geometry is safe; only the colour moves.
+      const pip = this.add.graphics();
+      pip.fillStyle(MEAT_RGB, 1);
+      pip.fillCircle(cx - 16, kb.y + ROW3.kindCost.dy + 9, 5);
+      b.add(pip);
+      const cost = b.add(
+        this.add.text(cx + 10, kb.y + ROW3.kindCost.dy, `${def.cost}`, text(TYPE.label, COLORS.meat)).setOrigin(0.5, 0),
+      );
+
+      this.shopButtons.push({ def, button: b, cost });
+    });
+
+    this.sheetPanel = this.add.rectangle(8, ROW3.y, CANVAS_W - 16, ROW3.h - 8, COLORS.hudPanel).setOrigin(0, 0);
+    // The genus is the collectible, so its column is 272px — 15 characters
+    // of title type, which is exactly Argentinosaurus and Rhamphorhynchus.
+    const w = ROW3.sheetName.w;
+    this.sheetName = this.add.text(ROW3.sheetName.x, ROW3.sheetName.y, "", line(TYPE.title, w));
+    this.sheetKind = this.add.text(ROW3.sheetKind.x, ROW3.sheetKind.y, "", line(TYPE.label, w, COLORS.textDim));
+    this.sheetStats = this.add.text(ROW3.sheetStats.x, ROW3.sheetStats.y, "", line(TYPE.body, w));
+    this.sheetRange = this.add.text(ROW3.sheetRange.x, ROW3.sheetRange.y, "", line(TYPE.label, w, COLORS.textDim));
+    this.growButton = this.button(ROW3.grow.x, ROW3.grow.y, ROW3.grow.w, ROW3.grow.h, "Grow", () => this.grow(), TYPE.label);
+    this.sellButton = this.button(ROW3.sell.x, ROW3.sell.y, ROW3.sell.w, ROW3.sell.h, "Sell", () => this.sell(), TYPE.label);
+    this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
+  }
+
+  /**
+   * The toast sits over the bottom of the board, not in a HUD row: it costs
+   * no layout height and it puts the message where the eye and the thumb
+   * already are. A refusal gets a bar down the left edge; an event does not.
+   */
+  private buildToast(): void {
+    this.toastPanel = this.add.rectangle(TOAST.x, TOAST.y, TOAST.w, TOAST.h, COLORS.hud).setOrigin(0, 0).setAlpha(0.78);
+    this.toastBar = this.add.rectangle(TOAST.x, TOAST.y, TOAST.barW, TOAST.h, COLORS.refusal).setOrigin(0, 0);
+    this.toastText = this.add.text(
+      TOAST.x + TOAST.pad,
+      TOAST.y + (TOAST.h - TYPE.body) / 2 - 2,
+      "",
+      line(TYPE.body, TOAST.w - TOAST.pad * 2),
+    );
+    this.hideToast();
+  }
+
+  /** Swap the tray. The shop and the sheet are never both on screen. */
+  private showSheet(v: boolean): void {
+    this.sheetPanel.setVisible(v);
+    this.sheetName.setVisible(v);
+    this.sheetKind.setVisible(v);
+    this.sheetStats.setVisible(v);
+    this.sheetRange.setVisible(v);
+    this.growButton.setVisible(v);
+    this.sellButton.setVisible(v);
+    for (const { button } of this.shopButtons) button.setVisible(!v);
+  }
+
+  private hideToast(): void {
+    this.toastPanel.setVisible(false);
+    this.toastBar.setVisible(false);
+    this.toastText.setVisible(false);
   }
 
   private refreshHud(): void {
     const g = this.game_;
     const s = g.state;
-    this.meatText.setText(`Meat ${s.meat}`);
-    this.eggsText.setText(`Eggs ${s.eggs}`);
+    this.meatText.setText(String(s.meat));
+    this.eggsText.setText(String(s.eggs));
     const total = content.migrations.length;
-    const shown = Math.min(s.migration + 1, total);
+    this.migrationValue.setText(`${Math.min(s.migration + 1, total)} / ${total}`);
+
+    // The bar drains across the build phase and is the early-send
+    // affordance at the same time: what is left of it *is* the bonus.
     if (s.phase === "build") {
-      this.timerText.setText(`${Math.ceil(s.buildTimer / TICKS_PER_SECOND)}s`);
+      const frac = Math.max(0, Math.min(1, s.buildTimer / content.rules.buildPhaseTicks));
+      this.timerBar.setVisible(true);
+      this.timerBar.displayWidth = CANVAS_W * frac;
       const bonus = g.earlySendBonus();
       this.sendButton.label.setText(bonus > 0 ? `Send  +${bonus}` : "Send");
       this.sendButton.bg.setFillStyle(COLORS.buttonActive);
     } else {
-      this.timerText.setText(s.phase === "migration" ? `${s.invaders.length + s.spawnQueue.length} left` : "");
+      this.timerBar.setVisible(false);
       this.sendButton.label.setText("Send");
       this.sendButton.bg.setFillStyle(COLORS.button);
     }
 
-    // The counter and the migration's name are one fact, so they share a
-    // line; what is in the migration goes under it. A boss migration is
-    // named after its genus, so the old single line printed the genus
-    // twice — split across the two lines it reads once each.
-    const m = g.currentMigration();
-    this.waveText.setText(m ? `Migration ${shown}/${total} · ${m.name}` : `Migration ${shown}/${total}`);
-    if (m) {
-      const desc = m.groups
-        .map((gr) => {
-          const inv = content.invaders[gr.invader];
-          return inv ? `${gr.count}× ${inv.name} · ${inv.archetype} ${inv.kind}` : gr.invader;
-        })
-        .join(", ");
-      this.previewText.setText(`${s.phase === "migration" ? "Now" : "Next"}: ${desc}`);
-    } else {
-      this.previewText.setText("");
-    }
+    this.refreshPreview();
+    this.refreshSheet();
+    this.refreshToast();
 
-    if (this.time.now > this.statusUntil) this.statusText.setText("");
-
-    for (const { def, button } of this.paletteButtons) {
+    for (const { def, button, cost } of this.shopButtons) {
       const active = this.selectedDef?.id === def.id && this.selectedDino === null;
       button.bg.setStrokeStyle(active ? 3 : 0, 0xffffff);
-      button.label.setColor(s.meat >= def.cost ? COLORS.text : COLORS.textDim);
-    }
-
-    if (this.selectedDino !== null) {
-      const d = s.dinos.find((x) => x.id === this.selectedDino);
-      if (d) {
-        const def = g.dinoDef(d);
-        const stage = ["", "hatchling", "juvenile", "adult"][def.stage];
-        this.panelName.setText(`${def.name} · ${def.kind} ${stage}`);
-        // Three lines, because one cannot carry six facts in the column's
-        // 352px. Per-hit damage stays beside dps: 200 a bite that one-shots
-        // is not the same thing as 77 dps of chip, and that difference is
-        // the reason to grow a tyrant.
-        const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(1);
-        const hits = def.targets === "both" ? "ground+air" : def.targets;
-        this.panelStats.setText(`${def.damage} dmg · ${dps} dps · range ${(def.range / CELL).toFixed(1)} · ${hits}`);
-        this.panelTraits.setText(
-          [
-            def.splash ? "splash" : "",
-            def.slow ? `slow ${def.slow.percent}%` : "",
-            def.stun ? `stun ${(def.stun.ticks / TICKS_PER_SECOND).toFixed(1)}s` : "",
-            def.targetCount && def.targetCount > 1 ? `${def.targetCount} targets` : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        );
-        const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
-        this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "Fully grown").setAlign("center");
-        this.growButton.label.setColor(next && s.meat >= next.cost ? COLORS.text : COLORS.textDim);
-        this.sellButton.label.setText(`Sell\n+${g.sellValue(d)}`).setAlign("center");
-      }
+      // The silhouette stays at full strength when the player cannot
+      // afford the kind: it is still a label, just not yet a purchase.
+      cost.setColor(s.meat >= def.cost ? COLORS.meat : COLORS.textDim);
     }
   }
 
+  /**
+   * Row 2 changes once a migration, so it is rebuilt on a key rather than
+   * every frame. A migration with several groups is named by its largest,
+   * with a count of the rest — the row is one line and stays one line.
+   */
+  private refreshPreview(): void {
+    const s = this.game_.state;
+    const key = `${s.migration}|${s.phase}`;
+    if (key === this.previewKey) return;
+    this.previewKey = key;
+
+    const m = this.game_.currentMigration();
+    let main = m?.groups[0];
+    for (const gr of m?.groups ?? []) if (!main || gr.count > main.count) main = gr;
+    const inv = main ? content.invaders[main.invader] : undefined;
+    if (!m || !main || !inv) {
+      this.previewChip.setVisible(false);
+      this.previewText.setText("");
+      this.previewMeta.setText("");
+      return;
+    }
+    const rest = m.groups.length > 1 ? ` +${m.groups.length - 1}` : "";
+    this.previewChip.setVisible(true);
+    this.previewChip.setFillStyle(KIND_COLOR[inv.kind]);
+    this.previewText.setText(`${s.phase === "migration" ? "NOW" : "NEXT"}  ${main.count}× ${inv.name}${rest}`);
+    this.previewMeta.setText(`${inv.archetype} · ${inv.kind}`);
+  }
+
+  /**
+   * The sheet. Four lines and two buttons: genus, kind and stage, what it
+   * does per second, and how far it reaches and at what. Sell shows the
+   * refund, which is 80% during a build phase and 60% during a migration,
+   * so the number itself teaches that juggling costs something.
+   */
+  private refreshSheet(): void {
+    const g = this.game_;
+    const s = g.state;
+    if (this.selectedDino === null) {
+      this.sheetKey = "";
+      return;
+    }
+    const d = s.dinos.find((x) => x.id === this.selectedDino);
+    if (!d) return;
+    const def = g.dinoDef(d);
+    const key = `${d.id}|${def.id}|${s.meat}|${s.phase}`;
+    if (key === this.sheetKey) return;
+    this.sheetKey = key;
+
+    const stage = ["", "hatchling", "juvenile", "adult"][def.stage];
+    const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(1);
+    const hits = def.targets === "both" ? "ground+air" : def.targets;
+    this.sheetName.setText(def.name);
+    this.sheetKind.setText(`${def.kind} ${stage}`);
+    // Per-hit damage stays beside dps: a 200 bite that one-shots is not the
+    // same thing as 77 dps of chip, and that difference is the reason to
+    // grow a tyrant.
+    this.sheetStats.setText(`${def.damage} dmg · ${dps} dps`);
+    this.sheetRange.setText(`range ${(def.range / CELL).toFixed(1)} cells · ${hits}`);
+
+    const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
+    // The price of the thing the player cannot buy yet is still shown; only
+    // its colour says they cannot buy it.
+    this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "FULLY GROWN").setAlign("center");
+    this.growButton.label.setColor(next && s.meat >= next.cost ? COLORS.text : COLORS.textDim);
+    this.sellButton.label.setText(`Sell\n+${g.sellValue(d)}`).setAlign("center");
+  }
+
+  /** Hold, then fade. One timestamp carries both. */
+  private refreshToast(): void {
+    const left = this.toastUntil - this.time.now;
+    if (left <= 0) {
+      if (this.toastPanel.visible) this.hideToast();
+      return;
+    }
+    const k = Math.min(1, left / TOAST.fadeMs);
+    this.toastPanel.setAlpha(0.78 * k);
+    this.toastBar.setAlpha(k);
+    this.toastText.setAlpha(k);
+  }
+
+  /** An event: what happened, with no refusal bar. */
   private status(msg: string): void {
-    this.statusText.setText(msg);
-    this.statusUntil = this.time.now + 2000;
+    this.toast(msg, false);
+  }
+
+  private toast(msg: string, refusal: boolean): void {
+    this.toastText.setText(msg);
+    this.toastBar.setVisible(refusal);
+    this.toastPanel.setVisible(true);
+    this.toastText.setVisible(true);
+    this.toastUntil = this.time.now + TOAST.holdMs + TOAST.fadeMs;
   }
 
   /**
@@ -575,12 +744,12 @@ export class BoardScene extends Phaser.Scene {
       const dino = this.game_.dinoAt(cell.x, cell.y);
       if (dino) {
         this.selectedDino = dino.id;
-        this.setPanelVisible(true);
+        this.showSheet(true);
         return;
       }
       if (this.selectedDino !== null) {
         this.selectedDino = null;
-        this.setPanelVisible(false);
+        this.showSheet(false);
         if (!this.selectedDef) return;
       }
       if (this.selectedDef) {
@@ -624,19 +793,19 @@ export class BoardScene extends Phaser.Scene {
     if (r) {
       const c = this.cellCenter(x, y);
       this.effects.push({ kind: "flash", x: c.x, y: c.y, color: COLORS.refusal, ttl: 250, life: 250 });
-      if (!quiet || r === "no-meat" || r === "would-block") this.status(REFUSAL_TEXT[r]);
+      if (!quiet || r === "no-meat" || r === "would-block") this.toast(REFUSAL_TEXT[r], true);
     }
   }
 
   private selectDef(def: DinoDef): void {
     this.selectedDef = def;
     this.selectedDino = null;
-    this.setPanelVisible(false);
+    this.showSheet(false);
   }
 
   private send(): void {
     const r = this.game_.apply({ type: "send" });
-    if (r) this.status(REFUSAL_TEXT[r]);
+    if (r) this.toast(REFUSAL_TEXT[r], true);
   }
 
   private cycleSpeed(): void {
@@ -647,16 +816,16 @@ export class BoardScene extends Phaser.Scene {
   private grow(): void {
     if (this.selectedDino === null) return;
     const r = this.game_.apply({ type: "grow", dinoId: this.selectedDino });
-    if (r) this.status(REFUSAL_TEXT[r]);
+    if (r) this.toast(REFUSAL_TEXT[r], true);
   }
 
   private sell(): void {
     if (this.selectedDino === null) return;
     const r = this.game_.apply({ type: "sell", dinoId: this.selectedDino });
-    if (r) this.status(REFUSAL_TEXT[r]);
+    if (r) this.toast(REFUSAL_TEXT[r], true);
     else {
       this.selectedDino = null;
-      this.setPanelVisible(false);
+      this.showSheet(false);
     }
   }
 
