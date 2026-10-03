@@ -3,11 +3,12 @@ import { content } from "@mazeosaur/content";
 import { freshSave, loadSave, type BuildStamp, type Game, type SaveDocument } from "@mazeosaur/sim";
 import { IndexedDbSaveStore, moveAsideCorruptSave, readRawSave } from "./save-store.js";
 
-// TODO(maze-release #8): once the `__BUILD_COMMIT__` define lands, read it
-// here instead of the literal. Until then every web build honestly stamps
-// "dev", which is what docs/01-v1-architecture.md §1.2 says a build nobody
-// stamped should say.
-const build: BuildStamp = { commit: "dev", platform: "web" };
+// Set by apps/web/vite.config.ts's `define`. "dev" for any build that
+// didn't come from CI; CI sets it to the same github.sha that tags the
+// GHCR image, so the string inside the bundle matches the tag that
+// shipped it (docs/01-v1-architecture.md §2.2).
+declare const __BUILD_COMMIT__: string;
+const build: BuildStamp = { commit: __BUILD_COMMIT__, platform: "web" };
 
 // The shell decides the seed. `?seed=` pins one so a bug can be reproduced
 // exactly; otherwise every run is fresh. Read once: a pinned seed repeats
