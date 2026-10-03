@@ -99,6 +99,11 @@ export type LoadOutcome =
       /** The version it arrived as, when migrations ran. */
       readonly migratedFrom: number | null;
       readonly runDropped: RunDropReason | null;
+      /**
+       * The `Game` the validating replay already built, at `doc.run.tick`.
+       * Null exactly when `doc.run` is null — no run, or one dropped.
+       */
+      readonly resumed: Game | null;
     }
   | { readonly ok: false; readonly reason: LoadFailure };
 
@@ -320,13 +325,14 @@ export function loadSave(raw: unknown, content: Content, platform: BuildStamp["p
 
   let doc = narrowed;
   let runDropped: RunDropReason | null = null;
+  let resumed: Game | null = null;
   if (doc.run !== null) {
     if (doc.run.contentVersion !== content.version) {
       doc = { ...doc, run: null };
       runDropped = "content-version";
     } else {
       try {
-        replay(content, doc.run);
+        resumed = replay(content, doc.run);
       } catch (e) {
         if (!(e instanceof ReplayDivergedError)) throw e;
         doc = { ...doc, run: null };
@@ -335,5 +341,5 @@ export function loadSave(raw: unknown, content: Content, platform: BuildStamp["p
     }
   }
 
-  return { ok: true, doc, migratedFrom, runDropped };
+  return { ok: true, doc, migratedFrom, runDropped, resumed };
 }
