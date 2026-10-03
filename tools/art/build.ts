@@ -88,13 +88,6 @@ const PHONE_W = Math.round(CANVAS_W * SCALE);
 const PHONE_H = Math.round(CANVAS_H * SCALE);
 
 /**
- * The legibility sheet. Every dinosaur and every invader at exactly the size
- * it occupies on the reference phone, next to the same sprite at the logical
- * cell size. The left column is the only one that answers the question the
- * brief asks; the right column is there so a reviewer can see what detail
- * was in the sprite that failed to survive.
- */
-/**
  * Break a note into lines that fit `cols` characters without splitting a
  * word. The 5x7 font is fixed-pitch, so a character count is a width; the
  * notes are the one place on this sheet where a reviewer is reading prose
@@ -118,6 +111,21 @@ function wrap(s: string, cols: number, maxLines: number): string[] {
   return lines.slice(0, maxLines);
 }
 
+/**
+ * The legibility sheet. Every dinosaur and every invader at exactly the size
+ * it occupies on the reference phone, next to the same sprite at the logical
+ * cell size. The left column is the only one that answers the question the
+ * brief asks; the right column is there so a reviewer can see what detail
+ * was in the sprite that failed to survive.
+ *
+ * It is also, measurably, the only plate that separates the directions from
+ * each other. Differencing the committed frames pairwise: the `colBig`
+ * column disagrees across 14.1-15.0% of its pixels and `colSmall` across
+ * 8.0-8.7%, while the label and note columns are byte-identical because
+ * nothing in them is drawn by a direction. So a reviewer comparing
+ * directions is sent here, and to `colBig` specifically — not to the sheet
+ * frame, whose tray is direction-independent (see `doFrames`).
+ */
 function legibilitySheet(d: Direction): Raster {
   const small = Math.round(CELL_PX * SCALE); // 20px: the real cell on a 390pt phone
   const big = CELL_PX;
@@ -208,6 +216,14 @@ function doFrames(): void {
 
     // Migration 50, the Spinosaurus boss, with a dinosaur selected so the
     // frame carries the sheet tray and a refusal toast as well.
+    //
+    // This plate shows the tray; it does not compare directions. The tray is
+    // HUD type and buttons, which no direction touches: differencing the
+    // committed `*-sheet-phone.png` pairwise, the HUD band below `HUD_Y`
+    // disagrees across 0.25-0.39% of its pixels (antialiasing on glyphs),
+    // against 6.6-8.2% for the board area above it. Every visible difference
+    // in this frame is in the board region the `*-board-phone.png` plate
+    // already shows better. Compare directions on the legibility sheet.
     const sheet = renderBoardFrame(d, { migration: 50, ticks: 800, selectSheet: true, toast: "That would seal the maze", effects: true });
     png(`docs/art/${d.id}-sheet.png`, sheet);
     png(`docs/art/${d.id}-sheet-phone.png`, resample(sheet, PHONE_W, PHONE_H));
