@@ -98,6 +98,13 @@ export class BoardScene extends Phaser.Scene {
   private startedBy!: BuildStamp;
   private playedMsBase!: number;
   private sessionStartMs!: number;
+  // `won`/`lost` is terminal: nothing re-ticks it, so the phase is still
+  // `won` or `lost` for as long as the "Play again" overlay is up, and
+  // `GameHandle.suspend()` calls `flush()` unconditionally in that window
+  // (every `visibilitychange` -> hidden, every `pagehide`). Latches the
+  // fossil award and `runsFinished` to once per run so a backgrounded
+  // results screen cannot count the same run twice.
+  private finishedAccounted!: boolean;
 
   private staticGfx!: Phaser.GameObjects.Graphics;
   private towerGfx!: Phaser.GameObjects.Graphics;
@@ -153,6 +160,13 @@ export class BoardScene extends Phaser.Scene {
     // ended (it is frozen at whatever the mount loaded) and discard every
     // profile change -- `runsStarted`, `runsFinished`, `best` -- that
     // happened since. `hasStarted` already exists to tell the two apart.
+    //
+    // This depends on `doc.run` already being `null` by the time a
+    // restart is reachable: the overlay that offers "Play again" only
+    // shows after `flush()` has written the won/lost run with `run:
+    // null` (see `handleEvents`), and that is currently the only
+    // `scene.restart()` in the package. Revisit when `results`/`title`
+    // land (§5.1) and `scene.start("board")` becomes a second way in.
     const base = this.hasStarted ? this.doc : this.initialDoc;
     const run = base.run;
     this.doc = { ...base, run: null };
@@ -171,11 +185,16 @@ export class BoardScene extends Phaser.Scene {
       this.game_ = new Game(content, this.runSeed);
       this.startedBy = this.build;
       this.playedMsBase = 0;
-      // A fresh run, resumed or not, is one `runsStarted` -- including
-      // every "Play again", which is its own fresh `Game` at tick 0.
+      // A fresh `Game` is one `runsStarted` -- including every "Play
+      // again", which is its own fresh run at tick 0. A resumed run was
+      // already counted when it first started, in the branch above.
       this.doc = { ...this.doc, profile: runStarted(this.doc.profile) };
     }
     this.hasStarted = true;
+    // §1.2: a won/lost run must be accounted for exactly once, even
+    // though `suspend()` keeps calling `flush()` while the terminal
+    // phase sits under the "Play again" overlay. See `flush()`.
+    this.finishedAccounted = false;
     this.sessionStartMs = this.time.now;
     this.acc = 0;
     this.speed = 1;
@@ -680,9 +699,16 @@ export class BoardScene extends Phaser.Scene {
           hash: this.game_.hash(),
           playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
         };
-    // §1.7: a won or lost run writes `profile.best`. The award comes from
+    // §1.7: a won or lost run writes `profile.best`, exactly once. `won`
+    // and `lost` are terminal, so the phase is still `finished` for as
+    // long as the "Play again" overlay is up, and `suspend()` calls
+    // `flush()` unconditionally on every later tab-hide or `pagehide` in
+    // that window -- without the latch, each of those would hand the
+    // already-finished run to `runFinished` again and double (or
+    // triple...) `fossilsEarned` and `runsFinished`. The award comes from
     // `content.rules.fossilWeights`, never a number here -- rule 4.
-    const profile = finished
+    const accountFinish = finished && !this.finishedAccounted;
+    const profile = accountFinish
       ? runFinished(this.doc.profile, content.rules.fossilWeights, {
           valleyId: content.valley.id,
           seed: this.runSeed,
@@ -692,6 +718,7 @@ export class BoardScene extends Phaser.Scene {
           meatUnspent: this.game_.state.meat,
         })
       : this.doc.profile;
+    if (accountFinish) this.finishedAccounted = true;
     this.doc = { ...this.doc, run, profile, writtenBy: this.build };
     return services(this).saves.put(this.doc);
   }

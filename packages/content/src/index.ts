@@ -253,7 +253,7 @@ const generated = buildInvadersAndMigrations();
  * number that tracks skill; eggs and leftover meat round out a loss so a
  * wipe on migration one is never worth zero.
  */
-export const FOSSIL_WEIGHTS = {
+const FOSSIL_WEIGHTS = {
   perEggKept: 2,
   perMigrationCleared: 20,
   perMeatUnspent: 1,
