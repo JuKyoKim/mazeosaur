@@ -282,8 +282,14 @@ export interface PairCheck {
  * A pair passes if the colours are far enough apart *or* far enough apart
  * in value that lightness alone separates them. Shape is the third channel
  * and is not measured here; KIND_SILHOUETTE_NOTE is.
+ *
+ * `body` defaults to the raw KIND_HUE, which is what the HUD chips and the
+ * kind buttons use. Pass a direction's `palette(hue).base` to check the
+ * colour the player actually sees on the board — a direction that mixes
+ * the hue toward a neutral is spending the separation margin that these
+ * hues were chosen to have, and it should have to say so.
  */
-export function kindColourChecks(): { worst: PairCheck[]; failures: PairCheck[] } {
+export function kindColourChecks(body: (kind: Kind) => Rgb = (k) => rgb(KIND_HUE[k])): { worst: PairCheck[]; failures: PairCheck[] } {
   const visions: (keyof typeof SIM | "normal")[] = ["normal", "deuteranopia", "protanopia", "tritanopia"];
   const all: PairCheck[] = [];
   for (const vision of visions) {
@@ -291,8 +297,8 @@ export function kindColourChecks(): { worst: PairCheck[]; failures: PairCheck[] 
       for (let j = i + 1; j < KINDS.length; j++) {
         const ka = KINDS[i] as Kind;
         const kb = KINDS[j] as Kind;
-        const ca = vision === "normal" ? rgb(KIND_HUE[ka]) : simulate(rgb(KIND_HUE[ka]), vision);
-        const cb = vision === "normal" ? rgb(KIND_HUE[kb]) : simulate(rgb(KIND_HUE[kb]), vision);
+        const ca = vision === "normal" ? body(ka) : simulate(body(ka), vision);
+        const cb = vision === "normal" ? body(kb) : simulate(body(kb), vision);
         all.push({ a: ka, b: kb, vision, distance: perceptualDistance(ca, cb), valueRatio: contrastRatio(ca, cb) });
       }
     }

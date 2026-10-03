@@ -258,6 +258,25 @@ function doCheck(): void {
     console.log(`  ${failures.length} pair(s) separated by neither hue nor value`);
   }
 
+  // The hues above are what the HUD chips and the kind buttons use. Each
+  // direction repaints them before they reach the board, so the separation
+  // tuned into KIND_HUE is not necessarily the separation the player gets.
+  //
+  // Advisory, not a failure, and deliberately so: until a direction is
+  // chosen there is no single answer to grade, and the right fix is to
+  // re-run the constrained search that produced KIND_HUE against the
+  // winning direction's transform rather than to flatten all three toward
+  // the one that happens to pass. Once a direction is chosen this should
+  // become a gate.
+  console.log("\nthe same pairs in each direction's body colour (advisory until a direction is chosen)");
+  for (const d of DIRECTIONS) {
+    const c = kindColourChecks((k) => d.palette(KIND_HUE[k]).base);
+    const detail = c.failures.length
+      ? c.failures.map((f) => `${f.a}/${f.b} ${f.vision} d${f.distance.toFixed(0)} v${f.valueRatio.toFixed(2)}`).join(", ")
+      : `tightest ${c.worst[0]?.a}/${c.worst[0]?.b} d${c.worst[0]?.distance.toFixed(0)}`;
+    console.log(`  ${c.failures.length ? "warn" : "ok  "} ${d.id.padEnd(20)} ${detail}`);
+  }
+
   console.log("\nHUD contrast on the panel colours (WCAG AA body text is 4.5)");
   const pairs: [string, Rgb, Rgb][] = [
     ["text on HUD", BOARD.text, BOARD.hud],

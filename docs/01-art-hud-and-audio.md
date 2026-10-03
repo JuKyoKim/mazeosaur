@@ -136,6 +136,31 @@ those two, colour is the second channel and not the first.
 This table is a proposed replacement for `KIND_COLOR` in
 `packages/game/src/theme.ts`.
 
+**The hues are not what every direction draws.** Those six values are what
+the HUD chips and the kind buttons use. Each direction then repaints them —
+Clay Pack lightens 14%, Valley Naturalist mixes 22% toward an olive neutral
+— and both of those transforms spend the separation margin the search was
+run to produce:
+
+| direction | body colours | what fails |
+| --- | --- | --- |
+| Fossil Pixel | the raw hue | nothing |
+| Clay Pack | hue +14% lightness | longneck/flier under tritanopia, d93 |
+| Valley Naturalist | hue mixed 22% olive | raptor/longneck under protanopia (d117, just under the 120 line), and longneck/flier under tritanopia, d85 |
+
+`art:check` reports this but does not fail on it, because until a direction
+is chosen there is nothing to grade. **It is not a reason to prefer Fossil
+Pixel.** The fix is to re-run the same constrained search against the
+winning direction's transform and give that direction its own hue table —
+roughly an afternoon, mechanical, and much better than flattening all three
+palettes toward the one that happens to pass. Whichever vector direction
+wins, that task comes with it; this is what it costs.
+
+Dialling the transforms back until they pass was tried and rejected: Clay
+Pack needs its lift cut from 14% to 4% and Valley Naturalist its mix from
+22% to 8%, which is most of the way to deleting the thing that makes each
+one itself.
+
 ### The second channel, per axis
 
 | what the player must tell apart | first channel | second channel |
