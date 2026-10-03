@@ -132,7 +132,7 @@ export class BoardScene extends Phaser.Scene {
   private hasStarted: boolean;
 
   constructor(
-    private initialDoc: SaveDocument,
+    private readonly initialDoc: SaveDocument,
     private readonly nextSeed: () => number,
     private readonly build: BuildStamp,
   ) {
@@ -144,12 +144,18 @@ export class BoardScene extends Phaser.Scene {
     // scene.restart() re-runs create() on the same instance: every field
     // that refers to a display object or to the previous run must reset
     // here, or the HUD keeps touching destroyed objects.
-    const run = this.initialDoc.run;
-    this.doc = { ...this.initialDoc, run: null };
-    // Consume the resume once: `initialDoc` is otherwise never reassigned,
-    // so a later "Play again" (scene.restart()) would read this same `run`
-    // and resurrect the finished run instead of starting a new one.
-    this.initialDoc = this.doc;
+    //
+    // `initialDoc` is read only once, on the very first create() (the
+    // mount-time load from disk). Every later create() -- a "Play again"
+    // `scene.restart()` -- reads `doc` instead, which `flush()` has kept
+    // current with every profile and run update since. Reading
+    // `initialDoc` again on a restart would resurrect the run that just
+    // ended (it is frozen at whatever the mount loaded) and discard every
+    // profile change -- `runsStarted`, `runsFinished`, `best` -- that
+    // happened since. `hasStarted` already exists to tell the two apart.
+    const base = this.hasStarted ? this.doc : this.initialDoc;
+    const run = base.run;
+    this.doc = { ...base, run: null };
     if (run) {
       // The shell already validated this run through loadSave; replaying
       // it here is how the game package turns saved data back into a
@@ -687,13 +693,6 @@ export class BoardScene extends Phaser.Scene {
         })
       : this.doc.profile;
     this.doc = { ...this.doc, run, profile, writtenBy: this.build };
-    // Keep `initialDoc` in step with every flushed profile change: it is
-    // what the next `create()` (a "Play again" `scene.restart()`) rebuilds
-    // `doc` from, and it is otherwise frozen at the start of this run (see
-    // the consume-the-resume-once comment in `create()`). Without this, a
-    // won/lost run's fossil award and counters would be visible on disk
-    // for one write and then overwritten by the next run's autosave.
-    this.initialDoc = this.doc;
     return services(this).saves.put(this.doc);
   }
 
