@@ -25,9 +25,9 @@ npx tsx tools/art/build.ts atlas <id>    # the shipping atlases for one directio
 
 ## 1. The reference device, and why every number is two numbers
 
-The logical canvas is **720 x 1280**, 20 x 28 cells of **36px**, board on
-top (720 x 1008), HUD in the **272px** below it. Phaser scales that canvas
-uniformly (FIT) onto whatever screen mounts it.
+The logical canvas is **720 x 1280**, 20 x up to 28 cells of **36px**, the
+HUD the bottom **272px** and the board area the 720 x 1008 above it. Phaser
+scales that canvas uniformly (FIT) onto whatever screen mounts it.
 
 The reference phone is **390 x 844pt at dpr 3** — an iPhone 12 through 16
 and the middle of the Android range. At 720 wide into 390 wide the width
@@ -183,14 +183,21 @@ reads under time pressure and is not the place to be borderline.
 
 ## 4. The HUD
 
-Portrait, one-handed, thumb-reachable. The board is the top 1008px and the
-HUD is the 272px below it, which keeps every control in the bottom third
-and keeps the grid out from under the thumb.
+Portrait, one-handed, thumb-reachable. The HUD is the bottom **272px** and
+the board area is the 1008px above it, which keeps every control in the
+bottom third and keeps the grid out from under the thumb.
+
+The direction of that derivation matters. `HUD_H = 272` is the primitive —
+three rows that cost 96 + 40 + 136 because of the 82px hit floor — so
+`HUD_Y = CANVAS_H - HUD_H` and the HUD does not move to meet a short map.
+The grid is centred inside the board area, `GRID_W = 20` is fixed in v1
+(the cell every sprite is authored at is `CANVAS_W / GRID_W = 36`), and a
+valley may be up to 28 tall.
 
 ```
 y=0     ┌─────────────────────────────────────┐
         │                                     │
-        │   board: 20 x 28 cells of 36px      │   720 x 1008
+        │   board: 20 x <=28 cells of 36px    │   area 720 x 1008
         │                                     │
         │   toast lives here, y=932, 56 tall  │
 y=1008  ├━━━━━━━━━ build timer bar ━━━━━━━━━━━┤   8px, full width

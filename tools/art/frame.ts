@@ -29,6 +29,7 @@ import {
   TOAST,
   TYPE,
   fontScale,
+  gridTop,
   kindButtonX,
 } from "./layout.js";
 import { Raster, ellipse, rect, subtract, taper, union, darken, lighten, mix, rgb, type Rgb, type Shape } from "./raster.js";
@@ -333,13 +334,17 @@ function drawBoard(r: Raster, scene: Scene): void {
   const { game: g, sheet } = scene;
   const v = content.valley;
 
+  // The board area is the whole band above the HUD; the grid is drawn inside
+  // it at GRID_TOP, which is 0 for the 28-tall valley that ships.
+  const gridPxH = v.height * CELL_PX;
   r.fill(rect(0, 0, CANVAS_W, BOARD_H), BOARD.boardBg, 1, 1);
-  for (let x = 0; x <= v.width; x++) r.fill(rect(x * CELL_PX, 0, 1, BOARD_H), BOARD.gridLine, 1, 1);
-  for (let y = 0; y <= v.height; y++) r.fill(rect(0, y * CELL_PX, CANVAS_W, 1), BOARD.gridLine, 1, 1);
+  for (let x = 0; x <= v.width; x++) r.fill(rect(x * CELL_PX, GRID_TOP, 1, gridPxH), BOARD.gridLine, 1, 1);
+  for (let y = 0; y <= v.height; y++) r.fill(rect(0, GRID_TOP + y * CELL_PX, CANVAS_W, 1), BOARD.gridLine, 1, 1);
 
   const mark = (p: { x: number; y: number }, c: Rgb, label: string) => {
-    r.fill(roundRect(p.x * CELL_PX + 2, p.y * CELL_PX + 2, CELL_PX - 4, CELL_PX - 4, 4), c);
-    drawText(r, p.x * CELL_PX + CELL_PX / 2, p.y * CELL_PX + 12, label, 22, rgb(0x16211a), "center");
+    const b = cellTopLeft(p.x, p.y);
+    r.fill(roundRect(b.x + 2, b.y + 2, CELL_PX - 4, CELL_PX - 4, 4), c);
+    drawText(r, b.x + CELL_PX / 2, b.y + 12, label, 22, rgb(0x16211a), "center");
   };
   mark(v.lane.spawn, BOARD.spawn, "S");
   v.lane.checkpoints.forEach((c, i) => mark(c, BOARD.checkpoint, String(i + 1)));
@@ -349,8 +354,7 @@ function drawBoard(r: Raster, scene: Scene): void {
   const dinos = [...g.state.dinos].sort((a, b) => a.y - b.y);
   for (const dn of dinos) {
     const def = g.dinoDef(dn);
-    const x0 = dn.x * CELL_PX;
-    const y0 = dn.y * CELL_PX;
+    const { x: x0, y: y0 } = cellTopLeft(dn.x, dn.y);
     const cx = x0 + CELL_PX / 2;
     const cy = y0 + CELL_PX / 2;
     const hue = rgb(KIND_HUE[def.kind as Kind]);
@@ -376,7 +380,7 @@ function drawBoard(r: Raster, scene: Scene): void {
   for (const inv of g.state.invaders) {
     const def = g.invaderDef(inv);
     const cx = (inv.px * CELL_PX) / CELL;
-    const cy = (inv.py * CELL_PX) / CELL;
+    const cy = GRID_TOP + (inv.py * CELL_PX) / CELL;
     const box = def.archetype === "boss" ? CELL_PX * 2 : def.archetype === "swarm" ? CELL_PX * 0.8 : CELL_PX;
     if (inv.flying) {
       // a ground shadow, so height reads without a legend
@@ -401,7 +405,14 @@ function drawBoard(r: Raster, scene: Scene): void {
   }
 }
 
-const cellCentre = (x: number, y: number) => ({ x: x * CELL_PX + CELL_PX / 2, y: y * CELL_PX + CELL_PX / 2 });
+/**
+ * Cell to pixel, for the valley that ships. Every board coordinate goes
+ * through one of these two so the grid's vertical offset cannot be applied
+ * in some places and forgotten in others.
+ */
+const GRID_TOP = gridTop(content.valley.height);
+const cellTopLeft = (x: number, y: number) => ({ x: x * CELL_PX, y: GRID_TOP + y * CELL_PX });
+const cellCentre = (x: number, y: number) => ({ x: x * CELL_PX + CELL_PX / 2, y: GRID_TOP + y * CELL_PX + CELL_PX / 2 });
 
 /**
  * A blocked placement. Red is the loud channel and the diagonal hatching is
@@ -441,7 +452,7 @@ function drawLiveEffects(r: Raster, scene: Scene): void {
       const dx = inv.px - (dn.x * CELL + CELL / 2);
       const dy = inv.py - (dn.y * CELL + CELL / 2);
       if (Math.hypot(dx, dy) > def.range) continue;
-      const to = { x: (inv.px * CELL_PX) / CELL, y: (inv.py * CELL_PX) / CELL };
+      const to = { x: (inv.px * CELL_PX) / CELL, y: GRID_TOP + (inv.py * CELL_PX) / CELL };
       r.fill(taper(a.x, a.y, to.x, to.y, 1.8, 0.6), lighten(rgb(KIND_HUE[def.kind as Kind]), 0.55), 0.75);
       tracers++;
       break;
@@ -462,8 +473,9 @@ function drawLiveEffects(r: Raster, scene: Scene): void {
   }
   // A real refusal: the first empty corridor cell whose placement the sim
   // says would seal the maze.
-  for (let y = 1; y < 27 && !scene.refusedAt; y++) {
-    for (let x = 0; x < 20; x++) {
+  const v = content.valley;
+  for (let y = 1; y < v.height - 1 && !scene.refusedAt; y++) {
+    for (let x = 0; x < v.width; x++) {
       if (g.placeRefusal("raptor-1", x, y) === "would-block") {
         scene.refusedAt = { x, y };
         break;

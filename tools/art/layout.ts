@@ -3,7 +3,9 @@
 // the picture cannot disagree. If a number here changes, both change.
 //
 // Coordinate space is the logical canvas from packages/game/src/theme.ts:
-// 720 x 1280, 36px cells, board 720 x 1008, HUD the 272px below it.
+// 720 x 1280, 36px cells, the HUD the bottom 272px, and the board area the
+// 720 x 1008 above it. The grid is drawn inside the board area and may be
+// shorter than it; the HUD never moves to meet it.
 //
 // Every length is a logical pixel. `pt()` converts to the CSS points a
 // 390pt-wide phone actually shows, which is the number that decides whether
@@ -12,11 +14,29 @@
 export const CANVAS_W = 720;
 export const CANVAS_H = 1280;
 export const CELL_PX = 36;
+/**
+ * Fixed in v1, and a design constant rather than a number nobody
+ * parameterised: `CELL_PX = CANVAS_W / GRID_W = 36` is the cell every sprite
+ * in the atlas is authored at, so a valley of a different width would rescale
+ * every sprite and void the readability pass run at 36.
+ */
 export const GRID_W = 20;
-export const GRID_H = 28;
-export const BOARD_H = GRID_H * CELL_PX; // 1008
-export const HUD_Y = BOARD_H;
-export const HUD_H = CANVAS_H - BOARD_H; // 272
+/**
+ * The HUD is the primitive, not the leftover. Its three rows cost
+ * 96 + 40 + 136, and they cost that because of the 82px hit floor — so it
+ * does not get to shrink because a map is short.
+ */
+export const HUD_H = 272;
+/** The HUD anchors to the bottom of the canvas, never to the last grid row. */
+export const HUD_Y = CANVAS_H - HUD_H; // 1008
+/** The board *area*. The grid lives inside it and may be shorter than it. */
+export const BOARD_H = HUD_Y;
+export const GRID_H_MAX = Math.floor(BOARD_H / CELL_PX); // 28
+
+/** Vertical offset of a grid of `gridH` cells, centred in the board area. */
+export function gridTop(gridH: number): number {
+  return Math.round((BOARD_H - gridH * CELL_PX) / 2);
+}
 
 /**
  * The reference phone: 390 x 844 CSS points, device pixel ratio 3 — an
@@ -135,11 +155,12 @@ export function kindButtonX(i: number): number {
 }
 
 /**
- * The toast. Refusals and events appear over the bottom of the board, near
- * where the thumb just was, instead of taking a HUD row. It costs no
- * layout height and puts the message where the eye already is.
+ * The toast. Refusals and events appear over the board just above the HUD,
+ * near where the thumb just was, instead of taking a HUD row. It costs no
+ * layout height and puts the message where the eye already is. It hugs the
+ * HUD rather than the last grid row, so a short map does not strand it.
  */
-export const TOAST = { x: GUTTER, y: BOARD_H - 76, w: CONTENT_W, h: 56 } as const;
+export const TOAST = { x: GUTTER, y: HUD_Y - 76, w: CONTENT_W, h: 56 } as const;
 
 /**
  * The results screen, over a scrim with the board still visible behind it.
@@ -163,8 +184,8 @@ export function layoutTable(): { what: string; logical: string; points: string }
   const both = (b: { w: number; h: number }) => `${pt(b.w)}x${pt(b.h)}`;
   return [
     { what: "logical canvas", logical: `${CANVAS_W}x${CANVAS_H}`, points: `${pt(CANVAS_W)}x${pt(CANVAS_H)}` },
-    { what: "build grid", logical: `${GRID_W}x${GRID_H} cells of ${CELL_PX}`, points: `cell ${pt(CELL_PX)}` },
-    { what: "board", logical: `${CANVAS_W}x${BOARD_H}`, points: `${pt(CANVAS_W)}x${pt(BOARD_H)}` },
+    { what: "build grid", logical: `${GRID_W}x<=${GRID_H_MAX} cells of ${CELL_PX}`, points: `cell ${pt(CELL_PX)}` },
+    { what: "board area", logical: `${CANVAS_W}x${BOARD_H}`, points: `${pt(CANVAS_W)}x${pt(BOARD_H)}` },
     { what: "HUD", logical: `${CANVAS_W}x${HUD_H}`, points: `${pt(CANVAS_W)}x${pt(HUD_H)}` },
     { what: "hit-target floor", logical: `${MIN_HIT}`, points: `${pt(MIN_HIT)}` },
     { what: "Send", logical: box(ROW1.send), points: both(ROW1.send) },
