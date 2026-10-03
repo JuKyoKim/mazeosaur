@@ -37,6 +37,12 @@ hatchling, juvenile, adult; upgrading is **growing**). Creeps are
 ## Working here
 
 - `npm run check` is the gate. Keep sim tests under a second.
+- **A scratch checkout needs its own real `npm install`.** A copied or
+  symlinked `node_modules` loses `apps/web/node_modules`, so
+  `tsc -p apps/web` silently resolves the root's hoisted `vite@8` instead
+  of the `vite@7` that `apps/web` pins. A typecheck from a hand-assembled
+  checkout is not evidence about the code, red or green. Why both vites
+  exist: section 10 of `docs/00-proposal.md`.
 - CI is `docs/02-ci.md`: every step, how to run it locally, and why agents
   propose workflow changes but cannot push them.
 - `npm run dev` serves the web prototype; `.claude/launch.json` has the
