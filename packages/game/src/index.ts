@@ -9,7 +9,7 @@ import { SERVICES_KEY, type GameHandle, type MountOptions } from "./platform.js"
  * here; the game package never imports an implementation of them.
  */
 export function mountGame(opts: MountOptions): GameHandle {
-  const scene = new BoardScene(opts.save, opts.nextSeed, opts.build);
+  const scene = new BoardScene(opts.save, opts.resumed, opts.nextSeed, opts.build);
   const phaser = new Phaser.Game({
     type: Phaser.AUTO,
     parent: opts.parent,
