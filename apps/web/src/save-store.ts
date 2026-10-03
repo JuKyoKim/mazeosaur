@@ -107,6 +107,21 @@ export class IndexedDbSaveStore implements SaveStore {
     });
   }
 
+  /**
+   * Writes any coalesced-but-not-yet-committed document immediately,
+   * instead of waiting out the rest of `COALESCE_MS`. Not part of
+   * `SaveStore` (same precedent as `readRawSave`): `GameHandle.suspend()`
+   * only has the port's `put`, which would otherwise defer the suspend
+   * write by up to two seconds — long enough for the OS to have already
+   * killed the page. The web shell calls this right after `suspend()`.
+   * A no-op when nothing is pending.
+   */
+  flushNow(): Promise<void> {
+    if (this.pendingTimer === null) return Promise.resolve();
+    clearTimeout(this.pendingTimer);
+    return this.flushPending();
+  }
+
   async clear(): Promise<void> {
     if (this.pendingTimer !== null) {
       clearTimeout(this.pendingTimer);

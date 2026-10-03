@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { freshSave } from "@mazeosaur/sim";
+import { content } from "@mazeosaur/content";
+import { freshSave, Game, loadSave, type RunSave } from "@mazeosaur/sim";
 import { IndexedDbSaveStore, moveAsideCorruptSave, readRawSave } from "../src/save-store.js";
 
 const BUILD = { commit: "dev", platform: "web" as const };
@@ -59,6 +60,106 @@ describe("IndexedDbSaveStore", () => {
     },
     10_000,
   );
+});
+
+describe("flushNow", () => {
+  it("writes a coalesced document immediately instead of waiting out COALESCE_MS", async () => {
+    const store = new IndexedDbSaveStore();
+    const first = freshSave(BUILD);
+    await store.put(first);
+
+    const second = { ...first, profile: { ...first.profile, fossilsEarned: 1 } };
+    const p2 = store.put(second);
+    expect(await readRawSave()).toEqual(first);
+
+    await store.flushNow();
+    expect(await readRawSave()).toEqual(second);
+    await p2;
+  });
+
+  it("is a no-op when nothing is pending", async () => {
+    const store = new IndexedDbSaveStore();
+    await store.put(freshSave(BUILD));
+    await expect(store.flushNow()).resolves.toBeUndefined();
+    expect(await readRawSave()).toEqual(freshSave(BUILD));
+  });
+});
+
+// The hazard `BoardScene.flush()` must avoid: it snapshots `tick` and
+// `hash` but, before this fix, stored a live reference to `Game.log`
+// rather than a copy. `IndexedDbSaveStore` only structured-clones a
+// document when a coalesced write actually commits, up to `COALESCE_MS`
+// later — so a command accepted on the live `Game` in that window landed
+// in the stored log past the saved tick, and the next boot dropped the
+// run with "replay-diverged". This reproduces the exact numbers from the
+// architect's review of PR #24: tick 15 saved, a log entry lands at tick
+// 18 before the deferred write commits.
+describe("the live-log-vs-coalesced-write hazard (PR #24 review)", () => {
+  function runSaveAt(game: Game, overrides: Partial<RunSave> = {}): RunSave {
+    return {
+      valleyId: content.valley.id,
+      seed: game.seed,
+      contentVersion: content.version,
+      startedBy: BUILD,
+      log: game.log,
+      tick: game.state.tick,
+      hash: game.hash(),
+      playedMs: 0,
+      ...overrides,
+    };
+  }
+
+  it("a live `log` reference diverges when a later command lands before the deferred write commits", async () => {
+    const store = new IndexedDbSaveStore();
+    await store.put(freshSave(BUILD)); // immediate write; starts the coalesce clock.
+
+    const game = new Game(content, 1234);
+    game.apply({ type: "place", defId: "raptor-1", x: 2, y: 2 });
+    for (let i = 0; i < 15; i++) game.tick();
+
+    // Snapshot tick/hash now, but alias the live array — the bug.
+    const run = runSaveAt(game);
+    const doc = { ...freshSave(BUILD), run };
+    const pending = store.put(doc); // coalesces: deferred up to COALESCE_MS.
+
+    // Gameplay continues while the write is still pending.
+    for (let i = 0; i < 3; i++) game.tick();
+    game.apply({ type: "place", defId: "raptor-1", x: 0, y: 4 });
+    expect(game.state.tick).toBe(18);
+
+    await store.flushNow();
+    await pending;
+
+    const raw = await readRawSave();
+    const outcome = loadSave(raw, content, "web");
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) expect(outcome.runDropped).toBe("replay-diverged");
+  });
+
+  it("a copied `log` snapshot survives the same race", async () => {
+    const store = new IndexedDbSaveStore();
+    await store.put(freshSave(BUILD));
+
+    const game = new Game(content, 1234);
+    game.apply({ type: "place", defId: "raptor-1", x: 2, y: 2 });
+    for (let i = 0; i < 15; i++) game.tick();
+
+    // The fix: copy the log at snapshot time.
+    const run = runSaveAt(game, { log: [...game.log] });
+    const doc = { ...freshSave(BUILD), run };
+    const pending = store.put(doc);
+
+    for (let i = 0; i < 3; i++) game.tick();
+    game.apply({ type: "place", defId: "raptor-1", x: 0, y: 4 });
+
+    await store.flushNow();
+    await pending;
+
+    const raw = await readRawSave();
+    const outcome = loadSave(raw, content, "web");
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) expect(outcome.runDropped).toBeNull();
+  });
 });
 
 describe("moveAsideCorruptSave", () => {

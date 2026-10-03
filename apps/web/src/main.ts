@@ -1,4 +1,4 @@
-import { mountGame, NULL_AUDIO_PORT, NULL_SAVE_STORE, type PlatformServices } from "@mazeosaur/game";
+import { mountGame, NULL_AUDIO_PORT, NULL_SAVE_STORE, type GameHandle, type PlatformServices } from "@mazeosaur/game";
 import { content } from "@mazeosaur/content";
 import { freshSave, loadSave, type BuildStamp, type SaveDocument } from "@mazeosaur/sim";
 import { IndexedDbSaveStore, moveAsideCorruptSave, readRawSave } from "./save-store.js";
@@ -55,9 +55,32 @@ function startGame(save: SaveDocument, saves: PlatformServices["saves"]): void {
     build,
     nextSeed,
   });
+  wireSuspend(game, saves);
 
   // Dev only: poke the running sim from the console (`mazeosaur.phaser.scene.keys.board.sim`).
   if (import.meta.env.DEV) (window as unknown as { mazeosaur: unknown }).mazeosaur = game;
+}
+
+// The OS can kill a backgrounded tab without warning, so the suspend write
+// has to happen the moment the page is hidden, not on a timer. `pagehide`
+// also fires on navigation and, on iOS Safari, in cases `visibilitychange`
+// misses; wiring both is cheap insurance against either one being skipped.
+function wireSuspend(game: GameHandle, saves: PlatformServices["saves"]): void {
+  const suspend = () => {
+    // `game.suspend()` calls into `saves.put()` synchronously before
+    // returning its promise, so by the time `flushNow()` runs here, any
+    // coalesced write it just queued is already the one `flushNow()` will
+    // see and write immediately instead of leaving it for `COALESCE_MS`.
+    const flushed = game.suspend();
+    if (saves instanceof IndexedDbSaveStore) void saves.flushNow();
+    flushed.catch((err: unknown) => {
+      console.error("mazeosaur: suspend flush failed", err);
+    });
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") suspend();
+  });
+  window.addEventListener("pagehide", suspend);
 }
 
 void boot();
