@@ -1,10 +1,12 @@
 import type { Kind } from "@mazeosaur/sim";
 
-/** Logical canvas. Portrait; scaled to fit whatever screen mounts it. */
-export const CANVAS_W = 720;
-export const CANVAS_H = 1280;
-/** Pixels per grid cell on the logical canvas: 20 cells * 36 = 720. */
-export const CELL_PX = 36;
+// This file owns colour. The logical-canvas geometry it used to declare now
+// lives in ./layout.ts, which `tools/art` also reads — the spec, the sample
+// frames and the shipping HUD have to be unable to disagree, and they could
+// while CANVAS_W/CANVAS_H/CELL_PX were declared in two files that merely
+// happened to match. Re-exported here so `theme.js` stays the one import a
+// scene needs for the look of things.
+export { CANVAS_W, CANVAS_H, CELL_PX } from "./layout.js";
 
 export const COLORS = {
   bg: 0x16211a,
