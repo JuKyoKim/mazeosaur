@@ -9,9 +9,12 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
-    "@mazeosaur/game": "*"
+    "@mazeosaur/content": "*",
+    "@mazeosaur/game": "*",
+    "@mazeosaur/sim": "*"
   },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.5",
     "vite": "^7.0.0"
   }
 }
