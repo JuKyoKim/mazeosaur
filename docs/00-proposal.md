@@ -414,6 +414,20 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   fail a dichromat separation check and are replaced, and the M2 42px
   HUD buttons are 22.8pt — half the 44pt floor — so the hit target
   minimum is 82 logical pixels.
+- 2026-10-03: a dinosaur **occupies one cell and is drawn taller than one** —
+  a 36x54 draw box, bottom-anchored on the cell's bottom edge, rows drawn in
+  increasing y so a nearer row overlaps the one behind. The footprint stays
+  1x1, so the sim, pathing, the block check and all 50 migrations are
+  untouched. This is the mechanism by which a block style reads as solid; the
+  alternative — enlarging the cell — was measured against the real sim and
+  costs the maze its point, taking the mazed-lane multiplier from 13.2x to
+  6.8x and the wall count from 237 to 49, which fills the board by migration
+  18 of 50. The cost carried instead is occlusion: a sprite covers the lower
+  half of the cell behind it, so only the upper half of each silhouette
+  survives in a dense wall. That is why 1.5 cells is the cap and why all six
+  tells are identified by the top of the animal. Specified in
+  [docs/01-art-hud-and-audio.md](01-art-hud-and-audio.md) section 5.0, to be
+  confirmed by driving a dense wall at phone scale.
 - 2026-10-03: `tools/` joins the `tsc` gate (`tools/tsconfig.json`,
   `types: ["node"]`, appended to `npm run typecheck`). This reverses the
   call made reviewing the generator's own pull request, which was that two

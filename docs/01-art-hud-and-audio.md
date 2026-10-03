@@ -62,18 +62,44 @@ wants to be smaller than `label` should instead not be on the screen.
 
 ---
 
-## 2. The art direction, as three candidates
+## 2. The art direction, as four candidates
 
 The proposal leaves two axes open: pixel versus hand-drawn vector, and
 cute-round versus fierce-realistic. Three points on that grid were rendered
 as the actual board at the actual size, so the choice can be made by
 looking rather than by imagining.
 
+The board rejected all three and asked for a fourth off that grid: blocks,
+in the Crossy Road register, "steer away from 2d". **Toy Box** is that
+brief, built the same way and rendered into the same frames.
+
 | direction | axes | authored | ink | atlas | the pitch |
 | --- | --- | --- | --- | --- | --- |
 | **Fossil Pixel** | pixel, fierce | 36px | 1px | **23 kB** | Hard edges, four shade bands, one ink pixel. One art pixel is one canvas pixel. Smallest atlas by a factor of five. |
 | **Clay Pack** | vector, cute-round | 48px | 2px | 126 kB | Sticker-weight line, heads a third too big, an eye you can still see at 20px. Friendliest read, easiest to animate. |
 | **Valley Naturalist** | vector, fierce | 48px | 1px | 121 kB | Skeletal proportions, hairline edge, deep belly shadow, cold rim light. Reads as an animal, not a mascot. |
+| **Toy Box** | blocks, cute-round | 64px | 2px | 68 kB | Six to fourteen boxes an animal under one fixed isometric camera, three flat tones a face. Reads as a solid toy rather than a drawing of one. |
+
+### What Toy Box is, and what it is not
+
+It is **pre-rendered** 3D: the models in
+[`tools/art/blocks.ts`](../tools/art/blocks.ts) are projected once by
+[`tools/art/voxel.ts`](../tools/art/voxel.ts) into ordinary sprites. The
+engine sees a texture atlas like any other — no runtime 3D, no depth
+buffer, no new dependency — and the atlas is *smaller* than either vector
+direction, because flat faces compress well.
+
+It is **not** a change of camera. The board is still a square top-down grid
+of 20x28 cells. Tilting the board — the other half of what makes the
+reference game look the way it does — changes how much of the maze is
+visible at once and therefore how the maze plays, so it is a gameplay
+decision rather than an art one and it is not taken here.
+
+That distinction is the honest caveat, and the frames show it: at the
+19.5pt cell, a solid and a drawing of a solid are nearly the same handful
+of pixels. **The block treatment reads in the shop tray, the dinosaur sheet
+and the boss, and barely reads in a wall cell.** The cell is the binding
+constraint, not the artwork.
 
 Each is a record of about fifteen numbers in
 [`tools/art/directions.ts`](../tools/art/directions.ts) — authored
@@ -333,10 +359,53 @@ Messages are short and say what, not why-not: `That would seal the maze`,
 | HUD glyphs | 4 | 34 square | meat, egg, speed, kind chip mask |
 | **total** | **88** | | |
 
-`spritePx` is 36 for Fossil Pixel and 48 for the two vector directions. The
-atlas is packed at the authored size and the renderer scales down into the
-36px cell, so a swarm invader is small because its *silhouette* is small,
-not because its sprite is.
+`spritePx` is 36 for Fossil Pixel, 48 for the two vector directions and 64
+for Toy Box. The atlas is packed at the authored size and the renderer scales
+down into the 36px cell, so a swarm invader is small because its *silhouette*
+is small, not because its sprite is.
+
+### 5.0 The anchor: a dinosaur occupies one cell and is drawn taller than one
+
+**Footprint and draw box are different things, and only the footprint is the
+sim's.** A dinosaur occupies exactly one cell — pathing, the block check,
+range and every balance number unchanged — and is *drawn* into a box taller
+than that cell.
+
+| | value | why |
+| --- | --- | --- |
+| footprint | 36 x 36 (1 cell) | the sim's, unchanged |
+| draw box | **36 x 54** (1 x 1.5 cells) | tall enough for a solid to stand proud of its tile |
+| anchor | bottom of the draw box on the **bottom edge of the cell**, horizontally centred | feet on the floor of the cell the sim thinks it is in |
+| draw order | **by row, increasing y** — a lower row is drawn after, and over, the row above | what makes the overlap read as depth rather than as a z-fight |
+
+Within a row there is no horizontal overlap, so order inside a row is free.
+
+**Why.** This is the mechanism by which the reference game reads as blocks:
+its subjects are taller than the tile they stand on. Without it a block
+dinosaur is a 19.5pt square on a phone, and solidity is the first thing that
+cell takes away — the finding in section 2. Enlarging the *cell* instead
+would buy the same look for a re-tune of all 50 migrations against a quarter
+of the board; this costs nothing the sim can see.
+
+**The real cost is occlusion, and it is bounded.** A 1.5-cell sprite reaches
+18px — half a cell — into the row behind it, and what it covers there is the
+*lower* half of that cell, where the dinosaur behind is standing. In a solid
+wall every dinosaur has its feet covered by the one in front, and only the
+upper half of each silhouette survives.
+
+That is survivable, and not by luck: every one of the six silhouettes is
+identified by its *top* — the tyrant's oversized head, the longneck's
+vertical neck, the horned frill, the armoured hump, the flier's span, the
+raptor's forward-carried head. Section 5.1's tells were written against the
+upper half of the animal before this question was asked. **1.5 cells is the
+cap for that reason**, and a direction wanting more height has to justify it
+against the row behind.
+
+**Still to be tested by driving the client, not by argument:** a dense wall —
+twenty adjacent occupied cells — at phone scale, checking that kind stays
+separable and that a placement preview stays legible under a neighbour's
+overhang. That is acceptance for the integration, not a precondition for the
+convention.
 
 ### 5.1 Dinosaurs — six silhouettes, learned in one run
 

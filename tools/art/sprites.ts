@@ -11,8 +11,10 @@
 // is what stops a leg reading as a separate animal.
 
 import { ARCHETYPE_SILHOUETTE, KIND_SILHOUETTE, type Archetype, type Part } from "./bestiary.js";
+import { ARCHETYPE_BLOCKS, BLOCK_SPAN, KIND_BLOCKS } from "./blocks.js";
 import { KIND_HUE, type Direction, type Kind, type Palette } from "./directions.js";
 import { Raster, lighten, darken, scaleShape, union, type Rgb } from "./raster.js";
+import { fitFor, outlined, renderBoxes, type Box } from "./voxel.js";
 
 function toneColor(tone: Part["tone"], p: Palette): Rgb {
   return p[tone];
@@ -79,9 +81,23 @@ export function renderParts(parts: Part[], d: Direction, p: Palette, n: number):
   return out;
 }
 
+const FACES = { top: 1.1, front: 0.9, side: 0.7 };
+
+/**
+ * Render a block model in a direction's palette, with its ink outline.
+ * `frames` is the raster's width in sprite frames, so a double-size frame
+ * buys room rather than scale — see `fitFor`.
+ */
+function renderBlocks(model: Box[], d: Direction, p: Palette, n: number, frames = 1): Raster {
+  const body = renderBoxes(model, n, (t) => p[t], d.faces ?? FACES, fitFor(model, BLOCK_SPAN, frames), d.samples);
+  return outlined(body, d.outline, p.ink);
+}
+
 export function dinoSprite(kind: Kind, stage: 1 | 2 | 3, d: Direction): Raster {
+  const p = d.palette(KIND_HUE[kind]);
+  if (d.model === "blocks") return renderBlocks(KIND_BLOCKS[kind](stage), d, p, d.spritePx);
   const parts = KIND_SILHOUETTE[kind](stage, d.proportions);
-  return renderParts(parts, d, d.palette(KIND_HUE[kind]), d.spritePx);
+  return renderParts(parts, d, p, d.spritePx);
 }
 
 /**
@@ -91,9 +107,12 @@ export function dinoSprite(kind: Kind, stage: 1 | 2 | 3, d: Direction): Raster {
  * is.
  */
 export function invaderSprite(archetype: Archetype, kind: Kind, d: Direction): Raster {
+  const p = d.palette(KIND_HUE[kind]);
+  const frames = archetype === "boss" ? 2 : 1;
+  const n = d.spritePx * frames;
+  if (d.model === "blocks") return renderBlocks(ARCHETYPE_BLOCKS[archetype](), d, p, n, frames);
   const parts = ARCHETYPE_SILHOUETTE[archetype](d.proportions);
-  const n = archetype === "boss" ? d.spritePx * 2 : d.spritePx;
-  return renderParts(parts, d, d.palette(KIND_HUE[kind]), n);
+  return renderParts(parts, d, p, n);
 }
 
 // ------------------------------------------------------------------- atlas

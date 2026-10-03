@@ -286,24 +286,42 @@ function compareSheet(): Raster {
   const stripY = rowsY + subjects.length * rowH + 28;
   const stripH = 300;
 
-  const r = new Raster(colX(2) + colW + 10, stripY + 34 + stripH + 96);
+  const COST = `Fossil Pixel passes the colour-blindness check as drawn. The other three repaint the kind hues before they reach the board, so each needs its own hue table - about an afternoon, and it travels with whichever wins. Toy Box needs the least of that work and Valley Naturalist the most. Toy Box is also the only one that is not a flat drawing: same board, same square grid, but every animal is a solid under one fixed camera. That camera spends pixels on a top face which the others spend on the profile, so judge it on the 20px column rather than the 96px one. Atlas sizes run 23 kB to 126 kB, all irrelevant against a 40 MB binary.`;
+
+  // The surface is sized to the prose, not the other way round: measure the
+  // footer's wrapped height before allocating, so adding a sentence can
+  // never push it off the bottom edge.
+  const width = colX(DIRECTIONS.length - 1) + colW + 10;
+  const proseCols = Math.floor((width - labelX * 2) / (6 * fontScale(TYPE.label)));
+  const footLines = wrap(COST, proseCols, 99).length;
+  const r = new Raster(width, stripY + 24 + stripH + 42 + footLines * 20 + 16);
   r.clear(BOARD.hud, 1);
 
   // Every run of prose on this sheet is wrapped to the surface rather than
   // trusted to fit. A caption that runs off the right edge is the one defect
   // a reader cannot see is a defect — it reads as a finished sentence.
+  // No line cap: `wrap` silently drops everything past `maxLines`, which is
+  // the same failure as a caption running off the edge — the text that
+  // survives still reads as a finished sentence. Here the surface grows to
+  // the prose instead of the prose being cut to the surface.
   const cols = Math.floor((r.w - labelX * 2) / (6 * fontScale(TYPE.label)));
+  const proseLines = (s: string): string[] => wrap(s, cols, 99);
   const prose = (y: number, s: string, c = BOARD.textDim): number => {
-    const lines = wrap(s, cols, 3);
+    const lines = proseLines(s);
     lines.forEach((line, i) => drawText(r, labelX, y + i * 20, line, TYPE.label, c));
     return y + lines.length * 20;
   };
 
-  drawText(r, labelX, 16, "Three directions, one picture", TYPE.title, BOARD.text);
+  // The count comes from DIRECTIONS rather than from the sentence. A fourth
+  // direction was added after this sheet was written, and every "three" in
+  // the prose became a lie that still read as a finished sentence.
+  const n = DIRECTIONS.length;
+  const many = ["", "one", "two", "three", "four", "five", "six"][n] ?? String(n);
+  drawText(r, labelX, 16, `${many[0]?.toUpperCase()}${many.slice(1)} directions, one picture`, TYPE.title, BOARD.text);
   const ruleY =
     prose(
       52,
-      "the same dinosaurs, drawn three ways. 20px is the cell on a 390pt phone; 96px is only there to show what differs. all three are already built, cost the same and read at 20px. this is a taste call.",
+      `the same dinosaurs, drawn ${many} ways. 20px is the cell on a 390pt phone; 96px is only there to show what differs. all ${many} are already built and read at 20px. this is a taste call.`,
     ) + 12;
 
   DIRECTIONS.forEach((d, i) => {
@@ -323,7 +341,17 @@ function compareSheet(): Raster {
       const sprite = subject.sprite(d);
       sizes.forEach((s, j) => {
         const px = Math.round(s * (subject.label === "boss" ? 1.6 : subject.label === "swarm" ? 0.8 : 1));
-        r.blit(resample(sprite, px, px), colX(i) + slot[j]! - px / 2, y + (rowH - px) / 2);
+        const cx = colX(i) + slot[j]!;
+        const cy = y + (rowH - px) / 2;
+        // "half size, and never alone" is the swarm's whole tell, so it is
+        // never shown alone here either — legibilitySheet already draws three.
+        if (subject.label === "swarm") {
+          // Tight enough that the three read as one cluster at every size:
+          // a gap proportional to the sprite, not a constant.
+          for (let k = -1; k <= 1; k++) r.blit(resample(sprite, px, px), cx - px / 2 + k * px * 0.42, cy);
+        } else {
+          r.blit(resample(sprite, px, px), cx - px / 2, cy);
+        }
       });
     });
   });
@@ -339,10 +367,7 @@ function compareSheet(): Raster {
 
   const footY = stripY + 24 + stripH + 20;
   drawText(r, labelX, footY, "What each one costs you, honestly:", TYPE.label, BOARD.text);
-  prose(
-    footY + 22,
-    "Fossil Pixel passes the colour-blindness check as drawn. Clay Pack and Valley Naturalist each need their own hue table, about an afternoon, because the direction repaints the kind hues before they reach the board. Atlas size is 23 kB against 126 kB, which is irrelevant against a 40 MB binary.",
-  );
+  prose(footY + 22, COST);
   return r;
 }
 
@@ -546,6 +571,49 @@ function doCheck(): void {
   for (const row of layoutTable()) {
     if (!row.logical.includes("x") || row.what.startsWith("type")) continue;
     console.log(`  ${row.what.padEnd(22)} ${row.logical.padEnd(22)} ${row.points} pt`);
+  }
+
+  // A sprite touching its own frame border has been clipped, and what goes
+  // first is the ink dilation drawn *outside* the body — so the sprite still
+  // looks like a sprite and simply loses its outline on one edge. The boss
+  // did exactly that: 26 border pixels and a flat-topped crown, with nothing
+  // in any check that noticed. Cheap to assert, nearly invisible to the eye.
+  // Advisory, not a gate, and the reason is a real difference of intent.
+  // The 2D bestiary deliberately lets appendages — wing tips, tail clubs,
+  // horn tips — into a 6px overhang, so those three directions clip on
+  // purpose and have shipped that way. A block model has no such licence:
+  // `FILL` exists to reserve room for the ink, so any border pixel there is
+  // a scale bug. Until the three flat directions are either trimmed or
+  // explicitly exempted this prints rather than fails.
+  console.log("\nsprites clear of their frame border (advisory; clipping eats the ink first)");
+  const edge = (r: Raster): number => {
+    let n = 0;
+    for (let x = 0; x < r.w; x++) {
+      if (r.get(x, 0)[3] > 8) n++;
+      if (r.get(x, r.h - 1)[3] > 8) n++;
+    }
+    for (let y = 0; y < r.h; y++) {
+      if (r.get(0, y)[3] > 8) n++;
+      if (r.get(r.w - 1, y)[3] > 8) n++;
+    }
+    return n;
+  };
+  for (const d of DIRECTIONS) {
+    let worst = 0;
+    let worstName = "";
+    const note = (name: string, r: Raster): void => {
+      const n = edge(r);
+      if (n > worst) {
+        worst = n;
+        worstName = name;
+      }
+    };
+    for (const k of KINDS) for (const s of [1, 2, 3] as const) note(`${k}-${s}`, dinoSprite(k, s, d));
+    for (const a of ARCHETYPES) note(a, invaderSprite(a, "tyrant", d));
+    // Block directions are gated; the flat ones are reported (see above).
+    if (worst && d.model === "blocks") bad++;
+    const tag = !worst ? "ok  " : d.model === "blocks" ? "FAIL" : "warn";
+    console.log(`  ${tag} ${d.id.padEnd(20)} worst ${String(worst).padStart(3)} px${worst ? ` on ${worstName}` : ""}`);
   }
 
   console.log("\natlas bytes per direction");
