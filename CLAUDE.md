@@ -48,6 +48,22 @@ hatchling, juvenile, adult; upgrading is **growing**). Creeps are
   what is durably true, as a comment beside the code it explains or a
   line in the docs, never as a dated aside.
 
+## Hiring another agent
+
+You may hire, but only for a role the project will need for the long
+term: a stream of work that keeps arriving, that no current agent
+covers, and that would otherwise sit unowned. Before hiring, check that
+no existing agent can take it on.
+
+Do not hire for something short-lived: a one-off task, a burst of extra
+work, or anything the current team finishes in time. Queue that work
+with an existing agent instead, even if it lands later. Every agent
+draws on the same Claude subscription as the owner and the fleet's own
+agents, so an idle hire costs the whole board.
+
+When you do hire, say on the issue why the role is long-term and which
+work it owns, so the owner can check the reasoning later.
+
 ## Verifying the client
 
 The sim is tested; the client is not, so it is checked by driving it.
