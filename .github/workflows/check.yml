@@ -30,3 +30,27 @@ jobs:
             fi
           done
           echo "bundle clean of sockets and beacons"
+
+  client-smoke:
+    # Separate job from `check`: it boots a real browser against the real
+    # dev server, which is slower than the sim's under-a-second budget and
+    # has no business gating on the same runner step as typecheck/vitest.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:client
+      - name: upload playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
