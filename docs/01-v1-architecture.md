@@ -314,11 +314,12 @@ the hash (section 1.3), so by the time it returns it is holding a live
 The scene could not ask for another one later, because section 2 forbids an
 `await` in `create()` and the document carries no live object, so it
 replayed the same log a second time. That is not free: a full scripted run
-is 29,232 ticks and `packages/content/test/balance.test.ts` simulates one in
-452 ms on a dev box, all of it blocking the main thread, and several times
-that in a phone WebView. Returning the object that already exists removes
-one of the two replays from every resume without putting I/O or an `await`
-anywhere.
+is 29,232 ticks, and `packages/content/test/balance.test.ts` simulates one
+in 452 ms on a dev box — scripted player included, so a bare replay is
+somewhat under that, and a phone WebView is several times over it. Either
+way a late-game resume pays it twice, on the main thread, before the first
+frame. Returning the object that already exists removes one of the two
+replays without putting I/O or an `await` anywhere.
 
 Three rules keep that from becoming a second source of truth:
 

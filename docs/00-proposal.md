@@ -473,8 +473,9 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   a `SaveDocument` holds no live object, the board scene replayed the same
   log a second time. Measured: a full run is 29,232 ticks and
   `packages/content/test/balance.test.ts` simulates one in 452 ms on a dev
-  box, so a late-game resume paid roughly twice that in blocked main thread
-  before the first frame, and several times that in a phone WebView. Handing
+  box — scripted player included, so a bare replay is somewhat under that
+  and a phone WebView several times over it. A late-game resume paid it
+  twice, on the main thread, before the first frame. Handing
   back the object that already exists removes one replay and adds no I/O, no
   promise and no new source of truth: it is non-null exactly when `doc.run`
   is, and the hash check that validated the run is what produced it. It is
