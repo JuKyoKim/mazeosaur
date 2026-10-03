@@ -427,7 +427,7 @@ leave mid-migration.
 
 The shells inject; `packages/game` never imports a store, an audio
 backend or a network client. All of the following belongs in
-`packages/game/src/platform.ts`, which §2.1 is the plan for writing.
+`packages/game/src/platform.ts`.
 
 ```ts
 /** Save storage. Writes only — see below for why there is no load(). */
@@ -560,37 +560,6 @@ Scenes read booleans from that. The mobile build therefore has one
 unreachable branch rather than thirty scattered `if (services.net)`
 checks, and "what does mobile not do" is answerable by reading one
 function.
-
-### 2.1 Delta from the client branch
-
-`packages/game/src/platform.ts` is in flight on `maze-client/run-lifecycle`
-with a `SaveService` exposing `resumableRun(): ResumableRun | null`, and a
-`Services` bundle in the Phaser registry reached through `services(scene)`.
-The registry-plus-accessor part is right and stays. The rest converges on
-the above:
-
-- `SaveService` → `SaveStore`, and it gains `put` and `clear`. Reading is
-  the shell's job before mount.
-- `Services` → `PlatformServices`, gaining `audio` and the optional `net`.
-- `ResumableRun` is subsumed by `RunSave`, which carries the content
-  version, tick and hash that make a resume checkable.
-- `saves: SaveService | null` → `saves: SaveStore`, non-optional. A shell
-  with nowhere to write injects a store whose `put` resolves and does
-  nothing; "is there a save to resume" is `save.run !== null`, which is
-  a question about the document and not about the port.
-- `mountGame` returns `GameHandle`, not `Phaser.Game`, so the shell has
-  somewhere to call `suspend()`.
-- `MountOptions` gains `build: BuildStamp`. The shell computes it once;
-  nothing in `packages/game` reads a `define`, an env var or
-  `import.meta.env`.
-- `MountOptions` gains `resumed: Game | null`, passed through from
-  `loadSave`. The branch's `board` replays `save.run` itself in `create()`;
-  with `resumed` it takes the object instead, and replays only as the
-  fallback for a `null` that `save.run` says should not be null.
-
-This subsection exists only to stop two branches inventing the same file
-twice. Once `platform.ts` is in `main` matching §2, delete it — a delta
-against a branch that no longer exists is worse than no delta at all.
 
 ### 2.2 Where the commit SHA comes from
 
@@ -780,17 +749,25 @@ initialised fields that were harmless *because* `create()` happened to
 reset every one of them — which is precisely how the fourteenth gets
 forgotten. One assignment site, no judgement call.
 
-**A resume is start-shaped, not instance-shaped.** `MountOptions.resumed`
-and `MountOptions.save.run` describe the *first* `create()` of `board` and
+**A resume is start-shaped, not instance-shaped.** `MountOptions.save.run`
+and `MountOptions.resumed` describe the *first* `create()` of `board` and
 nothing after it. `scene.restart()` is "again (same seed)" in section 5.3 —
-a fresh `Game` on `runSeed` — so the second `create()` must not look at
-either one again. Holding the mount's `run` in a field and branching on it
-in `create()` resumes the saved run every time Play again is pressed, and
-with `resumed` it would hand back a `Game` the first run already played to
-its end. One field, cleared by the `create()` that consumes it, and the
-restart path falls through to the fresh-run branch by construction.
+a fresh `Game` on `runSeed` — so the second `create()` must not read either
+one again. A field that still holds the mount's run on the second pass
+resurrects the run that just ended every time Play again is pressed, and
+once `resumed` exists it hands back a `Game` that run already played to
+its end.
 
-`no-restricted-syntax` enforces it over `packages/game/src/**/*Scene.ts`.
+The shape that gets this right is **consume once**: `create()` reads the
+resume and clears it in the same block, so the restart path falls through
+to the fresh-run branch by construction rather than by a flag somebody has
+to remember to check. `BoardScene` does this with `initialDoc`. It is the
+same rule as the one above — the second `create()` sees only what
+`create()` assigned — applied to the values that come from the mount
+rather than from the scene.
+
+`no-restricted-syntax` enforces the declaration rule over
+`packages/game/src/**/*Scene.ts`.
 Static fields are exempt: they are per class, not per run. Anything that
 wants to be a shared constant belongs in `theme.ts`.
 
