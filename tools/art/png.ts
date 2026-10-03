@@ -51,6 +51,12 @@ export function encodePng(width: number, height: number, rgba: Uint8Array): Buff
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", ihdr),
+    // The committed frames are compared byte for byte, so these bytes are a
+    // product of the deflate implementation as well as of the pixels. Measured
+    // identical on Node 22.21.1 (zlib 1.3.1) and Node 24.21.0 (zlib
+    // 1.3.2.1-motley). If a future Node changes level-9 output, every frame
+    // gains a diff with no change in the art: regenerate and commit, and do
+    // not weaken the comparison to make the diff go away.
     chunk("IDAT", deflateSync(raw, { level: 9 })),
     chunk("IEND", new Uint8Array(0)),
   ]);

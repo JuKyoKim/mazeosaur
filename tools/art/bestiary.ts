@@ -208,7 +208,7 @@ function armored(stage: 1 | 2 | 3, p: Proportions): Part[] {
   ];
   const spikes = stage === 1 ? 3 : stage === 2 ? 5 : 7;
   for (let i = 0; i < spikes; i++) {
-    const t = spikes === 1 ? 0.5 : i / (spikes - 1);
+    const t = i / (spikes - 1);
     const x = 0.24 + t * 0.52;
     parts.push({ shape: spikeTri(x, 0.56, x, 0.47, 0.022, p), tone: stage === 3 ? "light" : "accent", detail: true });
   }
