@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { CELL, Game, TICKS_PER_SECOND, type DinoDef, type GameEvent, type Refusal } from "@mazeosaur/sim";
 import { content, hatchlings } from "@mazeosaur/content";
-import type { ResumableRun } from "./platform.js";
+import { SfxBus } from "./audio.js";
+import { services, type ResumableRun } from "./platform.js";
 import type { RunSummary } from "./ResultsScene.js";
 import { COLORS, KIND_COLOR, text } from "./theme.js";
 import {
@@ -126,6 +127,14 @@ export class BoardScene extends Phaser.Scene {
   private acc = 0;
   private speed = 1;
   private prevPos = new Map<number, { x: number; y: number }>();
+  /**
+   * Ids of the bosses alive as of the last tick. Refilled in
+   * `snapshotPositions`, because a killed invader is gone before its event
+   * is read and `kill-boss` is a different sound from `kill`.
+   */
+  private bossIds = new Set<number>();
+  private sfx!: SfxBus;
+  private eggsWarned = false;
   private effects: Effect[] = [];
 
   private staticGfx!: Phaser.GameObjects.Graphics;
@@ -200,6 +209,11 @@ export class BoardScene extends Phaser.Scene {
     this.hoverCell = null;
     this.shopButtons = [];
     this.toastUntil = 0;
+    this.eggsWarned = false;
+    this.bossIds.clear();
+    // One bus per scene instance, rebuilt on restart: a bus that kept the
+    // previous run's timestamps would swallow the next run's first hit.
+    this.sfx = new SfxBus(services(this).audio, () => this.time.now);
     this.previewKey = "";
     this.sheetKey = "";
     this.cameras.main.setBackgroundColor(COLORS.bg);
@@ -232,6 +246,10 @@ export class BoardScene extends Phaser.Scene {
 
   override update(_time: number, delta: number): void {
     const g = this.game_;
+    // The two music layers follow the phase. `music()` ignores a repeat, so
+    // this is a comparison a frame and a cross-fade only on the change —
+    // which is a 1.2s audio transition and so survives reduced motion.
+    this.sfx.music(g.state.phase === "migration" ? "migration" : g.state.phase === "build" ? "build" : "none");
     if (g.state.phase === "build" || g.state.phase === "migration") {
       this.acc += delta * this.speed;
       let ticks = 0;
@@ -252,9 +270,23 @@ export class BoardScene extends Phaser.Scene {
     this.refreshHud();
   }
 
+  /**
+   * Interpolation source for the frame, and the only place a live invader's
+   * archetype is still readable. `killed` and `leaked` carry an id and the
+   * invader is already gone from state by the time the event is drained, so
+   * whether it was a boss has to be remembered while it was alive. The set
+   * is cleared and refilled rather than reallocated, and `invaderDef` is
+   * already called per invader per *frame* in the draw path, so once per
+   * tick is strictly cheaper than what the renderer does anyway.
+   */
   private snapshotPositions(): void {
+    const g = this.game_;
     this.prevPos.clear();
-    for (const inv of this.game_.state.invaders) this.prevPos.set(inv.id, { x: inv.px, y: inv.py });
+    this.bossIds.clear();
+    for (const inv of g.state.invaders) {
+      this.prevPos.set(inv.id, { x: inv.px, y: inv.py });
+      if (g.invaderDef(inv).archetype === "boss") this.bossIds.add(inv.id);
+    }
   }
 
   private handleEvents(events: GameEvent[]): void {
@@ -267,39 +299,72 @@ export class BoardScene extends Phaser.Scene {
           if (!d) break;
           const from = this.cellCenter(d.x, d.y);
           const to = inv ? this.worldFromMilli(inv.px, inv.py) : from;
-          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: KIND_COLOR[g.dinoDef(d).kind], ttl: 120, life: 120 });
+          const hue = KIND_COLOR[g.dinoDef(d).kind];
+          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: hue, ttl: 120, life: 120 });
+          // Capped at one in 60ms board-wide, round-robin across the hues.
+          // The ring and the line are the visual partner and are never capped.
+          this.sfx.play("hit", hue);
           break;
         }
         case "killed": {
           const p = this.worldFromMilli(e.at.x, e.at.y);
           this.effects.push({ kind: "kill", x: p.x, y: p.y, color: 0xf39c12, ttl: 300, life: 300 });
+          this.sfx.play(this.bossIds.has(e.invaderId) ? "kill-boss" : "kill");
           break;
         }
         case "leaked": {
           const n = this.cellCenter(content.valley.lane.exit.x, content.valley.lane.exit.y);
           this.effects.push({ kind: "leak", x: n.x, y: n.y, color: COLORS.refusal, ttl: 500, life: 500 });
           this.status(`An invader reached the nest: -${e.eggs} egg${e.eggs > 1 ? "s" : ""}`);
+          this.sfx.play(this.bossIds.has(e.invaderId) ? "leak-boss" : "leak");
           break;
         }
         case "migration-started":
           this.status(e.bonus > 0 ? `Sent early: +${e.bonus} meat` : "The migration begins");
+          // An early send is the player's doing and gets its own horn; the
+          // herd call is what a timer running out sounds like.
+          this.sfx.play(e.bonus > 0 ? "send-early" : "migration-start");
           break;
         case "migration-cleared":
           this.status(`Migration cleared: +${e.bonus} meat`);
+          this.sfx.play("migration-clear");
           break;
         case "won":
+          this.sfx.play("victory");
           this.finish(true);
           break;
         case "lost":
+          this.sfx.play("defeat");
           this.finish(false);
           break;
         case "placed":
-        case "sold":
+          this.towersDirty = true;
+          this.sfx.play("place", KIND_COLOR[g.dinoDef(e.dino).kind]);
+          break;
         case "grown":
           this.towersDirty = true;
+          this.sfx.play("grow", KIND_COLOR[g.dinoDef(e.dino).kind]);
+          break;
+        case "sold":
+          this.towersDirty = true;
+          this.sfx.play("sell");
           break;
       }
     }
+    this.watchEggs();
+  }
+
+  /**
+   * The one sound that fires on a threshold rather than an event: eggs
+   * dropping to three. Once per run, and on the way *down* only — a run
+   * that claws back above three and falls again has already been warned,
+   * and a second heartbeat would read as a new kind of trouble.
+   */
+  private watchEggs(): void {
+    if (this.eggsWarned) return;
+    if (this.game_.state.eggs > 3) return;
+    this.eggsWarned = true;
+    this.sfx.play("warn-eggs");
   }
 
   // ------------------------------------------------------------- drawing
@@ -726,6 +791,10 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private toast(msg: string, refusal: boolean): void {
+    // A fast drag refuses many cells and toasts only the ones worth saying;
+    // tying the click to the toast borrows that judgement instead of
+    // inventing a second rate limit for the same event.
+    if (refusal) this.sfx.play("blocked");
     this.toastText.setText(msg);
     this.toastBar.setVisible(refusal);
     this.toastPanel.setVisible(true);
@@ -768,6 +837,7 @@ export class BoardScene extends Phaser.Scene {
       const dino = this.game_.dinoAt(cell.x, cell.y);
       if (dino) {
         this.selectedDino = dino.id;
+        this.sfx.play("select", KIND_COLOR[this.game_.dinoDef(dino).kind]);
         this.showSheet(true);
         return;
       }

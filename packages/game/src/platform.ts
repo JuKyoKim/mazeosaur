@@ -1,5 +1,6 @@
 import type Phaser from "phaser";
 import type { LoggedCommand } from "@mazeosaur/sim";
+import type { AudioService } from "./audio.js";
 
 /**
  * An interrupted run. The sim is deterministic, so (seed, command log) is
@@ -31,6 +32,12 @@ export interface Services {
    */
   nextSeed(): number;
   saves: SaveService | null;
+  /**
+   * Something that can make a noise, or null. Null is a supported
+   * configuration: the game is fully playable on mute, so no scene may
+   * treat a missing sink as an error or wait on one.
+   */
+  audio: AudioService | null;
 }
 
 export const SERVICES_KEY = "services";

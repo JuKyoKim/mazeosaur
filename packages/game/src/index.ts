@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { BoardScene } from "./BoardScene.js";
 import { ResultsScene } from "./ResultsScene.js";
 import { TitleScene } from "./TitleScene.js";
+import type { AudioService } from "./audio.js";
 import { SERVICES_KEY, type SaveService, type Services } from "./platform.js";
 import { CANVAS_H, CANVAS_W } from "./layout.js";
 import { COLORS } from "./theme.js";
@@ -20,6 +21,13 @@ export interface MountOptions {
   nextSeed?: () => number;
   /** Save storage. Without one the title screen's Resume stays dark. */
   saves?: SaveService;
+  /**
+   * Sound output. Without one the game is silent and otherwise identical —
+   * every sound in the spec has a visual partner, because phones are played
+   * on mute. The game package never loads or synthesises audio itself, so
+   * nothing it ships can reach the network for a clip.
+   */
+  audio?: AudioService;
 }
 
 /**
@@ -31,6 +39,7 @@ export function mountGame(opts: MountOptions): Phaser.Game {
   const services: Services = {
     nextSeed: opts.nextSeed ?? (() => opts.seed),
     saves: opts.saves ?? null,
+    audio: opts.audio ?? null,
   };
   return new Phaser.Game({
     type: Phaser.AUTO,
@@ -55,3 +64,13 @@ export { BoardScene } from "./BoardScene.js";
 export { TitleScene } from "./TitleScene.js";
 export { ResultsScene, type RunSummary } from "./ResultsScene.js";
 export { type ResumableRun, type SaveService, type Services } from "./platform.js";
+export {
+  MUSIC_CROSSFADE_MS,
+  SOUNDS,
+  SfxBus,
+  type AudioService,
+  type Ducks,
+  type MusicLayer,
+  type SoundId,
+  type SoundSpec,
+} from "./audio.js";
