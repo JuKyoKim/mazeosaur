@@ -18,8 +18,22 @@ export default defineConfig({
         // Phaser barely changes between our releases; splitting it into
         // its own chunk means a content/app change doesn't bust the
         // cache for the ~290 kB gzip engine chunk.
-        manualChunks: {
-          phaser: ["phaser"],
+        //
+        // This must stay a function, not the `{ phaser: ["phaser"] }`
+        // object-literal form. Vite 8 rebases its types on rolldown, whose
+        // `manualChunks` type is function-only (object literals were
+        // rejected with TS2769); Vite 7's are plain Rollup types, which
+        // accept both. Root installs vite@8 (via vitest); apps/web pins
+        // vite@7, so a real `npm ci` shadows it locally and the object
+        // form happened to typecheck here — until something assembles
+        // apps/web/node_modules without that per-workspace link, at which
+        // point the hoisted vite@8 types take over and this file fails to
+        // typecheck with no code change. The function form below
+        // typechecks under both, so the shadowing no longer matters.
+        manualChunks(id) {
+          if (id.includes("node_modules/phaser/")) {
+            return "phaser";
+          }
         },
       },
     },

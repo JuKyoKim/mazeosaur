@@ -25,11 +25,11 @@ const ROW_H = 72;
 /**
  * How a run ended, and the seed that would run it again.
  *
- * Like the title scene this keeps no fields: the summary arrives through
- * init() as plain data and everything drawn is local to create().
+ * Like the title scene this holds no display object: the summary arrives
+ * through init() as plain data and everything drawn is local to create().
  */
 export class ResultsScene extends Phaser.Scene {
-  private summary: RunSummary = { won: false, seed: 0, migrationsCleared: 0, totalMigrations: 0, eggs: 0, meat: 0 };
+  private summary!: RunSummary;
 
   constructor() {
     super("results");

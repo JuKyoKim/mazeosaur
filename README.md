@@ -14,7 +14,10 @@ One codebase, three targets:
   in the mobile binaries, and CI proves it.
 
 Read [docs/00-proposal.md](docs/00-proposal.md) for what is being built,
-why Phaser + Capacitor, the v1 design, and the milestone plan, then
+why Phaser + Capacitor, the v1 design, and the milestone plan. Then
+[docs/01-v1-architecture.md](docs/01-v1-architecture.md) for the contracts
+v1 is built against: the save format, the ports the app shells inject,
+the scene-graph contract, and how pull requests are reviewed here, and
 [docs/01-art-hud-and-audio.md](docs/01-art-hud-and-audio.md) for the HUD
 layout, the sprite manifest, the audio list and how the first migration
 teaches mazing.
@@ -35,12 +38,20 @@ docs/               proposals and decisions, numbered
 
 ```bash
 npm install
-npm run check      # typecheck + tests; the merge gate
+npm run check      # lint + typecheck + tests; the merge gate
+npm run lint       # the sim-purity and scene-restart rules on their own
 npm run dev        # the web prototype on http://localhost:5173
 ```
 
 Node 22 or newer. The simulation package has no dependencies and its
 tests run in well under a second; keep it that way.
+
+`npm run lint` is where the repo's rules stop being conventions: no
+clock, no timers, no DOM, no `Math.random` and no inexact `Math` inside
+`packages/sim`, no network import anywhere a mobile build can reach, and
+no initialised scene field. It installs its own toolchain into
+`tools/lint` the first time it runs, because it needs a TypeScript the
+rest of the repo must not see — `tools/lint/package.json` says why.
 
 ## Status
 
