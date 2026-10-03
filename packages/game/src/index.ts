@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BoardScene } from "./BoardScene.js";
-import { CANVAS_H, CANVAS_W, COLORS } from "./theme.js";
+import { CANVAS_H, CANVAS_W } from "./layout.js";
+import { COLORS } from "./theme.js";
 
 export interface MountOptions {
   /** element id or element to mount the canvas in */

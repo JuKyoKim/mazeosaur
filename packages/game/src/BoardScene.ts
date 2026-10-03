@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { CELL, Game, TICKS_PER_SECOND, type DinoDef, type GameEvent, type Refusal } from "@mazeosaur/sim";
 import { content, hatchlings } from "@mazeosaur/content";
-import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
+import { CANVAS_H, CANVAS_W, CELL_PX } from "./layout.js";
+import { COLORS, KIND_COLOR, text } from "./theme.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 const BOARD_H = content.valley.height * CELL_PX;
