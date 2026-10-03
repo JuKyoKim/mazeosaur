@@ -246,6 +246,29 @@ function byId<T extends { id: string }>(list: T[]): Record<string, T> {
 
 const generated = buildInvadersAndMigrations();
 
+/**
+ * The fossil award on a finished run: eggs kept, migrations cleared and
+ * meat unspent, each worth a flat amount. Migrations cleared dominates
+ * (fifty of them, each worth as much as ten eggs) because it is the
+ * number that tracks skill; eggs and leftover meat round out a loss so a
+ * wipe on migration one is never worth zero.
+ */
+export const FOSSIL_WEIGHTS = {
+  perEggKept: 2,
+  perMigrationCleared: 20,
+  perMeatUnspent: 1,
+};
+
+/** eggsLeft, migrationsCleared and meatUnspent are all >= 0; so is the result. */
+export function fossilAward(
+  weights: { readonly perEggKept: number; readonly perMigrationCleared: number; readonly perMeatUnspent: number },
+  result: { readonly eggsLeft: number; readonly migrationsCleared: number; readonly meatUnspent: number },
+): number {
+  return Math.round(
+    result.eggsLeft * weights.perEggKept + result.migrationsCleared * weights.perMigrationCleared + result.meatUnspent * weights.perMeatUnspent,
+  );
+}
+
 export const content: Content = {
   version: "m2.0",
   rules: {
@@ -255,6 +278,7 @@ export const content: Content = {
     earlyBonusPerSecond: 1,
     sellRefundBuildPercent: 80,
     sellRefundMigrationPercent: 60,
+    fossilWeights: FOSSIL_WEIGHTS,
   },
   dinos: byId(dinoList),
   invaders: generated.invaders,

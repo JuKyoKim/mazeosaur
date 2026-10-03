@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Game, laneIsOpen, Grid, KIND_CYCLE } from "@mazeosaur/sim";
-import { content, hatchlings } from "../src/index.js";
+import { content, fossilAward, hatchlings } from "../src/index.js";
 
 describe("content integrity", () => {
   it("every migration references a known invader and every growsTo a known next stage", () => {
@@ -32,6 +32,17 @@ describe("content integrity", () => {
     for (const r of v.rock) grid.setBlocked(r.x, r.y, true);
     expect(laneIsOpen(grid, v.lane)).toBe(true);
     for (const p of [v.lane.spawn, v.lane.exit, ...v.lane.checkpoints]) expect(grid.inBounds(p.x, p.y)).toBe(true);
+  });
+
+  it("the fossil weights are non-negative, so no run is ever worth negative fossils", () => {
+    const w = content.rules.fossilWeights;
+    expect(w.perEggKept).toBeGreaterThanOrEqual(0);
+    expect(w.perMigrationCleared).toBeGreaterThanOrEqual(0);
+    expect(w.perMeatUnspent).toBeGreaterThanOrEqual(0);
+    expect(fossilAward(w, { eggsLeft: 0, migrationsCleared: 0, meatUnspent: 0 })).toBe(0);
+    expect(fossilAward(w, { eggsLeft: 20, migrationsCleared: 50, meatUnspent: 300 })).toBeGreaterThan(
+      fossilAward(w, { eggsLeft: 0, migrationsCleared: 1, meatUnspent: 0 }),
+    );
   });
 
   it("a scripted starter maze clears the first migration without leaking", () => {
