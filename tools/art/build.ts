@@ -1,14 +1,19 @@
 // The asset generator. Nothing here ships; it writes what does.
 //
 //   node tools/art/build.ts frames     the three sample frames the board picks from
+//   node tools/art/build.ts verify     the committed frames still match, without writing
 //   node tools/art/build.ts compare    all three directions in one picture
 //   node tools/art/build.ts atlas <id> the shipping atlases for one direction
 //   node tools/art/build.ts check      colour-blindness, contrast and byte budget
 //
-// Every output is a pure function of this directory, so a frame can be
-// regenerated from a diff and nobody has to trust a binary.
+// Every *pixel* here is a pure function of this directory, so a frame can be
+// regenerated from a diff and nobody has to trust a binary. The bytes are
+// not: `encodePng` compresses through the zlib the running Node links, and
+// two zlib builds disagree on the same scanlines. So every comparison of a
+// generated image against a committed one goes through `pngHasPixels`, and
+// `png()` below leaves a file alone when only its compression would change.
 
-import { mkdirSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { content, hatchlings } from "@mazeosaur/content";
 import { ARCHETYPE_TELL, KIND_SILHOUETTE_NOTE, type Archetype } from "./bestiary.js";
@@ -27,7 +32,7 @@ import {
 } from "./directions.js";
 import { drawText, effectsPlate, renderBoardFrame } from "./frame.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
-import { encodePng } from "./png.js";
+import { encodePng, pngHasPixels } from "./png.js";
 import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
 import { atlasJson, dinoSprite, invaderSprite, pack } from "./sprites.js";
 
@@ -42,7 +47,30 @@ function write(rel: string, data: Buffer | string): void {
   console.log(`  ${rel}  ${kb} kB`);
 }
 
+/**
+ * Write a PNG, unless the file already there holds exactly these pixels.
+ *
+ * The skip is the whole point. A Node bump can change every byte of every
+ * frame without changing a pixel, and a generator that rewrote them anyway
+ * would turn CI's regenerate-and-diff red on a change to zlib rather than to
+ * the art — a failure that reads as "the art drifted", which is the wrong
+ * diagnosis entirely. Skipping makes `frames` idempotent on pixels, which is
+ * what the diff is really asking about, and lets a frame be regenerated on
+ * any machine. An unreadable file counts as needing a write; `verify` is the
+ * command that reports it instead.
+ */
 function png(rel: string, r: Raster): void {
+  const p = join(ROOT, rel);
+  let holds = false;
+  try {
+    holds = existsSync(p) && pngHasPixels(readFileSync(p), r.w, r.h, r.px);
+  } catch {
+    holds = false;
+  }
+  if (holds) {
+    console.log(`  ${rel}  unchanged`);
+    return;
+  }
   write(rel, encodePng(r.w, r.h, r.px));
 }
 
@@ -340,14 +368,20 @@ function colourSheet(): Raster {
   return r;
 }
 
-function doFrames(): void {
-  console.log("sample frames (board at 720x1280, and at the reference phone's rendered size)");
+/**
+ * Every frame `frames` owns, generated in memory and not yet written. One
+ * list, so `doFrames` and `doVerify` can never disagree about which files
+ * belong to the generator — which is what lets `verify` call a PNG in
+ * `docs/art/` that is missing from this list an extra frame.
+ */
+function generatedFrames(): { rel: string; raster: Raster }[] {
+  const out: { rel: string; raster: Raster }[] = [];
   for (const d of DIRECTIONS) {
     // Migration 49, 260 ticks in: a `fast` migration strung across two
     // corridors of the maze, which is the state the board should judge.
     const board = renderBoardFrame(d, { migration: 49, ticks: 260, effects: true });
-    png(`docs/art/${d.id}-board.png`, board);
-    png(`docs/art/${d.id}-board-phone.png`, resample(board, PHONE_W, PHONE_H));
+    out.push({ rel: `docs/art/${d.id}-board.png`, raster: board });
+    out.push({ rel: `docs/art/${d.id}-board-phone.png`, raster: resample(board, PHONE_W, PHONE_H) });
 
     // Migration 50, the Spinosaurus boss, with a dinosaur selected so the
     // frame carries the sheet tray and a refusal toast as well.
@@ -360,14 +394,73 @@ function doFrames(): void {
     // in this frame is in the board region the `*-board-phone.png` plate
     // already shows better. Compare directions on the legibility sheet.
     const sheet = renderBoardFrame(d, { migration: 50, ticks: 800, selectSheet: true, toast: "That would seal the maze", effects: true });
-    png(`docs/art/${d.id}-sheet.png`, sheet);
-    png(`docs/art/${d.id}-sheet-phone.png`, resample(sheet, PHONE_W, PHONE_H));
+    out.push({ rel: `docs/art/${d.id}-sheet.png`, raster: sheet });
+    out.push({ rel: `docs/art/${d.id}-sheet-phone.png`, raster: resample(sheet, PHONE_W, PHONE_H) });
 
-    png(`docs/art/${d.id}-legibility.png`, legibilitySheet(d));
-    png(`docs/art/${d.id}-effects.png`, effectsPlate(d));
+    out.push({ rel: `docs/art/${d.id}-legibility.png`, raster: legibilitySheet(d) });
+    out.push({ rel: `docs/art/${d.id}-effects.png`, raster: effectsPlate(d) });
   }
-  png("docs/art/kind-hues.png", colourSheet());
-  png("docs/art/directions-compared.png", compareSheet());
+  out.push({ rel: "docs/art/kind-hues.png", raster: colourSheet() });
+  out.push({ rel: "docs/art/directions-compared.png", raster: compareSheet() });
+  return out;
+}
+
+function doFrames(): void {
+  console.log("sample frames (board at 720x1280, and at the reference phone's rendered size)");
+  for (const { rel, raster } of generatedFrames()) png(rel, raster);
+}
+
+/**
+ * Check the committed frames without touching the tree: every frame the
+ * generator produces must already be on disk with exactly those pixels, and
+ * `docs/art/` must hold no PNG the generator does not produce.
+ *
+ * Pixels, not bytes, because only the pixels are reproducible — see the note
+ * on `encodePng`'s IDAT chunk. That loses nothing a byte comparison had: a
+ * changed frame differs in pixels, a deleted one is missing, an added one is
+ * extra. It gains immunity to the zlib the runner's Node happens to link, so
+ * a Node bump cannot be mistaken for the art drifting.
+ */
+function doVerify(): void {
+  const produced = generatedFrames();
+  const owned = new Set<string>();
+  let bad = 0;
+
+  for (const { rel, raster } of produced) {
+    owned.add(rel);
+    const p = join(ROOT, rel);
+    if (!existsSync(p)) {
+      console.error(`  MISSING    ${rel}`);
+      bad++;
+      continue;
+    }
+    let same: boolean;
+    try {
+      same = pngHasPixels(readFileSync(p), raster.w, raster.h, raster.px);
+    } catch (e) {
+      console.error(`  UNREADABLE ${rel}  ${(e as Error).message}`);
+      bad++;
+      continue;
+    }
+    if (same) {
+      console.log(`  ok         ${rel}  ${raster.w}x${raster.h}`);
+    } else {
+      console.error(`  CHANGED    ${rel}`);
+      bad++;
+    }
+  }
+
+  for (const name of readdirSync(join(ROOT, "docs/art")).sort()) {
+    if (!name.endsWith(".png") || owned.has(`docs/art/${name}`)) continue;
+    console.error(`  EXTRA      docs/art/${name}`);
+    bad++;
+  }
+
+  if (bad) {
+    console.error(`\n${bad} frame(s) do not match the generator. Run \`npm run art:frames\` and commit the result.`);
+    process.exit(1);
+  }
+  console.log(`\nall ${produced.length} frames match the generator, pixel for pixel`);
 }
 
 // ---------------------------------------------------------------- the atlases
@@ -480,11 +573,12 @@ function doCheck(): void {
 
 const [cmd, arg] = process.argv.slice(2);
 if (cmd === "frames") doFrames();
+else if (cmd === "verify") doVerify();
 else if (cmd === "compare") png("docs/art/directions-compared.png", compareSheet());
 else if (cmd === "atlas") doAtlas(arg ?? "fossil-pixel");
 else if (cmd === "check") doCheck();
 else {
-  console.log("usage: node tools/art/build.ts [frames|atlas <direction>|check]");
+  console.log("usage: node tools/art/build.ts [frames|verify|atlas <direction>|check]");
   console.log(`directions: ${DIRECTIONS.map((d) => d.id).join(", ")}`);
   process.exit(1);
 }
