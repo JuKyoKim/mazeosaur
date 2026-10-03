@@ -345,6 +345,65 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   so late meat still buys late dinosaurs. The balance harness (a scripted
   player in `packages/content/test`) must survive at least 35 of 50;
   it reached 46 at this tuning, losing eggs mostly to bosses.
+- 2026-10-02: the v1 contracts are written down in
+  [01-v1-architecture.md](01-v1-architecture.md) — save format, platform
+  ports, sim-purity lint, scene-graph contract, review protocol. The lines
+  below are the decisions in it that change or sharpen this proposal.
+- 2026-10-02: the save format lives in `packages/sim` (`save.ts` plus a
+  numbered, append-only `save-migrations.ts`), so it sits behind rule 1
+  and `apps/server` needs nothing but the sim to verify a replay.
+  `SAVE_VERSION === 1 + SAVE_MIGRATIONS.length`, asserted by a test, so
+  bumping the version without adding a migration fails CI.
+- 2026-10-02: profile and settings are separate objects in the save, not
+  one. M4 syncs the profile and never the settings; a phone's haptics
+  preference has no business arriving on a desktop.
+- 2026-10-02: a run whose `content.version` no longer matches the build is
+  **dropped**, keeping the profile; the title screen offers a fresh run on
+  the same seed. The alternative is shipping every historical content
+  version forever. So `content.version` bumps when a sim-visible number
+  changes and not for art or copy, and a digest test in
+  `packages/content` enforces that.
+- 2026-10-02: the command log stays verbose JSON. A full scripted
+  50-migration run measures 408 commands and 24.8 KB; §4.4's "a few KB"
+  was optimistic but the order of magnitude is harmless. A packed encoding
+  is a pure function of this one, so it stays available as save version 2.
+- 2026-10-02: audio joins save storage and the network client as an
+  injected port, and `mountGame` returns a handle with `suspend()` so the
+  shell can flush an interrupted run when the OS backgrounds the app.
+  Exactly one function in `packages/game` reads the network port.
+- 2026-10-02: §6's bundle grep is demoted to a smoke test. The no-network
+  proof becomes four exact layers — a Rollup module-graph assertion, a
+  source-level import ban, a checked-in vendor allowlist, and removing
+  `fetch`/`WebSocket`/`EventSource`/`sendBeacon` at runtime in the mobile
+  entry point while wrapping XHR to same-origin reads only.
+- 2026-10-02: rule 1 is now `npm run lint`, which `npm run check` runs
+  first, so it fails on CI too rather than being a review habit. The linter carries its own TypeScript 6 in `tools/lint`
+  because typescript-eslint will not load against the repo's TypeScript 7;
+  holding the compiler back for a linter was the worse trade.
+- 2026-10-02: v1 has three scenes — title, board, results. The board draws
+  its own HUD. A scene field is declared, never initialised; `create()`
+  gives it its first value, and the linter enforces the declaration half.
+- 2026-10-03: the board accepted this proposal, and with it the merge gate.
+  The architect merges ordinary Mazeosaur pull requests — scenes, sprites,
+  sim refactors, content edits, CI, docs — on one review against the bar in
+  [01-v1-architecture.md](01-v1-architecture.md) §6.3. The owner stays the
+  gate for the homelab, spend, store credentials and anything that becomes
+  visible on the public internet, because a review can establish that code
+  is correct and cannot establish that somebody agreed to publish it.
+- 2026-10-03: the web target is a commit-tagged GHCR image served as static
+  files by Caddy, pinned by a Komodo stack in `JuKyoKim/arbor` on beelink.
+  There is no application server, so **everything v1 persists is local to
+  the device**: `SaveStore` is specified against a local store with no
+  `userId`, no `etag` and no failure that can be a network failure, and
+  `services.net` is absent on every target in v1, web included. §4.5's
+  server is M4 and the game is complete without it.
+- 2026-10-03: a save says which build wrote it. `SaveDocument.writtenBy` and
+  `RunSave.startedBy` carry `{ commit, platform }`, where `commit` is the
+  SHA the image was tagged with, so a bug report that quotes a save names
+  the artifact to check out and a divergent resume says whether the build
+  changed underneath it. The sim never reads either field, and a malformed
+  one is repaired rather than rejected — it is the only field in the format
+  with that treatment, because it is the only one nothing depends on.
 - 2026-10-03: the HUD layout, sprite manifest, audio list and onboarding
   are specified in [docs/01-art-hud-and-audio.md](01-art-hud-and-audio.md),
   with the numbers shared with `tools/art/layout.ts` so the spec and the

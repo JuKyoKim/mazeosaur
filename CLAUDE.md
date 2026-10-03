@@ -1,7 +1,10 @@
 # mazeosaur: orientation for a fresh agent
 
-Read [README.md](README.md), then [docs/00-proposal.md](docs/00-proposal.md).
-This file carries only what an agent needs before it knows where to look.
+Read [README.md](README.md), then [docs/00-proposal.md](docs/00-proposal.md)
+for the design and [docs/01-v1-architecture.md](docs/01-v1-architecture.md)
+for the contracts — the save format, the platform ports, the scene-graph
+contract and the review protocol. This file carries only what an agent
+needs before it knows where to look.
 
 ## The rules that are not obvious from the code
 
@@ -10,6 +13,7 @@ This file carries only what an agent needs before it knows where to look.
    function of (seed, content, command log). If you need randomness, use
    the `Rng` that is passed in. If you need a curve, use a lookup table.
    Breaking this silently breaks replays, saves and server verification.
+   `npm run lint` enforces this; it is not just a convention any more.
 2. **Mobile has no network. None.** `apps/mobile` must never depend on the
    network package, and `packages/game` must never import it either; the
    web shell injects it. Do not add analytics, crash reporting, remote

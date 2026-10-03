@@ -67,39 +67,43 @@ const REFUSAL_TEXT: Record<Refusal, string> = {
  * scenes once there is more than one screen. It never decides a rule; it
  * asks the Game and draws the answer.
  */
+// Every field below is declared and never initialised here. create() runs
+// again on the same instance for every run, so a value set at the
+// declaration would be the first run's value forever; see the scene-graph
+// contract in docs/01-v1-architecture.md. The linter enforces it.
 export class BoardScene extends Phaser.Scene {
   private game_!: Game;
-  private acc = 0;
-  private speed = 1;
-  private prevPos = new Map<number, { x: number; y: number }>();
-  private effects: Effect[] = [];
+  private acc!: number;
+  private speed!: number;
+  private prevPos!: Map<number, { x: number; y: number }>;
+  private effects!: Effect[];
 
   private staticGfx!: Phaser.GameObjects.Graphics;
   private towerGfx!: Phaser.GameObjects.Graphics;
   private dynGfx!: Phaser.GameObjects.Graphics;
-  private towersDirty = true;
+  private towersDirty!: boolean;
 
-  private selectedDef: DinoDef | null = null;
-  private selectedDino: number | null = null;
-  private painting = false;
-  private lastPaint: { x: number; y: number } | null = null;
-  private hoverCell: { x: number; y: number } | null = null;
+  private selectedDef!: DinoDef | null;
+  private selectedDino!: number | null;
+  private painting!: boolean;
+  private lastPaint!: { x: number; y: number } | null;
+  private hoverCell!: { x: number; y: number } | null;
 
   private meatText!: Phaser.GameObjects.Text;
   private eggsText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
   private timerText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
-  private statusUntil = 0;
+  private statusUntil!: number;
   private previewText!: Phaser.GameObjects.Text;
-  private paletteButtons: { def: DinoDef; button: Button }[] = [];
+  private paletteButtons!: { def: DinoDef; button: Button }[];
   private sendButton!: Button;
   private speedButton!: Button;
   private panelName!: Phaser.GameObjects.Text;
   private panelStats!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
-  private overlay: Phaser.GameObjects.Container | null = null;
+  private overlay!: Phaser.GameObjects.Container | null;
 
   constructor(private readonly seed: number) {
     super("board");
@@ -112,7 +116,7 @@ export class BoardScene extends Phaser.Scene {
     this.game_ = new Game(content, this.seed);
     this.acc = 0;
     this.speed = 1;
-    this.prevPos.clear();
+    this.prevPos = new Map();
     this.effects = [];
     this.towersDirty = true;
     this.selectedDef = null;
