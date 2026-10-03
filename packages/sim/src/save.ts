@@ -1,5 +1,5 @@
 import type { Content } from "./content-types.js";
-import { Game, type LoggedCommand } from "./game.js";
+import { Game, type Command, type LoggedCommand } from "./game.js";
 import { SAVE_MIGRATIONS, type SaveMigration } from "./save-migrations.js";
 
 export const SAVE_FORMAT = "mazeosaur.save";
@@ -229,12 +229,23 @@ function isSettingsSave(x: unknown): x is SettingsSave {
   );
 }
 
-const COMMAND_TYPES = new Set(["place", "sell", "grow", "send"]);
+/**
+ * Keyed by every member of the `Command` union, so a variant added to
+ * `Command` without a line here is a `tsc` error rather than a silent drop
+ * into `corrupt` (profile included) the next time that command shows up in
+ * a saved log.
+ */
+const COMMAND_TYPES: Record<Command["type"], true> = {
+  place: true,
+  sell: true,
+  grow: true,
+  send: true,
+};
 
 function isLoggedCommand(x: unknown): x is LoggedCommand {
   if (!isRecord(x) || !isFiniteNumber(x.tick) || !isRecord(x.command)) return false;
   const c = x.command;
-  if (typeof c.type !== "string" || !COMMAND_TYPES.has(c.type)) return false;
+  if (typeof c.type !== "string" || !(c.type in COMMAND_TYPES)) return false;
   switch (c.type) {
     case "place":
       return typeof c.defId === "string" && isFiniteNumber(c.x) && isFiniteNumber(c.y);
@@ -290,10 +301,7 @@ function narrowSaveDocument(x: Record<string, unknown>, platform: BuildStamp["pl
  * Reads a raw JSON value into a `SaveDocument`, migrating and validating
  * it on the way. `platform` is the platform now running, used only to
  * repair a missing or malformed `writtenBy`/`startedBy` (section 1.4 of
- * docs/01-v1-architecture.md names that repair but its signature for
- * `loadSave` has no way to supply "the platform now running" — this is a
- * deliberate deviation; the architect should confirm it or specify another
- * source for that value).
+ * docs/01-v1-architecture.md).
  */
 export function loadSave(raw: unknown, content: Content, platform: BuildStamp["platform"]): LoadOutcome {
   if (!isRecord(raw)) return { ok: false, reason: "not-a-save" };
