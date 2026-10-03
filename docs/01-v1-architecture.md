@@ -1,6 +1,6 @@
 # Mazeosaur v1 architecture
 
-*Status: decided, 2026-10-02. This doc settles the contracts that more
+*Status: decided, 2026-10-03. This doc settles the contracts that more
 than one branch of v1 work needs. [docs/00-proposal.md](00-proposal.md) is
 still the design of record for what the game is; this is how the pieces
 are shaped so they fit. Where the two disagree, this one is newer and
@@ -10,6 +10,14 @@ The four things decided here are the four that two or more teams would
 otherwise each invent: the save format, the ports the app shells inject,
 how sim purity is enforced, and what a Phaser scene owns. Section 6 is
 the review protocol, which is how all of it stays true.
+
+**The deployment target is an input, not a detail.** The web build is served
+as static files from a container with no application server behind it — a
+commit-tagged GHCR image, pinned by a Komodo stack that lives in
+`JuKyoKim/arbor`, on beelink. Two things in this doc follow from that and
+would be different if a server existed: everything v1 persists is local to
+the device (section 2), and a release is identified by a commit SHA, which
+is why a save says which build wrote it (section 1.2).
 
 ## 1. The save format, v1
 
@@ -46,12 +54,52 @@ export interface SaveDocument {
   readonly format: typeof SAVE_FORMAT;
   /** Save-format version. Integer, >= 1. Not the build version. */
   readonly version: number;
+  /** The build that last wrote this document. Diagnostic; never an input. */
+  readonly writtenBy: BuildStamp;
   readonly profile: ProfileSave;
   readonly settings: SettingsSave;
   /** The run in progress, or null when there is nothing to resume. */
   readonly run: RunSave | null;
 }
+
+export interface BuildStamp {
+  /**
+   * The commit the build was made from: 40 lowercase hex, or "dev" for a
+   * build nobody stamped (`npm run dev`, a test, a local `npm run build`).
+   */
+  readonly commit: string;
+  /** Which shell wrote it. */
+  readonly platform: "web" | "ios" | "android" | "node";
+}
 ```
+
+**`writtenBy` identifies the release, because the release is a commit.**
+The web target ships as a GHCR image tagged with the commit SHA that built
+it (`.github/workflows/check.yml`, and the stack that pins it in
+`JuKyoKim/arbor`), so "which build wrote this save" and "which artifact is
+running on beelink" are the same string, and a bug report that quotes a
+save says exactly what to check out. It is two fields and about sixty bytes
+once per document; retrofitting it later means every save already in a
+browser is from an unknown build forever.
+
+Three rules keep it from becoming a correctness input:
+
+- **The sim never reads it.** It is not in the hash, not in the replay, and
+  not a reason to reject or drop anything. A save whose `writtenBy.commit`
+  is unknown, older, newer or `"dev"` loads normally. Only `version` and
+  `run.contentVersion` gate loading (sections 1.4 and 1.5).
+- **The shell supplies it**, as `MountOptions.build` (section 2), for the
+  same reason it supplies `nextSeed()`: reading an env var or a `define` is
+  shell work, and neither the sim nor `packages/game` may do it.
+- **It is stamped on write, not on read.** `loadSave` leaves the field
+  alone, so between loading and the first save it still names the build
+  that wrote the bytes — which is the one you want when the bytes look
+  wrong. `freshSave(build)` takes the stamp for the same reason.
+
+`RunSave.startedBy` carries the stamp the run *began* under, so a resume
+that diverges tells you whether the build changed underneath it. That is
+the first question to ask about a divergence and the save is the only place
+the answer could have been recorded.
 
 `profile` and `settings` are separate because they sync differently:
 `profile` is the thing a signed-in web player wants on their other
@@ -103,6 +151,8 @@ export interface RunSave {
   readonly seed: number;
   /** content.version when the run *started*. Exact match required to resume. */
   readonly contentVersion: string;
+  /** The build the run started under. Diagnostic only; a resume on a different build is allowed. */
+  readonly startedBy: BuildStamp;
   /** Every accepted command, ascending by tick. This is also the replay. */
   readonly log: readonly LoggedCommand[];
   /** The tick reached when this was written. >= the last log entry's tick. */
@@ -214,7 +264,7 @@ export type LoadOutcome =
   | { readonly ok: false; readonly reason: LoadFailure };
 
 export function loadSave(raw: unknown, content: Content): LoadOutcome;
-export function freshSave(): SaveDocument;
+export function freshSave(build: BuildStamp): SaveDocument;
 ```
 
 - `version < SAVE_VERSION`: run every entry with `to > version` in
@@ -225,6 +275,12 @@ export function freshSave(): SaveDocument;
   a sync landed ahead of this binary — and clobbering it loses real
   progress. Play from `freshSave()` in memory, tell the player the save
   was written by a newer version, and leave the bytes alone.
+- A missing or malformed `writtenBy` or `run.startedBy` is **repaired, not
+  rejected**: substitute `{ commit: "unknown", platform }` for the
+  platform now running. It is a diagnostic, and losing a player's run
+  because the diagnostic is unreadable would be the worse bug. It is the
+  only field in the format with that treatment, because it is the only one
+  nothing depends on.
 - Missing `format`, or a `version` that is not a positive integer:
   `not-a-save`. Anything else that fails validation: `corrupt`. In both
   cases the shell moves the file aside to one backup slot
@@ -344,7 +400,7 @@ export interface AudioPort {
   volumes(music: number, sfx: number): void;
 }
 
-/** Web only. See section 3 for why a type here is not a dependency. */
+/** Web only, and nobody passes one in v1. Section 3: a type is not a dependency. */
 export interface NetPort {
   dailySeed(): Promise<{ seed: number; valleyId: string; contentVersion: string }>;
   syncProfile(local: ProfileSave): Promise<ProfileSave>;
@@ -355,8 +411,9 @@ export interface PlatformServices {
   readonly saves: SaveStore;
   readonly audio: AudioPort;
   /**
-   * Web only. On mobile this is absent, and so is every feature behind
-   * it: there is no stub, no offline queue and no retry.
+   * Absent in v1 on every target, and absent on mobile forever. When it is
+   * absent so is every feature behind it: no stub, no offline queue, no
+   * retry.
    */
   readonly net?: NetPort;
 }
@@ -366,6 +423,8 @@ export interface MountOptions {
   /** The save, already read and migrated by the shell. */
   readonly save: SaveDocument;
   readonly services: PlatformServices;
+  /** This build's identity, stamped into every save the game writes. */
+  readonly build: BuildStamp;
   /** Seed policy is the shell's: `?seed=` pins one, otherwise fresh per run. */
   nextSeed(): number;
 }
@@ -380,7 +439,28 @@ export interface GameHandle {
 export function mountGame(opts: MountOptions): GameHandle;
 ```
 
-Four things in that shape are deliberate.
+Five things in that shape are deliberate.
+
+**`SaveStore` is local on every target, including web.** The web build
+ships as static files out of a Caddy container with no application server
+behind it — `apps/web/Dockerfile`, pinned by tag on beelink — so in v1
+there is nowhere for a save to go but the browser. The port is therefore
+specified against a local store and nothing in it may assume a backend
+appears later: no `userId`, no `etag`, no `lastSyncedAt`, no "pending
+upload" flag, no method that can fail for a network reason. `put` resolves
+or it throws a storage error, and that is the whole failure model.
+
+M4's cloud save, if it happens, is `NetPort.syncProfile` — a second,
+clearly-named port over the *profile*, called by the shell, which is why
+`SaveStore` does not need a seam for it. A store that half-anticipates a
+server is the shape that gets stuck: every scene learns to handle a
+staleness that cannot occur, and the handling is never exercised.
+
+The practical consequence for v1: **`services.net` is absent on every
+target, web included.** There is no server to talk to until `apps/server`
+exists. `cloudFeatures()` returns all false everywhere, and the three
+features behind it are not built. `NetPort` is written down here so the
+boundary is decided before anyone needs it, not because v1 calls it.
 
 **`SaveStore` has no `load()`.** The shell reads the file, runs
 `loadSave`, and hands the document to `mountGame`. Phaser's `create()` is
@@ -438,6 +518,33 @@ the above:
   a question about the document and not about the port.
 - `mountGame` returns `GameHandle`, not `Phaser.Game`, so the shell has
   somewhere to call `suspend()`.
+- `MountOptions` gains `build: BuildStamp`. The shell computes it once;
+  nothing in `packages/game` reads a `define`, an env var or
+  `import.meta.env`.
+
+### 2.2 Where the commit SHA comes from
+
+`BuildStamp.commit` has to arrive at the shell without the game or the sim
+reading its environment, and without a build that is not from CI pretending
+to be one.
+
+- `apps/web/vite.config.ts` declares `define: { __BUILD_COMMIT__:
+  JSON.stringify(process.env.BUILD_COMMIT ?? "dev") }`. A local `npm run
+  dev` or `npm run build` has no such variable and stamps `"dev"`, which is
+  honest: that build is not reproducible from a tag.
+- `apps/web/Dockerfile` takes `ARG BUILD_COMMIT` and passes it into the
+  build step as that env var.
+- `.github/workflows/check.yml` already tags the image
+  `ghcr.io/jukyokim/mazeosaur:${{ github.sha }}`; the same `github.sha`
+  goes in as a build arg, so the tag on the registry and the string inside
+  every save written by that image are the same forty characters by
+  construction rather than by discipline.
+- `apps/web/src/main.ts` passes `{ commit: __BUILD_COMMIT__, platform:
+  "web" }` as `MountOptions.build`. Mobile does the same in M3 with its own
+  platform and the same variable from the Capacitor build.
+
+That is a three-file change in the web build, which release owns, not the
+architecture; it is written down here so the string means one thing.
 
 ## 3. Mobile has no network: making the proof exact
 
@@ -604,6 +711,27 @@ currently in.
 
 ## 6. The review protocol
 
+### 6.0 Who merges
+
+**The architect merges ordinary Mazeosaur pull requests.** Scenes, sprites,
+sim refactors, content edits, tests, CI, docs: one review against the bar in
+6.3, and it lands. The board settled this when it accepted the proposal on
+2026-10-03; it is not a proposal and does not need re-asking per pull
+request.
+
+**The owner stays the gate for four things**, and they are about reach, not
+about code quality: the homelab, spend, store credentials, and anything that
+becomes visible on the public internet. A pull request that touches one of
+those does not merge on an architect's review no matter how good the diff
+is — see 6.4. The test is not "is this change risky", it is "does landing
+this put something outside the repo", because a review can establish that
+code is correct and cannot establish that somebody agreed to pay for it or
+to publish it.
+
+Nobody merges their own pull request, the architect included: an architect
+change goes to whoever else is competent to read it, and a disagreement that
+survives three rounds goes to Odin.
+
 ### 6.1 Branches and commits
 
 - Branch from `origin/main` as `<author>/<short-slug>`. Never commit to
@@ -644,10 +772,14 @@ were actually checked:
 
 Request changes with the specific line and the specific rule. "Looks fine"
 is not a review; a review that finds real problems and says so is a
-successful one. Nobody merges their own pull request. After three rounds
-of disagreement on the same point, it goes to Odin.
+successful one. After three rounds of disagreement on the same point, it
+goes to Odin.
 
 ### 6.4 What does not get decided in a pull request
+
+The owner's gate from 6.0, spelled out, plus the product choices that were
+never the architect's. Everything here goes to Odin with a recommendation;
+none of it lands on an architect's approval, however clean the diff is.
 
 | it needs | because |
 | --- | --- |
@@ -668,6 +800,10 @@ Named so nobody builds them on spec:
 - **A packed command log.** Section 1.6 measured the verbose one and it
   fits.
 - **Multiple concurrent runs** or save slots. One `run` field, one device.
+- **A server of any kind.** The web target is static files from a container
+  (section 2). `apps/server`, `packages/net` and everything behind `NetPort`
+  — accounts, cloud save, the leaderboard, the daily seed — are M4, and the
+  game is complete without them.
 - **Conflict resolution for cloud save.** M4 syncs `profile` only, and
   last-write-wins on a monotonic `fossilsEarned` is enough for it. An
   in-progress run never leaves the device in v1.

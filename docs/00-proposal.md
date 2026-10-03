@@ -383,3 +383,24 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
 - 2026-10-02: v1 has three scenes — title, board, results. The board draws
   its own HUD. A scene field is declared, never initialised; `create()`
   gives it its first value, and the linter enforces the declaration half.
+- 2026-10-03: the board accepted this proposal, and with it the merge gate.
+  The architect merges ordinary Mazeosaur pull requests — scenes, sprites,
+  sim refactors, content edits, CI, docs — on one review against the bar in
+  [01-v1-architecture.md](01-v1-architecture.md) §6.3. The owner stays the
+  gate for the homelab, spend, store credentials and anything that becomes
+  visible on the public internet, because a review can establish that code
+  is correct and cannot establish that somebody agreed to publish it.
+- 2026-10-03: the web target is a commit-tagged GHCR image served as static
+  files by Caddy, pinned by a Komodo stack in `JuKyoKim/arbor` on beelink.
+  There is no application server, so **everything v1 persists is local to
+  the device**: `SaveStore` is specified against a local store with no
+  `userId`, no `etag` and no failure that can be a network failure, and
+  `services.net` is absent on every target in v1, web included. §4.5's
+  server is M4 and the game is complete without it.
+- 2026-10-03: a save says which build wrote it. `SaveDocument.writtenBy` and
+  `RunSave.startedBy` carry `{ commit, platform }`, where `commit` is the
+  SHA the image was tagged with, so a bug report that quotes a save names
+  the artifact to check out and a divergent resume says whether the build
+  changed underneath it. The sim never reads either field, and a malformed
+  one is repaired rather than rejected — it is the only field in the format
+  with that treatment, because it is the only one nothing depends on.
