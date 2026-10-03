@@ -1,6 +1,7 @@
 // The asset generator. Nothing here ships; it writes what does.
 //
 //   node tools/art/build.ts frames     the three sample frames the board picks from
+//   node tools/art/build.ts compare    all three directions in one picture
 //   node tools/art/build.ts atlas <id> the shipping atlases for one direction
 //   node tools/art/build.ts check      colour-blindness, contrast and byte budget
 //
@@ -25,7 +26,7 @@ import {
   type Kind,
 } from "./directions.js";
 import { drawText, effectsPlate, renderBoardFrame } from "./frame.js";
-import { CANVAS_H, CANVAS_W, CELL_PX, SCALE, layoutTable, pt, TYPE } from "./layout.js";
+import { CANVAS_H, CANVAS_W, CELL_PX, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
 import { encodePng } from "./png.js";
 import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
 import { atlasJson, dinoSprite, invaderSprite, pack } from "./sprites.js";
@@ -175,6 +176,130 @@ function legibilitySheet(d: Direction): Raster {
   return r;
 }
 
+/** A rectangle of a raster, copied out. */
+function crop(src: Raster, x: number, y: number, w: number, h: number): Raster {
+  const out = new Raster(w, h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const [r, g, b, a] = src.get(x + i, y + j);
+      const k = (j * w + i) * 4;
+      out.px[k] = r;
+      out.px[k + 1] = g;
+      out.px[k + 2] = b;
+      out.px[k + 3] = a;
+    }
+  }
+  return out;
+}
+
+/**
+ * The comparison sheet: all three directions in one picture.
+ *
+ * The per-direction frames answer "is this direction legible"; none of them
+ * answers "which of these three do I want", because that question needs the
+ * three held against each other and a reader cannot hold three screenshots
+ * in their head. The board frames are nearly identical at phone scale and
+ * the sheet tray is HUD type, which is direction-independent — so a reader
+ * told to compare those compares three pictures that genuinely look alike
+ * and learns nothing.
+ *
+ * What separates them is the drawing: the outline weight, the proportions
+ * and the palette. So each subject appears three times per direction — at
+ * 20px, which is the true cell on the reference phone; at 36px, the logical
+ * cell; and at 96px, where the treatment is actually visible. The 96px
+ * column is not a claim about how the game looks. It is there so a reader
+ * can see *what* is different before deciding whether they care at 20.
+ */
+function compareSheet(): Raster {
+  const subjects: { label: string; sub: string; sprite: (d: Direction) => Raster }[] = [
+    ...KINDS.map((kind) => {
+      const def = Object.values(content.dinos).find((x) => x.kind === kind && x.stage === 3);
+      return {
+        label: def?.name ?? kind,
+        sub: `${kind} adult`,
+        sprite: (d: Direction) => dinoSprite(kind, 3, d),
+      };
+    }),
+    { label: "boss", sub: "the migration-50 boss", sprite: (d: Direction) => invaderSprite("boss", "tyrant", d) },
+    { label: "swarm", sub: "the smallest invader", sprite: (d: Direction) => invaderSprite("swarm", "flier", d) },
+  ];
+
+  const labelX = 16;
+  const colW = 320;
+  const colGap = 12;
+  // The label column is sized to the longest genus name at TYPE.body rather
+  // than guessed: Argentinosaurus is 15 characters, and a column that fits
+  // the average name clips that one into the first sprite.
+  const nameAdvance = 6 * fontScale(TYPE.body);
+  const labelW = Math.max(...subjects.map((s) => s.label.length)) * nameAdvance + 24;
+  const colX = (i: number) => labelX + labelW + i * (colW + colGap);
+  const sizes = [Math.round(CELL_PX * SCALE), CELL_PX, 96] as const; // 20, 36, 96
+  const slot = [46, 110, 230] as const; // slot centres within a column
+  const rowH = 112;
+  const rowsY = 196;
+  const stripY = rowsY + subjects.length * rowH + 28;
+  const stripH = 300;
+
+  const r = new Raster(colX(2) + colW + 10, stripY + 34 + stripH + 96);
+  r.clear(BOARD.hud, 1);
+
+  // Every run of prose on this sheet is wrapped to the surface rather than
+  // trusted to fit. A caption that runs off the right edge is the one defect
+  // a reader cannot see is a defect — it reads as a finished sentence.
+  const cols = Math.floor((r.w - labelX * 2) / (6 * fontScale(TYPE.label)));
+  const prose = (y: number, s: string, c = BOARD.textDim): number => {
+    const lines = wrap(s, cols, 3);
+    lines.forEach((line, i) => drawText(r, labelX, y + i * 20, line, TYPE.label, c));
+    return y + lines.length * 20;
+  };
+
+  drawText(r, labelX, 16, "Three directions, one picture", TYPE.title, BOARD.text);
+  const ruleY =
+    prose(
+      52,
+      "the same dinosaurs, drawn three ways. 20px is the cell on a 390pt phone; 96px is only there to show what differs. all three are already built, cost the same and read at 20px. this is a taste call.",
+    ) + 12;
+
+  DIRECTIONS.forEach((d, i) => {
+    const x = colX(i);
+    r.fill(rect(x, ruleY, colW, 3), BOARD.text, 0.5, 1);
+    drawText(r, x + 4, ruleY + 12, d.name, TYPE.body, BOARD.text);
+    drawText(r, x + 4, ruleY + 42, `${d.axes.render}, ${d.axes.register}`, TYPE.label, BOARD.textDim);
+    sizes.forEach((s, j) => drawText(r, x + slot[j]!, ruleY + 68, `${s}px`, TYPE.label, BOARD.textDim, "center"));
+  });
+
+  subjects.forEach((subject, row) => {
+    const y = rowsY + row * rowH;
+    r.fill(rect(0, y, r.w, rowH - 2), row % 2 === 0 ? BOARD.hudPanel : BOARD.hud, 1, 1);
+    drawText(r, labelX, y + 38, subject.label, TYPE.body, BOARD.text);
+    drawText(r, labelX, y + 62, subject.sub, TYPE.label, BOARD.textDim);
+    DIRECTIONS.forEach((d, i) => {
+      const sprite = subject.sprite(d);
+      sizes.forEach((s, j) => {
+        const px = Math.round(s * (subject.label === "boss" ? 1.6 : subject.label === "swarm" ? 0.8 : 1));
+        r.blit(resample(sprite, px, px), colX(i) + slot[j]! - px / 2, y + (rowH - px) / 2);
+      });
+    });
+  });
+
+  // The same crop of the same board in each direction, side by side. At
+  // logical scale, so the cell is 36px: the true-size board is the job of
+  // the *-board-phone.png frames and this strip would be unreadable there.
+  drawText(r, labelX, stripY, "the same corner of the same board, at logical scale (36px cell; the phone shows 20px)", TYPE.label, BOARD.textDim);
+  DIRECTIONS.forEach((d, i) => {
+    const board = renderBoardFrame(d, { migration: 49, ticks: 260, effects: true });
+    r.blit(crop(board, 200, 130, colW, stripH), colX(i), stripY + 24);
+  });
+
+  const footY = stripY + 24 + stripH + 20;
+  drawText(r, labelX, footY, "What each one costs you, honestly:", TYPE.label, BOARD.text);
+  prose(
+    footY + 22,
+    "Fossil Pixel passes the colour-blindness check as drawn. Clay Pack and Valley Naturalist each need their own hue table, about an afternoon, because the direction repaints the kind hues before they reach the board. Atlas size is 23 kB against 126 kB, which is irrelevant against a 40 MB binary.",
+  );
+  return r;
+}
+
 /** Six kind hues under normal vision and the three dichromacies, as swatches. */
 function colourSheet(): Raster {
   const visions = ["normal", "deuteranopia", "protanopia", "tritanopia"] as const;
@@ -216,6 +341,7 @@ function doFrames(): void {
     png(`docs/art/${d.id}-effects.png`, effectsPlate(d));
   }
   png("docs/art/kind-hues.png", colourSheet());
+  png("docs/art/directions-compared.png", compareSheet());
 }
 
 // ---------------------------------------------------------------- the atlases
@@ -328,6 +454,7 @@ function doCheck(): void {
 
 const [cmd, arg] = process.argv.slice(2);
 if (cmd === "frames") doFrames();
+else if (cmd === "compare") png("docs/art/directions-compared.png", compareSheet());
 else if (cmd === "atlas") doAtlas(arg ?? "fossil-pixel");
 else if (cmd === "check") doCheck();
 else {

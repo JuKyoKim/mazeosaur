@@ -94,6 +94,19 @@ anything.
 - `*-effects.png` — hit, kill, leak, blocked and slow at board scale.
 - `kind-hues.png` — the six hues under normal, protan, deutan and tritan
   vision.
+- `directions-compared.png` — all three in one picture: eight subjects at
+  20px, 36px and 96px side by side, then the same crop of the same board in
+  each. The per-direction frames answer "is this legible"; this one is the
+  only frame that answers "which of these do I want", because that question
+  needs the three held against each other.
+
+**Which frame answers which question.** The board and sheet frames are the
+honest record of the product at true size, and at true size the three
+directions are much closer than a direction deck usually implies — the
+19.5pt cell flattens the treatment, and the sheet tray is HUD type, which
+is identical in all three. So they are the wrong frames to *choose* from
+even though they are the right frames to *ship* against. Choose from
+`directions-compared.png`, or from the 36px column of `*-legibility.png`.
 
 **One honest caveat on Fossil Pixel.** True pixel-perfect rendering needs
 the canvas-to-device scale to be a whole number. FIT onto arbitrary phone
