@@ -141,6 +141,22 @@ export function kindButtonX(i: number): number {
  */
 export const TOAST = { x: GUTTER, y: BOARD_H - 76, w: CONTENT_W, h: 56 } as const;
 
+/**
+ * The results screen, over a scrim with the board still visible behind it.
+ * `again` sits in the HUD band at the same height as Send, so the thumb
+ * does not have to move between the run that ended and the next one.
+ */
+export const RESULTS = {
+  headline: { y: 360 },
+  cleared: { y: 440 },
+  eggsKept: { y: 520 },
+  meatUnspent: { y: 520 },
+  fossils: { y: 600 },
+  /** Every dinosaur grown to adult, as its sprite, in a row. */
+  pack: { x: GUTTER, y: 680, w: CONTENT_W, h: 180 },
+  again: { x: Math.round((CANVAS_W - 328) / 2), y: HUD_Y + 11, w: 328, h: 82 },
+} as const;
+
 /** Everything a reviewer should be able to check, as one table. */
 export function layoutTable(): { what: string; logical: string; points: string }[] {
   const box = (b: { w: number; h: number }) => `${b.w}x${b.h}`;
@@ -156,6 +172,7 @@ export function layoutTable(): { what: string; logical: string; points: string }
     { what: "kind button", logical: box(ROW3.kindButton), points: both(ROW3.kindButton) },
     { what: "Grow", logical: box(ROW3.grow), points: both(ROW3.grow) },
     { what: "Sell", logical: box(ROW3.sell), points: both(ROW3.sell) },
+    { what: "Again (results)", logical: box(RESULTS.again), points: both(RESULTS.again) },
     { what: "type: vital", logical: `${TYPE.vital}`, points: `${pt(TYPE.vital)}` },
     { what: "type: title", logical: `${TYPE.title}`, points: `${pt(TYPE.title)}` },
     { what: "type: body", logical: `${TYPE.body}`, points: `${pt(TYPE.body)}` },

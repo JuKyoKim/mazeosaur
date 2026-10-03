@@ -1,0 +1,554 @@
+# Mazeosaur v1: art, HUD, audio and onboarding
+
+*Status: spec. Supersedes nothing; section 9 item 4 of
+[the proposal](00-proposal.md) is still the open question and section 2
+below is what the board is being asked to settle.*
+
+This document is what a client engineer builds from. Every number in it is
+a logical pixel on the 720x1280 canvas unless it says `pt`, and every
+layout number in it is also a constant in
+[`tools/art/layout.ts`](../tools/art/layout.ts), which is what draws the
+sample frames. The spec and the picture read the same constants on purpose:
+if they disagree, one of them is lying, and there is no way to tell which.
+The timings in sections 5.4 and 6 are the exception — they are behaviour,
+not layout, and the mock does not animate.
+
+Regenerate everything this document refers to:
+
+```
+npx tsx tools/art/build.ts frames        # the sample frames in docs/art
+npx tsx tools/art/build.ts check         # colour, contrast, hit targets, bytes
+npx tsx tools/art/build.ts atlas <id>    # the shipping atlases for one direction
+```
+
+---
+
+## 1. The reference device, and why every number is two numbers
+
+The logical canvas is **720 x 1280**, 20 x 28 cells of **36px**, board on
+top (720 x 1008), HUD in the **272px** below it. Phaser scales that canvas
+uniformly (FIT) onto whatever screen mounts it.
+
+The reference phone is **390 x 844pt at dpr 3** — an iPhone 12 through 16
+and the middle of the Android range. At 720 wide into 390 wide the width
+binds, so the scale is **0.5417** and the canvas renders 390 x 693pt,
+leaving the rest of the screen as letterbox.
+
+That scale is the reason every size appears twice. A 36px cell is
+**19.5pt**. A 42px button — which is what M2 shipped — is **22.8pt**, which
+is barely half the 44pt floor that both Apple and Google publish. The
+smallest number in this document is therefore `MIN_HIT = 82`, which is 44
+divided back through the scale and rounded up. **82 logical pixels is the
+floor for anything a thumb touches.** It is the single most load-bearing
+constant here.
+
+`npx tsx tools/art/build.ts check` prints every control against it. Nothing
+tappable is allowed to print under 44.0pt.
+
+### Type scale
+
+Four sizes and no more. The HUD says less rather than smaller.
+
+| role | logical | on the phone | used for |
+| --- | --- | --- | --- |
+| `vital` | 34px | 18.4pt | the meat and egg counts |
+| `title` | 26px | 14.1pt | a dinosaur's genus, a result headline |
+| `body` | 22px | 11.9pt | the migration line, stat lines, button labels |
+| `label` | 19px | 10.3pt | dim secondary labels **only** |
+
+There is nothing below `label` because 19px is already 10.3pt, and 10.3pt
+of dim grey is the smallest thing a person reads on a bus. Anything that
+wants to be smaller than `label` should instead not be on the screen.
+
+---
+
+## 2. The art direction, as three candidates
+
+The proposal leaves two axes open: pixel versus hand-drawn vector, and
+cute-round versus fierce-realistic. Three points on that grid were rendered
+as the actual board at the actual size, so the choice can be made by
+looking rather than by imagining.
+
+| direction | axes | authored | ink | atlas | the pitch |
+| --- | --- | --- | --- | --- | --- |
+| **Fossil Pixel** | pixel, fierce | 36px | 1px | **23 kB** | Hard edges, four shade bands, one ink pixel. One art pixel is one canvas pixel. Smallest atlas by a factor of five. |
+| **Clay Pack** | vector, cute-round | 48px | 2px | 126 kB | Sticker-weight line, heads a third too big, an eye you can still see at 20px. Friendliest read, easiest to animate. |
+| **Valley Naturalist** | vector, fierce | 48px | 1px | 121 kB | Skeletal proportions, hairline edge, deep belly shadow, cold rim light. Reads as an animal, not a mascot. |
+
+Each is a record of about fifteen numbers in
+[`tools/art/directions.ts`](../tools/art/directions.ts) — authored
+resolution, edge sampling, outline weight, shade depth, rim light, and four
+proportion knobs — applied over **one shared bestiary**. The silhouette of
+a kind is a fact about the kind, not about the treatment, so all three
+directions draw the same shapes and choosing one does not mean redrawing
+anything.
+
+**The frames** (in [`docs/art/`](art/), `<direction>-*.png`):
+
+- `*-board-phone.png` — migration 49, a `fast` migration strung through two
+  corridors, at the exact pixel size the reference phone shows.
+- `*-sheet-phone.png` — migration 50, the Spinosaurus boss, a dinosaur
+  selected so the sheet tray is up, and a refusal toast.
+- `*-legibility.png` — every dinosaur and every invader at 20px (the real
+  cell) beside 36px (the logical cell), with the tell to look for.
+- `*-effects.png` — hit, kill, leak, blocked and slow at board scale.
+- `kind-hues.png` — the six hues under normal, protan, deutan and tritan
+  vision.
+
+**One honest caveat on Fossil Pixel.** True pixel-perfect rendering needs
+the canvas-to-device scale to be a whole number. FIT onto arbitrary phone
+widths gives 0.5417 on the reference device, so this is pixel-art *style* —
+hard edges, limited palette, banded shading — resampled once by the
+display. It reads well. It will not satisfy someone who wants to count
+uniform square pixels.
+
+Nothing downstream of this document depends on which one wins. The HUD,
+the manifest shape, the audio and the onboarding are all written against
+the silhouettes, not the treatment.
+
+---
+
+## 3. Colour: six families, and never only colour
+
+### The kind hues
+
+Six kinds need six colours that are still six colours in a 19.5pt cell and
+to the roughly 8% of men who cannot separate red from green. These were not
+picked by eye. `art:check` simulates all six hues under protanopia,
+deuteranopia and tritanopia and measures all 60 pairs; a pair passes only if
+hue distance clears 120 **or** lightness contrast clears 1.5, so that
+lightness alone can carry it. The current set clears with 23% to spare.
+
+| kind | v1 | M2 was | why it moved |
+| --- | --- | --- | --- |
+| raptor | `#f4a82a` | `#e0a83a` | brighter, to sit a clear step above longneck |
+| tyrant | `#bd2b1d` | `#c0392b` | less orange, so it reads red and not amber |
+| armored | `#dbe4e6` | `#95a5a6` | much lighter; it was lost against the board |
+| horned | `#8a44c4` | `#8e44ad` | more blue, to clear tyrant under protanopia |
+| longneck | `#52a87e` | `#27ae60` | lighter and cooler — the biggest single change |
+| flier | `#3ab1ea` | `#3498db` | brighter, to clear armored under deuteranopia |
+
+longneck and flier end up adjacent in hue (151 and 199). That is allowed,
+because they are the two most distinct silhouettes on the board — the only
+tall one and the only wide one — and the measured pair still passes. For
+those two, colour is the second channel and not the first.
+
+This table is a proposed replacement for `KIND_COLOR` in
+`packages/game/src/theme.ts`.
+
+### The second channel, per axis
+
+| what the player must tell apart | first channel | second channel |
+| --- | --- | --- |
+| kind | silhouette | hue |
+| growth stage | size and added detail | the stage pip count on the sheet |
+| archetype | the archetype tell (section 5) | the name in the migration line |
+| ownership (mine vs invader) | dinosaurs sit still on a cell; invaders move | invaders carry a hp bar, dinosaurs never do |
+| threat (low hp) | bar length | bar colour `#2ecc71` → `#e74c3c` |
+
+### HUD contrast
+
+Every text-on-panel pair the HUD can produce is measured against WCAG AA
+body text (4.5:1) by `art:check`. All ten pass. One of them had to move:
+M2's `buttonActive` `#3f7a55` put `#ecf0f1` at **4.44:1** — just under. It
+is now `#37694b` at 5.57:1. The Send button is the one control a player
+reads under time pressure and is not the place to be borderline.
+
+---
+
+## 4. The HUD
+
+Portrait, one-handed, thumb-reachable. The board is the top 1008px and the
+HUD is the 272px below it, which keeps every control in the bottom third
+and keeps the grid out from under the thumb.
+
+```
+y=0     ┌─────────────────────────────────────┐
+        │                                     │
+        │   board: 20 x 28 cells of 36px      │   720 x 1008
+        │                                     │
+        │   toast lives here, y=932, 56 tall  │
+y=1008  ├━━━━━━━━━ build timer bar ━━━━━━━━━━━┤   8px, full width
+        │ 🍖 214   🥚 14   MIGRATION   SEND  1x│   row 1, 96 tall
+        │                  49 / 50             │
+y=1104  ├─────────────────────────────────────┤
+        │ ▪ NOW  12x Dakotaraptor   fast·raptor│   row 2, 40 tall
+y=1144  ├─────────────────────────────────────┤
+        │ [raptor][tyrant][armored][horned]... │   row 3, 136 tall
+y=1280  └─────────────────────────────────────┘      (the tray)
+```
+
+### Row 1 — the vitals, y=1008, 96 tall
+
+| element | box | on the phone |
+| --- | --- | --- |
+| build timer bar | `0, 1008, 720 x 8` | full width, 4.3pt tall |
+| meat icon | `16, 1038, 34 x 34` | — |
+| meat value | `60, 1038`, `vital` | four digits before it reaches the egg icon |
+| egg icon | `192, 1038, 30 x 34` | — |
+| egg value | `230, 1038`, `vital` | — |
+| migration label / value | `320, 1034` / `320, 1058` | `label` over `body` |
+| **Send** | `444, 1019, 164 x 82` | **88.8 x 44.4pt** |
+| **speed toggle** | `622, 1019, 82 x 82` | **44.4 x 44.4pt** |
+
+**The timer is a draining bar, not digits.** A full-width bar across the
+seam between board and HUD is legible without being read, which is the
+point — during a build phase the player is looking at the grid, not at the
+HUD. The digits are not shown at all. The bar is also the early-send
+affordance: the amount left *is* the bonus.
+
+Meat and eggs are an icon plus a count rather than a labelled field, for
+the same reason. 214 and 14 are read as shapes.
+
+### Row 2 — the next migration, y=1104, 40 tall
+
+One line: a 28px kind chip (hue plus the kind's silhouette), then the count
+and the genus in `body`, then the archetype and kind as dim `label`,
+right-aligned. This is the only place the kind chart appears mid-run.
+
+It is information, never tappable, so 40px is allowed to sit under the hit
+floor. Nothing in this row responds to touch.
+
+### Row 3 — the tray, y=1144, 136 tall
+
+**One tray at a time.** The six hatchling buttons while nothing is
+selected; the dinosaur sheet while something is. Swapping rather than
+stacking is what buys the hit targets — there is not room for both at 44pt.
+
+It is also the onboarding (section 8): tapping a dinosaur and watching the
+shop visibly become a sheet with a **Grow** button is how a player learns
+that growing exists, without being told.
+
+**The shop tray.** Six kind buttons, `109 x 120` each with a 6px gap:
+`(688 − 5·6) / 6 = 109.6`, floored. That is **59 x 65pt**, comfortably over
+the floor. Each carries the kind's silhouette in its hue, the kind name in
+`label`, and the hatchling's cost with a meat pip. A button the player
+cannot currently afford dims its cost to `textDim` and keeps the
+silhouette at full strength — it is still a label, just not yet a purchase.
+
+**The sheet tray.**
+
+| element | box | note |
+| --- | --- | --- |
+| genus | `20, 1154, 272 wide`, `title` | **never truncated** — see below |
+| kind + stage | `20, 1182`, `label` | e.g. `tyrant adult` |
+| stat line | `20, 1204`, `body` | damage per second |
+| range line | `20, 1232`, `label` | in cells, one decimal |
+| **Grow** | `300, 1171, 228 x 82` | **123.5 x 44.4pt** |
+| **Sell** | `540, 1171, 164 x 82` | **88.8 x 44.4pt** |
+
+The name column is 272px because that is 15 characters of `title`, and the
+two longest genus names in the content — *Argentinosaurus* and
+*Rhamphorhynchus* — are both exactly 15. The genus is the collectible; it
+is not allowed to be truncated. The buttons moved right until it fit.
+
+**Grow** shows the cost when affordable, dims to `FULLY GROWN` at stage 3,
+and dims to the cost when it is not affordable — the player should be able
+to read the price of the thing they cannot buy yet. **Sell** always shows
+the refund in meat, which is different during a build phase (80%) and
+during a migration (60%), so the number itself teaches that juggling costs
+something.
+
+### The toast, y=932, 688 x 56
+
+Refusals and events appear **over the bottom of the board**, not in a HUD
+row. It costs no layout height, and it puts the message where the eye and
+the thumb already are. Left-aligned `body` on a 78%-opaque panel with a
+3px `refusal` bar down the left edge for a refusal and no bar for an
+event. 1.6 seconds, then a 200ms fade.
+
+Messages are short and say what, not why-not: `That would seal the maze`,
+`Not enough meat`, `Rock`, `+96 meat`.
+
+---
+
+## 5. The sprite manifest
+
+### What v1 needs
+
+| group | frames | authored size | note |
+| --- | --- | --- | --- |
+| dinosaurs | **18** | `spritePx` square | 6 kinds x 3 stages |
+| invaders | **54** | `spritePx` square | 9 archetypes x 6 kinds |
+| bosses | *included above* | `2 x spritePx` | the `boss` archetype row |
+| terrain | 5 | 36 square | board, rock, water, spawn, nest |
+| checkpoint badges | 2 | 28 square | `1` and `2` |
+| effects | 5 | see 5.4 | hit, kill, leak, blocked, slow |
+| HUD glyphs | 4 | 34 square | meat, egg, speed, kind chip mask |
+| **total** | **88** | | |
+
+`spritePx` is 36 for Fossil Pixel and 48 for the two vector directions. The
+atlas is packed at the authored size and the renderer scales down into the
+36px cell, so a swarm invader is small because its *silhouette* is small,
+not because its sprite is.
+
+### 5.1 Dinosaurs — six silhouettes, learned in one run
+
+Each stage is a different real genus, so growing is also a small
+collection. The silhouette is constant within a kind and grows in mass and
+detail across stages; the player should recognise the kind at a glance and
+the stage on a second look, in that order.
+
+| kind | hatchling → juvenile → adult | the silhouette, at 20px |
+| --- | --- | --- |
+| raptor | Velociraptor → Deinonychus → Utahraptor | a low horizontal dash: stiff tail out behind, head carried forward |
+| tyrant | Tarbosaurus → Daspletosaurus → Tyrannosaurus | top-heavy: the head is a third of the animal, over a deep body |
+| armored | Nodosaurus → Euoplocephalus → Ankylosaurus | a wide low hump with a detached-looking ball on the tail |
+| horned | Protoceratops → Styracosaurus → Triceratops | a disc broken by one forward spike |
+| longneck | Diplodocus → Brachiosaurus → Argentinosaurus | the only tall one: a vertical neck with the head at the cell top |
+| flier | Rhamphorhynchus → Pteranodon → Quetzalcoatlus | the only wide one: a swept chevron with a long beak |
+
+Those six descriptions are the acceptance criteria, not flavour. If a
+reviewer cannot pick the kind out of `*-legibility.png`'s 20px column using
+only the sentence, the sprite is wrong. They live in
+[`tools/art/bestiary.ts`](../tools/art/bestiary.ts) as
+`KIND_SILHOUETTE_NOTE` and the legibility sheet prints them beside the
+sprite they describe.
+
+**On rule 5.** These are paleontological silhouettes. *Deinonychus* and
+*Utahraptor* are drawn feathered, because the fossils say feathered, which
+also happens to be the clearest way to make them not read as the movie
+animal. *Dilophosaurus* is not in v1 at all. No raptor is drawn in a pack
+of three stalking anything. The horned line's frill is a disc because
+*Protoceratops*' frill is a disc.
+
+### 5.2 Invaders — archetype first, kind second
+
+There can be sixty of them and they are smaller on screen, so they get
+simpler shapes than dinosaurs. The archetype owns one unmistakable tell;
+the kind is carried by hue and by a reduced version of the kind
+silhouette.
+
+| archetype | the tell |
+| --- | --- |
+| normal | plain bipedal herd animal, no tell — the baseline the others differ from |
+| fast | leaning forward past its feet, with three trailing streaks |
+| tank | twice as wide as tall, four shoulder plates |
+| flying | a chevron, drawn over a ground shadow so height reads |
+| swarm | half size, and never alone |
+| splitter | a visible seam down the body: it is already two animals |
+| regenerator | a bright chevron on the flank that pulses with the regen tick |
+| shielded | a bracket plate held in front, drawn in front of the body outline |
+| boss | two cells wide, a crown of spines, and its own shadow |
+
+The flying tell is the one that must not fail: a flying migration ignores
+the maze entirely, and a player who does not notice loses eggs to a rule
+they did not know applied. The ground shadow is drawn **separately and
+below** so that height reads even when the chevron is over a dark cell.
+
+### 5.3 Bosses
+
+Five, at migrations 10, 20, 30, 40 and 50: *Giganotosaurus* (tyrant),
+*Argentinosaurus* (longneck), *Quetzalcoatlus* (flier), *Tarchia*
+(armored), *Spinosaurus* (tyrant). Each is the `boss` silhouette at 2x in
+its kind's hue, which is why the boss costs six frames rather than five —
+the atlas carries one per kind and the content names it.
+
+A boss leak eats five eggs, so the boss is the one invader allowed its own
+ground shadow and its own kill effect.
+
+### 5.4 Effects
+
+Five, and they are deliberately different weights. Feedback that is uniform
+is noise.
+
+| effect | what it is | size | duration |
+| --- | --- | --- | --- |
+| hit | a 2px tapered line from the dinosaur to the target, in the dinosaur's hue | 1–3 cells | 80ms |
+| kill | a 24px expanding ring in the kind hue, plus a meat pip that rises 18px and fades | 1 cell | 260ms |
+| leak | a 40px ring in `refusal` around the nest, egg count flashes | 1 cell | 420ms |
+| blocked | the refused cell fills with 45° `refusal` hatching, no movement | 1 cell | 200ms |
+| slow | a `#74b9ff` ring around the slowed invader, held while the debuff lasts | 1 cell | held |
+
+A kill is small and constant. A leak is sharp and the egg count is the
+thing that moves. A boss leak is the only effect allowed to touch the whole
+screen: a 120ms `refusal` vignette at 30% and five egg pips falling.
+
+Blocked placement does not animate the dinosaur at all, because the
+placement did not happen — animating it would say that it nearly did.
+
+### 5.5 The atlas
+
+Two atlases per direction, Phaser JSON Hash format, shelf-packed by
+descending height into a power-of-two width (256 for Fossil Pixel, 512 for
+the vector directions) with 1px padding:
+
+```
+packages/game/assets/<direction>/dinos.png    + dinos.json
+packages/game/assets/<direction>/invaders.png + invaders.json
+```
+
+Frame names are `<kind>-<stage>` and `<archetype>-<kind>`, both lowercase,
+so the client can build a frame name from sim state without a lookup table.
+
+**The budget.** The offline binary targets under 40 MB with every asset
+inside it. Measured by `art:check`:
+
+| direction | authored | frames | atlas bytes |
+| --- | --- | --- | --- |
+| Fossil Pixel | 36px | 72 | **23.4 kB** |
+| Clay Pack | 48px | 72 | 126.1 kB |
+| Valley Naturalist | 48px | 72 | 120.5 kB |
+
+All three are irrelevant against 40 MB, which is the useful finding: **the
+atlas is not what will blow the budget, and the direction should therefore
+not be chosen on size.** Audio and the Phaser runtime are the real
+consumers. The budget line to hold is section 6's: v1 audio stays under
+1.5 MB.
+
+---
+
+## 6. Audio
+
+### Direction
+
+**Valley, not jungle.** Low wind, far-off calls, dry grass. No orchestral
+sting, no rock. The score is two layers that cross-fade on phase: a slow
+drone with a low drum during a build phase, the same drone with a pulse and
+a higher percussion line during a migration. Phase change is a cross-fade
+over 1.2 seconds, not a cut, because the player is usually mid-placement
+when it happens.
+
+**Dinosaur voices are made, not sampled.** Nobody knows what these animals
+sounded like, and anything that sounds like the films is the films. Each
+kind gets a short vocalisation built from a bellow and a resonant body
+tone, pitched down a fifth from hatchling to adult so growth is audible.
+
+**The game must be fully playable on mute.** Every sound has a visual
+partner in section 5.4. Phones are played silently.
+
+### The SFX list
+
+| sound | fires on | character | ms | ducks |
+| --- | --- | --- | --- | --- |
+| `place` | a dinosaur is placed | a soft earth thud plus the kind's pitch | 120 | no |
+| `blocked` | a refused placement | a dry wooden click, no tone | 90 | no |
+| `grow` | a stage increases | the kind's call, a fifth lower, with a swell | 600 | no |
+| `sell` | a dinosaur is sold | a short reversed swell | 260 | no |
+| `hit` | damage dealt | a tiny dry tick, pitched by the dinosaur's kind | 40 | **yes** |
+| `kill` | an invader dies | a wet snap plus a meat chime | 180 | **yes** |
+| `kill-boss` | a boss dies | a long descending bellow and a sub drop | 1400 | ducks all |
+| `leak` | an invader reaches the nest | a cracked-shell snap, close and dry | 300 | ducks music |
+| `leak-boss` | a boss reaches the nest | the same five times, overlapping, plus sub | 900 | ducks all |
+| `send-early` | the player sends early | a rising three-note horn | 500 | no |
+| `migration-start` | a migration begins | a distant herd call that arrives from the spawn side | 900 | no |
+| `migration-clear` | a migration is cleared | a two-note resolve, up | 700 | no |
+| `warn-eggs` | eggs drop to 3 | a low two-pulse heartbeat, once | 800 | ducks music |
+| `select` | a dinosaur is tapped | a short soft tick | 50 | no |
+| `defeat` | eggs reach 0 | the drone collapses to silence over 2s | 2000 | ducks all |
+| `victory` | migration 50 cleared | the build-phase theme, full, resolved | 4000 | ducks all |
+
+**`hit` is the one that needs a limiter.** Sixty invaders under six adult
+dinosaurs is hundreds of hits a second. Cap it: at most one `hit` per 60ms
+across the whole board, round-robin across the hues so it still sounds
+distributed, and drop rather than queue. The same cap on `kill` at 90ms.
+
+Fifteen SFX at 48kHz mono, trimmed, as OGG plus M4A for Safari, is under
+400 kB. Two music layers at 90 seconds each, looped, is about 1 MB. Total
+under 1.5 MB, which is the budget line.
+
+---
+
+## 7. Reduced motion, and playing without the pleasant parts
+
+`prefers-reduced-motion` is respected, and the game must be fully playable
+with it on.
+
+| normal | reduced |
+| --- | --- |
+| kill ring expands | the ring appears at final size for 120ms |
+| meat pip rises and fades | the meat count steps, no pip |
+| toast fades in and out | the toast appears and disappears |
+| boss-leak vignette | the egg count flashes twice, no vignette |
+| phase cross-fade | still a cross-fade — it is 1.2s of audio, not motion |
+| timer bar drains smoothly | the bar steps once a second |
+
+Nothing in the reduced column removes information. Every one of them is
+the same fact delivered without movement. The one thing that does **not**
+change is the slow ring, because it is state and not feedback.
+
+---
+
+## 8. Onboarding: the first migration teaches mazing
+
+No modal. No tutorial overlay. No text wall. The first migration is
+designed so that a player who taps where the game points learns the one
+rule that matters — **the towers are the walls** — by watching it happen.
+
+The sequence, all of it diegetic:
+
+1. **The board opens empty with the path drawn.** A dim dotted line runs
+   spawn → checkpoint 1 → checkpoint 2 → nest. It is not decoration: it is
+   the live flow-field path, and it is on screen from the first frame.
+2. **Only the raptor button is lit.** The other five kinds are present but
+   dim. Raptor is the cheapest wall. The player taps it because it is the
+   only thing that looks tappable.
+3. **The first placement moves the dotted line.** This is the whole lesson,
+   and it costs nothing to teach because the path was already being drawn.
+   The player places one dinosaur, the line visibly bends around it, and
+   the rule is learned. It is not stated anywhere.
+4. **The toast says the consequence, once.** The first time a placement
+   lengthens the path, one toast: `Longer path`. It never appears again.
+5. **A seal is refused, visibly.** The valley is shaped so that the obvious
+   greedy wall is one cell from sealing. When the player tries it, the
+   blocked hatching plus `That would seal the maze` teaches the block rule
+   at the exact moment the player's model predicts something else.
+6. **Migration 1 is six `normal` raptors, slow.** Enough to watch a kill,
+   see a meat pip, and see the count go up. Not enough to lose an egg even
+   with one dinosaur placed.
+7. **The tray swaps on the first tap.** Tapping the placed dinosaur
+   replaces the shop with the sheet, which has a **Grow** button on it. The
+   swap is the teaching: growing is discovered, not announced.
+8. **Migration 2 is flying.** One archetype that ignores the maze, early,
+   while a leak costs one egg out of twenty. The lesson is cheap here and
+   expensive at migration 30.
+
+The only words the first run shows are `Longer path`, `That would seal the
+maze` and `Not enough meat`. Everything else is the board.
+
+**What tells us it worked:** a first-time player places a second dinosaur
+*adjacent to the first* rather than somewhere else on the grid. That is
+the moment the maze becomes a maze. If playtests show players scattering
+dinosaurs through migration 3, step 3 failed and the dotted line needs to
+be brighter, not louder.
+
+---
+
+## 9. The results screen
+
+Shown on defeat (eggs at 0) and on victory (migration 50 cleared). Full
+canvas over a 70% `bg` scrim, the board still visible behind it, because
+the board is what the player wants to look at.
+
+| element | position | type |
+| --- | --- | --- |
+| headline | centred, y=360 | `title` at 2x — `The valley is quiet` / `The nest holds` |
+| migrations cleared | centred, y=440 | `vital` — the number first, big |
+| eggs kept | y=520, left of centre | `body` with egg pips, not digits |
+| meat unspent | y=520, right of centre | `body` with the meat icon |
+| fossils earned | centred, y=600 | `vital` in `checkpoint` yellow |
+| the pack | y=680, 180 tall | every dinosaur the player grew to adult, as its sprite, in a row — the collection, which is the reason the stages are real genus names |
+| **Again** | `196, 1019, 328 x 82` | primary, centred in the HUD band |
+
+The pack row is the one piece of this screen that is not a statistic. A
+player who grew three *Utahraptors* and one *Triceratops* sees exactly
+that, and the next run's first thought is about what is missing from it.
+
+**Again** sits in the HUD band at the bottom, in the same place the Send
+button was, so the thumb does not move.
+
+---
+
+## 10. What this leaves open
+
+1. **The direction.** Section 2. The board's call; nothing else waits on
+   anything but this.
+2. **The kind-hue change** in section 3 is a proposed replacement for
+   `KIND_COLOR` and can land before the direction does — it is measured,
+   and it is an improvement on M2 under every eye.
+3. **Animation.** v1 is static sprites plus the five effects. Idle breath
+   and a two-frame walk are the obvious next thing and are not specified
+   here, because whether they are affordable depends on the direction.
+4. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
+   it stands. The proposal says "a final one to be designed", so this is a
+   placeholder the content can change without touching this document.

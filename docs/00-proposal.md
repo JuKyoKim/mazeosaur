@@ -345,3 +345,13 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   so late meat still buys late dinosaurs. The balance harness (a scripted
   player in `packages/content/test`) must survive at least 35 of 50;
   it reached 46 at this tuning, losing eggs mostly to bosses.
+- 2026-10-03: the HUD layout, sprite manifest, audio list and onboarding
+  are specified in [docs/01-art-hud-and-audio.md](01-art-hud-and-audio.md),
+  with the numbers shared with `tools/art/layout.ts` so the spec and the
+  sample frames cannot disagree. Three candidate directions for item 4
+  above are rendered as frames of the real board at real phone size in
+  `docs/art/`; the choice is the board's and nothing else waits on it.
+  Two findings that are independent of the choice: the M2 kind colours
+  fail a dichromat separation check and are replaced, and the M2 42px
+  HUD buttons are 22.8pt — half the 44pt floor — so the hit target
+  minimum is 82 logical pixels.
