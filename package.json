@@ -18,7 +18,8 @@
     "check": "npm run typecheck && npm test",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "art:check": "tsx tools/art/build.ts check",
-    "art:frames": "tsx tools/art/build.ts frames"
+    "art:frames": "tsx tools/art/build.ts frames",
+    "art:verify": "tsx tools/art/build.ts verify"
   },
   "engines": {
     "node": ">=22"

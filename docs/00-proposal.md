@@ -379,3 +379,19 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   see the comment on `manualChunks` in `apps/web/vite.config.ts`.
   Revisit when `apps/web` moves to vite 8, or when a second field
   diverges.
+- 2026-10-03: the committed art frames are guarded by pixel equality, not
+  byte equality, and the guard is enforced inside the generator rather
+  than in CI. `art:frames` decodes the PNG already on disk and skips the
+  write when the pixels match, so CI's existing regenerate-and-diff step
+  compares art and not compression. The reason is that PNG bytes are not
+  reproducible: `deflateSync(level: 9)` is a call into whichever zlib the
+  running Node links, and two builds disagree on the same scanlines —
+  measured, 12879 bytes against 12878 for one frame, per-frame rather
+  than uniform. Bytes were therefore pinning the toolchain, not the
+  pixels, and a `node-version` bump or an arm64 runner would have turned
+  the step red with no art change and read as the art having drifted.
+  Making the generator idempotent on pixels also disarms the trap without
+  a `check.yml` edit, which no agent can push; `art:verify` is the same
+  comparison as a read-only command. This retires the "regenerate frames
+  on Linux, never on a Mac" rule — the variable was never the OS. See
+  `docs/02-ci.md`.
