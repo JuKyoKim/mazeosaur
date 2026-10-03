@@ -21,17 +21,27 @@ that touches the browser, because `@mazeosaur/game` takes its platform
 services as injected ports (see section 2 of
 [docs/01-v1-architecture.md](../../docs/01-v1-architecture.md)).
 
+In `src/main.ts` today:
+
 - **The seed.** `?seed=123` pins a run so a bug reproduces exactly;
   otherwise every run is fresh. The game package has no source of
   randomness of its own, so seed policy lives here.
+- **The offline cache.** A service worker, registered in production builds
+  only. It caches the app shell, so a dropped connection mid-migration
+  changes nothing; the game itself needs no network once the page has
+  loaded. A failed registration is swallowed on purpose — it costs this
+  session's cache and nothing else.
+
+Specified in section 2 and not written yet:
+
 - **Save storage.** IndexedDB, database `mazeosaur`, object store `save`,
   key `default`. The shell reads and migrates the document *before*
   mounting, so no scene does async work in `create()`.
-- **The network client**, once M4 exists. It is injected as `NetPort` and
-  is the one port the mobile shell does not pass. Nothing under
-  `packages/game` may import it.
 - **Lifecycle.** The shell listens for the tab going hidden and calls
   `GameHandle.suspend()` so an interrupted run is flushed.
+- **The network client**, if `apps/server` ever exists. It is injected as
+  `NetPort`, no shell passes one in v1, and the mobile shell never will.
+  Nothing under `packages/game` may import it.
 
 ## Serving it
 

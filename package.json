@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p packages/sim && tsc --noEmit -p packages/content && tsc --noEmit -p packages/game && tsc --noEmit -p apps/web",
     "lint": "node scripts/lint.mjs",
-    "check": "npm run lint && npm run typecheck && npm test",
+    "check:readmes": "node scripts/check-readme-files.mjs",
+    "check": "npm run lint && npm run check:readmes && npm run typecheck && npm test",
     "check:bundle-size": "node scripts/check-bundle-size.mjs"
   },
   "engines": {

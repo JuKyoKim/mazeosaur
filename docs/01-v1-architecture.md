@@ -380,8 +380,8 @@ leave mid-migration.
 ## 2. The platform-service ports
 
 The shells inject; `packages/game` never imports a store, an audio
-backend or a network client. All of the following lives in
-`packages/game/src/platform.ts`.
+backend or a network client. All of the following belongs in
+`packages/game/src/platform.ts`, which §2.1 is the plan for writing.
 
 ```ts
 /** Save storage. Writes only — see below for why there is no load(). */
@@ -522,6 +522,10 @@ the above:
   nothing in `packages/game` reads a `define`, an env var or
   `import.meta.env`.
 
+This subsection exists only to stop two branches inventing the same file
+twice. Once `platform.ts` is in `main` matching §2, delete it — a delta
+against a branch that no longer exists is worse than no delta at all.
+
 ### 2.2 Where the commit SHA comes from
 
 `BuildStamp.commit` has to arrive at the shell without the game or the sim
@@ -638,6 +642,21 @@ is why adding the rule cost nothing.
 aliasing a banned global through a parameter, walks past them. That is
 review's job, and the sim is small enough for review to do it. The rules
 catch what people actually type.
+
+**The same move, for READMEs.** A README is a claim about what is in a
+directory, and nothing was checking it: the three this document rewrote had
+been wrong since M1, and the first draft of the rewrite was wrong the other
+way, listing four files that are specified here and not written yet.
+`npm run check:readmes` makes the claim checked. Under each
+`## What is in here` heading, every `src/…` or `test/…` path in the bullets
+must exist, and every file in that package's `src/` must appear in the
+bullets — so a described-but-absent file and an added-but-undescribed file
+both fail the gate. Only those bullets are read. Prose after the list may
+name a file that is coming, which is the honest way to describe a contract
+before it lands, and it is why `docs/` is exempt entirely: a design
+document's job is to name files that do not exist yet. Relative markdown
+links are checked everywhere, this document included, because a dead link
+is wrong in either kind of file.
 
 **Why the linter has its own TypeScript.** `typescript-eslint` refuses to
 load against TypeScript 7 ([typescript-eslint#10940]) and the repo is on
@@ -777,6 +796,9 @@ were actually checked:
 - Nothing the mobile build includes can reach the network.
 - A save-format change bumps `SAVE_VERSION` and appends a migration entry.
 - A new scene field is declared, not initialised, and `create()` assigns it.
+- A document describes what the branch contains, not what it will contain
+  once another branch merges. `npm run check:readmes` answers this for the
+  file lists; the review answers it for the prose.
 - The verification in the PR body is of the kind described in 6.2.3.
 
 Request changes with the specific line and the specific rule. "Looks fine"

@@ -5,22 +5,27 @@ sends commands to `@mazeosaur/sim` and draws whatever state comes back,
 interpolating between the sim's 20 Hz ticks and the display's frame rate.
 
 Both `apps/web` and `apps/mobile` mount this package unchanged. Platform
-differences — save storage, audio, and on web only the network client —
-are injected at mount through the ports in `src/platform.ts` and are never
-imported here. That injection point is what lets the mobile shell prove it
-has no network code.
+differences — save storage, audio, and a network client no shell passes
+yet — are injected at mount and are never imported here. That injection
+point is what lets the mobile shell prove it has no network code. The
+ports themselves are section 2 of
+[docs/01-v1-architecture.md](../../docs/01-v1-architecture.md).
 
 ## What is in here
 
 - `src/index.ts` — `mountGame(opts)`, the only export a shell uses.
-- `src/platform.ts` — the ports the shell injects, and the registry
-  accessor the scenes read them through.
 - `src/BoardScene.ts` — the board, the HUD and all input. The only scene
   that constructs a `Game`.
-- `src/TitleScene.ts`, `src/ResultsScene.ts` — the other two v1 screens.
 - `src/theme.ts` — canvas size, colours, text styles. Shared constants
   live here rather than on a scene.
-- `src/ui.ts` — the button primitive.
+
+That is the whole package today: `mountGame` starts `BoardScene` with a
+seed, and a shell injects nothing. Four more files are specified and not
+yet written — `src/platform.ts` (the injected ports, section 2),
+`src/TitleScene.ts` and `src/ResultsScene.ts` (the other two v1 screens,
+section 5), and `src/ui.ts`, the button primitive they share. Write them
+against the doc rather than against this list, and extend this list when
+they land.
 
 ## The one rule that bites
 
