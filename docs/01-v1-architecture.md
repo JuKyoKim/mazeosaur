@@ -260,10 +260,19 @@ export type LoadOutcome =
       /** The version it arrived as, when migrations ran. */
       readonly migratedFrom: number | null;
       readonly runDropped: RunDropReason | null;
+      /**
+       * The `Game` the validating replay already built, at `doc.run.tick`.
+       * Null exactly when `doc.run` is null — no run, or one dropped.
+       */
+      readonly resumed: Game | null;
     }
   | { readonly ok: false; readonly reason: LoadFailure };
 
-export function loadSave(raw: unknown, content: Content): LoadOutcome;
+export function loadSave(
+  raw: unknown,
+  content: Content,
+  platform: BuildStamp["platform"],
+): LoadOutcome;
 export function freshSave(build: BuildStamp): SaveDocument;
 ```
 
@@ -276,16 +285,52 @@ export function freshSave(build: BuildStamp): SaveDocument;
   progress. Play from `freshSave()` in memory, tell the player the save
   was written by a newer version, and leave the bytes alone.
 - A missing or malformed `writtenBy` or `run.startedBy` is **repaired, not
-  rejected**: substitute `{ commit: "unknown", platform }` for the
-  platform now running. It is a diagnostic, and losing a player's run
-  because the diagnostic is unreadable would be the worse bug. It is the
-  only field in the format with that treatment, because it is the only one
-  nothing depends on.
+  rejected**: substitute `{ commit: "unknown", platform }`, the third
+  argument. It is a diagnostic, and losing a player's run because the
+  diagnostic is unreadable would be the worse bug. It is the only field in
+  the format with that treatment, because it is the only one nothing
+  depends on.
 - Missing `format`, or a `version` that is not a positive integer:
   `not-a-save`. Anything else that fails validation: `corrupt`. In both
   cases the shell moves the file aside to one backup slot
   (`save.corrupt.json`, overwritten each time — one is a diagnostic,
   twenty is a leak) and starts from `freshSave()`.
+
+**Why `platform` is a parameter.** The repair above needs the platform now
+running, and `loadSave` cannot work it out: the sim is one compiled package
+on every target, so neither `raw` nor `content` names the shell that called
+it, and nothing in the sim may ask the environment (rule 1, section 4).
+Only the shell knows, and it already has the value — it is
+`MountOptions.build.platform`, computed once per section 2.2. So it is
+passed, as the narrowest thing that satisfies the repair:
+`BuildStamp["platform"]`, not the whole stamp. Passing the stamp would let
+a future edit copy the *commit* of the running build onto a document that
+some other build wrote, which is exactly the lie `writtenBy` exists to
+prevent; `"unknown"` is the honest answer and it is hardcoded here.
+
+**Why the outcome carries a `Game`.** `loadSave` replays the run to check
+the hash (section 1.3), so by the time it returns it is holding a live
+`Game` at `doc.run.tick` — and then, before `resumed` existed, dropped it.
+The scene could not ask for another one later, because section 2 forbids an
+`await` in `create()` and the document carries no live object, so it
+replayed the same log a second time. That is not free: a full scripted run
+is 29,232 ticks and `packages/content/test/balance.test.ts` simulates one in
+452 ms on a dev box, all of it blocking the main thread, and several times
+that in a phone WebView. Returning the object that already exists removes
+one of the two replays from every resume without putting I/O or an `await`
+anywhere.
+
+Three rules keep that from becoming a second source of truth:
+
+- **`resumed` is non-null exactly when `doc.run` is non-null.** A dropped
+  run (section 1.5) nulls both, in the same assignment. Consumers branch on
+  one of them and get the other for free.
+- **It is the replay's own object, not a copy.** `resumed.hash() ===
+  doc.run.hash` and `resumed.state.tick === doc.run.tick` hold on return,
+  because the hash check that proved them *is* what produced it.
+- **It is consumed once.** A `Game` is mutable, and play mutates it. The
+  holder uses it for one `create()` and then lets it go — see section 5.2,
+  which says what `scene.restart()` must do instead of reusing it.
 
 ### 1.5 When the content version no longer matches
 
@@ -422,6 +467,13 @@ export interface MountOptions {
   readonly parent: string | HTMLElement;
   /** The save, already read and migrated by the shell. */
   readonly save: SaveDocument;
+  /**
+   * `LoadOutcome.resumed` for that save: the `Game` the load's replay
+   * already built, or null. Non-null exactly when `save.run` is non-null.
+   * Consumed by the first `create()` of `board` and not reused — see
+   * sections 1.4 and 5.2.
+   */
+  readonly resumed: Game | null;
   readonly services: PlatformServices;
   /** This build's identity, stamped into every save the game writes. */
   readonly build: BuildStamp;
@@ -469,6 +521,15 @@ half-initialised scene, which is the bug the "wait a frame before
 screenshotting" note in `CLAUDE.md` exists to tell apart from a real one.
 With the save preloaded, the title screen can light Resume on the first
 frame and no scene does I/O.
+
+It hands over `resumed` with it, for the same reason. A document is data
+and a `Game` is not, so a scene that is given only the document has to
+rebuild the `Game` by replaying the log — a second full replay of the one
+`loadSave` just did, 452 ms of blocked main thread at full run length
+(section 1.4). The field does not weaken the no-`load()` rule: it carries
+no I/O, no promise and nothing the shell computed itself, only the object
+the sim produced one call earlier. The shell passes through
+`LoadOutcome.resumed` unchanged, or `null` after `freshSave()`.
 
 **`nextSeed()` is injected** rather than computed. The game package has no
 source of randomness, for the same reason the sim does not: the shell owns
@@ -521,6 +582,10 @@ the above:
 - `MountOptions` gains `build: BuildStamp`. The shell computes it once;
   nothing in `packages/game` reads a `define`, an env var or
   `import.meta.env`.
+- `MountOptions` gains `resumed: Game | null`, passed through from
+  `loadSave`. The branch's `board` replays `save.run` itself in `create()`;
+  with `resumed` it takes the object instead, and replays only as the
+  fallback for a `null` that `save.run` says should not be null.
 
 This subsection exists only to stop two branches inventing the same file
 twice. Once `platform.ts` is in `main` matching §2, delete it — a delta
@@ -713,6 +778,16 @@ than the bug requires. Before this doc, `BoardScene` had thirteen
 initialised fields that were harmless *because* `create()` happened to
 reset every one of them — which is precisely how the fourteenth gets
 forgotten. One assignment site, no judgement call.
+
+**A resume is start-shaped, not instance-shaped.** `MountOptions.resumed`
+and `MountOptions.save.run` describe the *first* `create()` of `board` and
+nothing after it. `scene.restart()` is "again (same seed)" in section 5.3 —
+a fresh `Game` on `runSeed` — so the second `create()` must not look at
+either one again. Holding the mount's `run` in a field and branching on it
+in `create()` resumes the saved run every time Play again is pressed, and
+with `resumed` it would hand back a `Game` the first run already played to
+its end. One field, cleared by the `create()` that consumes it, and the
+restart path falls through to the fresh-run branch by construction.
 
 `no-restricted-syntax` enforces it over `packages/game/src/**/*Scene.ts`.
 Static fields are exempt: they are per class, not per run. Anything that

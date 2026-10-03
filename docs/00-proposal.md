@@ -454,3 +454,29 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   comparison as a read-only command. This retires the "regenerate frames
   on Linux, never on a Mac" rule — the variable was never the OS. See
   `docs/02-ci.md`.
+- 2026-10-03: `loadSave` takes a third argument, the platform now running
+  (`loadSave(raw, content, platform)`). Section 1.4 of
+  `docs/01-v1-architecture.md` specified two arguments and, four bullets
+  later, a repair that substitutes `{ commit: "unknown", platform }` for a
+  missing `writtenBy`. The sim is one compiled package on every target, so
+  neither `raw` nor `content` names the calling shell and nothing in the sim
+  may ask its environment — the two-argument signature could not satisfy its
+  own bullet. The shell already has the value as `MountOptions.build.platform`
+  and passes it. Only the platform, not the whole `BuildStamp`: a repair that
+  could reach the running build's *commit* would write the lie that
+  `writtenBy` exists to prevent. The doc was wrong and the implementation on
+  `maze-server/local-first-saves` was right; the doc now says so.
+- 2026-10-03: `LoadOutcome` carries the `Game` its own replay built —
+  `resumed: Game | null` on the `ok: true` branch, and a matching field on
+  `MountOptions`. `loadSave` replays the run to check the hash and then
+  dropped the result; because section 2 forbids an `await` in `create()` and
+  a `SaveDocument` holds no live object, the board scene replayed the same
+  log a second time. Measured: a full run is 29,232 ticks and
+  `packages/content/test/balance.test.ts` simulates one in 452 ms on a dev
+  box, so a late-game resume paid roughly twice that in blocked main thread
+  before the first frame, and several times that in a phone WebView. Handing
+  back the object that already exists removes one replay and adds no I/O, no
+  promise and no new source of truth: it is non-null exactly when `doc.run`
+  is, and the hash check that validated the run is what produced it. It is
+  consumed once, by the first `create()`, because a `Game` is mutable and
+  `scene.restart()` is a fresh run (sections 1.4, 2 and 5.2).
