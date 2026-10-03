@@ -54,8 +54,31 @@ describe("content integrity", () => {
       }
     }
     expect(g.state.phase).toBe("build");
-    expect(kills).toBe(10);
+    expect(kills).toBe(content.migrations[0]!.groups[0]!.count);
     expect(leaks).toBe(0);
     expect(g.state.eggs).toBe(20);
+  });
+
+  /**
+   * Section 8 of `docs/01-art-hud-and-audio.md` teaches mazing with a single
+   * placement: the player taps the one lit button, the path bends, and the
+   * first migration is small enough that one dinosaur is a kill to watch and
+   * no egg lost. Every number behind that promise lives in content, so the
+   * promise can drift without anyone editing the spec. This pins it.
+   */
+  it("one hatchling is enough for the first migration, as onboarding promises", () => {
+    const g = new Game(content, 1);
+    expect(g.apply({ type: "place", defId: "raptor-1", x: 1, y: 1 })).toBeNull();
+    g.apply({ type: "send" });
+    let kills = 0;
+    for (let i = 0; i < 20_000 && g.state.phase === "migration"; i++) {
+      g.tick();
+      for (const e of g.drainEvents()) if (e.type === "killed") kills++;
+    }
+    expect(g.state.phase).toBe("build");
+    // "enough to watch a kill"
+    expect(kills).toBeGreaterThan(0);
+    // "not enough to lose an egg even with one dinosaur placed"
+    expect(g.state.eggs).toBe(content.rules.eggs);
   });
 });

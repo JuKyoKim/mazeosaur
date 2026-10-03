@@ -88,6 +88,26 @@ export function clearBonus(w: number): number {
 }
 
 /**
+ * Per-migration overrides on the derived numbers, for the migrations the
+ * curve cannot describe.
+ *
+ * Migration 1 is one of those: it is the tutorial, so it is authored.
+ * Section 8 of `docs/01-art-hud-and-audio.md` promises a first-time player
+ * who places one dinosaur a kill to watch and no egg lost. The curve gives
+ * ten Parasaurolophus at twenty-five hit points, and one Velociraptor
+ * hatchling does four damage a hit: it lands sixteen hits across the whole
+ * herd and kills none of them, so the first migration shows no kill and
+ * takes ten of the twenty eggs. Eight hit points is two hits from that
+ * hatchling, which is few enough that the strike reads as the cause of the
+ * fall, and half speed keeps the herd inside its 1.8-cell range long
+ * enough to land them. At those numbers one hatchling clears all six and
+ * loses nothing.
+ */
+const OVERRIDES: Record<number, { hp?: number; speed?: number; count?: number }> = {
+  1: { hp: 8, speed: 50, count: 6 },
+};
+
+/**
  * The fifty migrations: archetype, genus, kind. Fliers every six or so
  * (the maze is useless against them), a boss every ten, kinds rotating
  * so no single counter carries. Genus names are real and public.
@@ -167,6 +187,7 @@ function buildInvadersAndMigrations(): { invaders: Record<string, InvaderDef>; m
   SCHEDULE.forEach(([archetype, genus, kind], i) => {
     const w = i + 1;
     const a = ARCHETYPES[archetype];
+    const over = OVERRIDES[w] ?? {};
     const baseHp = hpCurve(w);
     const baseBounty = bountyCurve(w);
     const id = `${slug(genus)}-${w}`;
@@ -176,8 +197,8 @@ function buildInvadersAndMigrations(): { invaders: Record<string, InvaderDef>; m
       name: genus,
       kind,
       archetype,
-      hp: Math.max(1, Math.round(baseHp * a.hp)),
-      speed: a.speed,
+      hp: over.hp ?? Math.max(1, Math.round(baseHp * a.hp)),
+      speed: over.speed ?? a.speed,
       flying,
       bounty: Math.max(1, Math.round(baseBounty * a.bounty)),
       eggs: a.eggs,
@@ -203,7 +224,7 @@ function buildInvadersAndMigrations(): { invaders: Record<string, InvaderDef>; m
     migrations.push({
       id: `m${String(w).padStart(2, "0")}`,
       name,
-      groups: [{ invader: id, count: a.count, spacing: a.spacing }],
+      groups: [{ invader: id, count: over.count ?? a.count, spacing: a.spacing }],
       clearBonus: clearBonus(w),
     });
   });
