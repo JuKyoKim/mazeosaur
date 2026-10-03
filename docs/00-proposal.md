@@ -355,3 +355,11 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   fail a dichromat separation check and are replaced, and the M2 42px
   HUD buttons are 22.8pt — half the 44pt floor — so the hit target
   minimum is 82 logical pixels.
+- 2026-10-03: `tools/` joins the `tsc` gate (`tools/tsconfig.json`,
+  `types: ["node"]`, appended to `npm run typecheck`). This reverses the
+  call made reviewing the generator's own pull request, which was that two
+  provable non-bugs did not justify a `@types/node` devDependency. The
+  reversal is about what the code does rather than how much it costs:
+  `tools/art/layout.ts` is the single source of every layout number the
+  spec and the frames both read, so an unchecked edit there can only be
+  found by a human noticing a picture changed.

@@ -237,7 +237,7 @@ export class Raster {
     if (out <= 0) return;
     for (let k = 0; k < 3; k++) {
       const d = this.px[i + k] as number;
-      this.px[i + k] = Math.round((c[k] * a + d * da * (1 - a)) / out);
+      this.px[i + k] = Math.round(((c[k] as number) * a + d * da * (1 - a)) / out);
     }
     this.px[i + 3] = Math.round(out * 255);
   }

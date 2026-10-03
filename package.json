@@ -14,7 +14,7 @@
     "build": "npm run build --workspace apps/web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p packages/sim && tsc --noEmit -p packages/content && tsc --noEmit -p packages/game && tsc --noEmit -p apps/web",
+    "typecheck": "tsc --noEmit -p packages/sim && tsc --noEmit -p packages/content && tsc --noEmit -p packages/game && tsc --noEmit -p apps/web && tsc --noEmit -p tools",
     "check": "npm run typecheck && npm test",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "art:check": "tsx tools/art/build.ts check",
@@ -24,6 +24,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@types/node": "^22.19.1",
     "tsx": "4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
