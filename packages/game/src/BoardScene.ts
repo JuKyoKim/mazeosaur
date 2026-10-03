@@ -119,34 +119,38 @@ const REFUSAL_TEXT: Record<Refusal, string> = {
  * Game and draws the answer, including whether the run is over — the sim
  * raises "won" and "lost" and the scene only reacts by leaving.
  */
+// Every field below is declared and never initialised here. create() runs
+// again on the same instance for every run, so a value set at the
+// declaration would be the first run's value forever; see the scene-graph
+// contract in docs/01-v1-architecture.md. The linter enforces it.
 export class BoardScene extends Phaser.Scene {
   private game_!: Game;
-  private seed = 1;
-  private resume: ResumableRun | null = null;
-  private ending = false;
-  private acc = 0;
-  private speed = 1;
-  private prevPos = new Map<number, { x: number; y: number }>();
+  private seed!: number;
+  private resume!: ResumableRun | null;
+  private ending!: boolean;
+  private acc!: number;
+  private speed!: number;
+  private prevPos!: Map<number, { x: number; y: number }>;
+  private effects!: Effect[];
   /**
    * Ids of the bosses alive as of the last tick. Refilled in
    * `snapshotPositions`, because a killed invader is gone before its event
    * is read and `kill-boss` is a different sound from `kill`.
    */
-  private bossIds = new Set<number>();
+  private bossIds!: Set<number>;
   private sfx!: SfxBus;
-  private eggsWarned = false;
-  private effects: Effect[] = [];
+  private eggsWarned!: boolean;
 
   private staticGfx!: Phaser.GameObjects.Graphics;
   private towerGfx!: Phaser.GameObjects.Graphics;
   private dynGfx!: Phaser.GameObjects.Graphics;
-  private towersDirty = true;
+  private towersDirty!: boolean;
 
-  private selectedDef: DinoDef | null = null;
-  private selectedDino: number | null = null;
-  private painting = false;
-  private lastPaint: { x: number; y: number } | null = null;
-  private hoverCell: { x: number; y: number } | null = null;
+  private selectedDef!: DinoDef | null;
+  private selectedDino!: number | null;
+  private painting!: boolean;
+  private lastPaint!: { x: number; y: number } | null;
+  private hoverCell!: { x: number; y: number } | null;
 
   /** Row 1. The timer is a bar, so it is sized rather than written. */
   private hudGfx!: Phaser.GameObjects.Graphics;
@@ -161,10 +165,10 @@ export class BoardScene extends Phaser.Scene {
   private previewChip!: Phaser.GameObjects.Rectangle;
   private previewText!: Phaser.GameObjects.Text;
   private previewMeta!: Phaser.GameObjects.Text;
-  private previewKey = "";
+  private previewKey!: string;
 
   /** Row 3: one tray at a time — the shop, or the selected dinosaur's sheet. */
-  private shopButtons: { def: DinoDef; button: Button; cost: Phaser.GameObjects.Text }[] = [];
+  private shopButtons!: { def: DinoDef; button: Button; cost: Phaser.GameObjects.Text }[];
   private sheetPanel!: Phaser.GameObjects.Rectangle;
   private sheetName!: Phaser.GameObjects.Text;
   private sheetKind!: Phaser.GameObjects.Text;
@@ -172,13 +176,13 @@ export class BoardScene extends Phaser.Scene {
   private sheetExtras!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
-  private sheetKey = "";
+  private sheetKey!: string;
 
   /** The toast, over the bottom of the board rather than in a HUD row. */
   private toastPanel!: Phaser.GameObjects.Rectangle;
   private toastBar!: Phaser.GameObjects.Rectangle;
   private toastText!: Phaser.GameObjects.Text;
-  private toastUntil = 0;
+  private toastUntil!: number;
 
   constructor() {
     super("board");
@@ -199,7 +203,7 @@ export class BoardScene extends Phaser.Scene {
     this.ending = false;
     this.acc = 0;
     this.speed = 1;
-    this.prevPos.clear();
+    this.prevPos = new Map();
     this.effects = [];
     this.towersDirty = true;
     this.selectedDef = null;
@@ -210,7 +214,7 @@ export class BoardScene extends Phaser.Scene {
     this.shopButtons = [];
     this.toastUntil = 0;
     this.eggsWarned = false;
-    this.bossIds.clear();
+    this.bossIds = new Set();
     // One bus per scene instance, rebuilt on restart: a bus that kept the
     // previous run's timestamps would swallow the next run's first hit.
     this.sfx = new SfxBus(services(this).audio, () => this.time.now);

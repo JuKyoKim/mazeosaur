@@ -1,7 +1,10 @@
 # mazeosaur: orientation for a fresh agent
 
-Read [README.md](README.md), then [docs/00-proposal.md](docs/00-proposal.md).
-This file carries only what an agent needs before it knows where to look.
+Read [README.md](README.md), then [docs/00-proposal.md](docs/00-proposal.md)
+for the design and [docs/01-v1-architecture.md](docs/01-v1-architecture.md)
+for the contracts — the save format, the platform ports, the scene-graph
+contract and the review protocol. This file carries only what an agent
+needs before it knows where to look.
 
 ## The rules that are not obvious from the code
 
@@ -10,6 +13,7 @@ This file carries only what an agent needs before it knows where to look.
    function of (seed, content, command log). If you need randomness, use
    the `Rng` that is passed in. If you need a curve, use a lookup table.
    Breaking this silently breaks replays, saves and server verification.
+   `npm run lint` enforces this; it is not just a convention any more.
 2. **Mobile has no network. None.** `apps/mobile` must never depend on the
    network package, and `packages/game` must never import it either; the
    web shell injects it. Do not add analytics, crash reporting, remote
@@ -37,6 +41,14 @@ hatchling, juvenile, adult; upgrading is **growing**). Creeps are
 ## Working here
 
 - `npm run check` is the gate. Keep sim tests under a second.
+- **A scratch checkout needs its own real `npm install`.** A copied or
+  symlinked `node_modules` loses `apps/web/node_modules`, so
+  `tsc -p apps/web` silently resolves the root's hoisted `vite@8` instead
+  of the `vite@7` that `apps/web` pins. A typecheck from a hand-assembled
+  checkout is not evidence about the code, red or green. Why both vites
+  exist: section 10 of `docs/00-proposal.md`.
+- CI is `docs/02-ci.md`: every step, how to run it locally, and why agents
+  propose workflow changes but cannot push them.
 - `npm run dev` serves the web prototype; `.claude/launch.json` has the
   same server for the in-app browser preview.
 - This repo deploys separately from arbor. Nothing here touches the fleet

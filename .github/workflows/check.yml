@@ -19,6 +19,17 @@ jobs:
       - run: npm run build
       - name: bundle size budget
         run: npm run check:bundle-size
+      - name: art check (colour, contrast, hit targets)
+        run: npm run art:check
+      - name: art frames regenerate byte-identical
+        # tools/art is a deterministic generator; docs/art must be exactly
+        # what it produces. --intent-to-add makes an added frame visible to
+        # git diff, and diffing against HEAD (not the index) keeps a deleted
+        # frame visible too, since --all stages deletions.
+        run: |
+          npm run art:frames
+          git add --all --intent-to-add -- docs/art
+          git diff HEAD --exit-code -- docs/art
       - name: no network code in the game bundle
         # Until apps/mobile exists this guards the same bundle the mobile
         # shell will wrap. Phaser's loader references XHR; it is allowed
