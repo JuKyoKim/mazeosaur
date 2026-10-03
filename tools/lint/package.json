@@ -1,0 +1,12 @@
+{
+  "name": "@mazeosaur/lint",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The repo's lint toolchain, deliberately installed on its own. typescript-eslint refuses to load against TypeScript 7 (typescript-eslint#10940), so it gets its own TypeScript 6 here and the compiler that typechecks the repo stays at 7. Nothing but the linter sees this directory. `npm run lint` installs it on first use.",
+  "dependencies": {
+    "@typescript-eslint/parser": "8.71.0",
+    "eslint": "10.12.0",
+    "typescript": "6.0.3"
+  }
+}
