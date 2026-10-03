@@ -363,16 +363,10 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   `tools/art/layout.ts` is the single source of every layout number the
   spec and the frames both read, so an unchecked edit there can only be
   found by a human noticing a picture changed.
-- 2026-10-03: the root now pins `vite@^7.0.0` (`package.json`), the same
-  range `apps/web` already carried. Before this, the root had no direct
-  vite dependency, so npm hoisted whatever satisfied vitest's peer range
-  (`^6.4.0 || ^7.0.0 || ^8.0.0`) — vite 8, which is rolldown-based, a
-  different bundler from vite 7's plain Rollup. `apps/web`'s nested
-  `vite@7.3.6` shadowed that at build and dev time, but `tsc -p apps/web`
-  would see whichever copy a given checkout actually resolved, so the
-  same config could typecheck or fail `TS2769` with no code change
-  depending on install shape. Vitest 5 accepts vite 7 outright, so holding
-  the root there removes the second copy and the skew, rather than moving
-  the shipped web bundler to rolldown. Verified: `npm run check` passes,
-  and `apps/web`'s build output is byte-identical before and after
-  (`phaser-*.js` 1,208,070 raw / `index-*.js` 32,053 raw, both unchanged).
+- 2026-10-03: `apps/web` keeps its own `vite@7` while the root hoists `vite@8`
+  (via vitest 5), and the two are deliberately not deduped: aligning them means
+  either a rolldown migration on the shipped web shell or stranding vitest off
+  its supported vite. Config that both majors must typecheck is written to the
+  intersection of their types instead — see the comment on `manualChunks` in
+  `apps/web/vite.config.ts`. Revisit when `apps/web` moves to vite 8, or when a
+  second field diverges.
