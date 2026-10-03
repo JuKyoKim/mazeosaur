@@ -14,6 +14,7 @@ export const fixture: Content = {
     earlyBonusPerSecond: 2,
     sellRefundBuildPercent: 80,
     sellRefundMigrationPercent: 60,
+    fossilWeights: { perEggKept: 1, perMigrationCleared: 1, perMeatUnspent: 1 },
   },
   dinos: {
     "raptor-1": {

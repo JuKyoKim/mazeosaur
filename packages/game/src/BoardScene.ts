@@ -14,6 +14,7 @@ import {
 import { content, hatchlings } from "@mazeosaur/content";
 import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
 import { services } from "./platform.js";
+import { runFinished, runStarted } from "./profile.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 const BOARD_H = content.valley.height * CELL_PX;
@@ -97,6 +98,13 @@ export class BoardScene extends Phaser.Scene {
   private startedBy!: BuildStamp;
   private playedMsBase!: number;
   private sessionStartMs!: number;
+  // `won`/`lost` is terminal: nothing re-ticks it, so the phase is still
+  // `won` or `lost` for as long as the "Play again" overlay is up, and
+  // `GameHandle.suspend()` calls `flush()` unconditionally in that window
+  // (every `visibilitychange` -> hidden, every `pagehide`). Latches the
+  // fossil award and `runsFinished` to once per run so a backgrounded
+  // results screen cannot count the same run twice.
+  private finishedAccounted!: boolean;
 
   private staticGfx!: Phaser.GameObjects.Graphics;
   private towerGfx!: Phaser.GameObjects.Graphics;
@@ -131,7 +139,7 @@ export class BoardScene extends Phaser.Scene {
   private hasStarted: boolean;
 
   constructor(
-    private initialDoc: SaveDocument,
+    private readonly initialDoc: SaveDocument,
     private readonly nextSeed: () => number,
     private readonly build: BuildStamp,
   ) {
@@ -143,12 +151,25 @@ export class BoardScene extends Phaser.Scene {
     // scene.restart() re-runs create() on the same instance: every field
     // that refers to a display object or to the previous run must reset
     // here, or the HUD keeps touching destroyed objects.
-    const run = this.initialDoc.run;
-    this.doc = { ...this.initialDoc, run: null };
-    // Consume the resume once: `initialDoc` is otherwise never reassigned,
-    // so a later "Play again" (scene.restart()) would read this same `run`
-    // and resurrect the finished run instead of starting a new one.
-    this.initialDoc = this.doc;
+    //
+    // `initialDoc` is read only once, on the very first create() (the
+    // mount-time load from disk). Every later create() -- a "Play again"
+    // `scene.restart()` -- reads `doc` instead, which `flush()` has kept
+    // current with every profile and run update since. Reading
+    // `initialDoc` again on a restart would resurrect the run that just
+    // ended (it is frozen at whatever the mount loaded) and discard every
+    // profile change -- `runsStarted`, `runsFinished`, `best` -- that
+    // happened since. `hasStarted` already exists to tell the two apart.
+    //
+    // This depends on `doc.run` already being `null` by the time a
+    // restart is reachable: the overlay that offers "Play again" only
+    // shows after `flush()` has written the won/lost run with `run:
+    // null` (see `handleEvents`), and that is currently the only
+    // `scene.restart()` in the package. Revisit when `results`/`title`
+    // land (§5.1) and `scene.start("board")` becomes a second way in.
+    const base = this.hasStarted ? this.doc : this.initialDoc;
+    const run = base.run;
+    this.doc = { ...base, run: null };
     if (run) {
       // The shell already validated this run through loadSave; replaying
       // it here is how the game package turns saved data back into a
@@ -164,8 +185,16 @@ export class BoardScene extends Phaser.Scene {
       this.game_ = new Game(content, this.runSeed);
       this.startedBy = this.build;
       this.playedMsBase = 0;
+      // A fresh `Game` is one `runsStarted` -- including every "Play
+      // again", which is its own fresh run at tick 0. A resumed run was
+      // already counted when it first started, in the branch above.
+      this.doc = { ...this.doc, profile: runStarted(this.doc.profile) };
     }
     this.hasStarted = true;
+    // §1.2: a won/lost run must be accounted for exactly once, even
+    // though `suspend()` keeps calling `flush()` while the terminal
+    // phase sits under the "Play again" overlay. See `flush()`.
+    this.finishedAccounted = false;
     this.sessionStartMs = this.time.now;
     this.acc = 0;
     this.speed = 1;
@@ -651,26 +680,46 @@ export class BoardScene extends Phaser.Scene {
    */
   flush(): Promise<void> {
     const phase = this.game_.state.phase;
-    const run: RunSave | null =
-      phase === "won" || phase === "lost"
-        ? null
-        : {
-            valleyId: content.valley.id,
-            seed: this.runSeed,
-            contentVersion: content.version,
-            startedBy: this.startedBy,
-            // Copied, not aliased: `IndexedDbSaveStore` may coalesce this
-            // write up to `COALESCE_MS` into the future, and `tick`/`hash`
-            // above are a snapshot of right now. A live reference to
-            // `game_.log` would pick up whatever commands land on it
-            // before the deferred write actually commits, landing a log
-            // past the saved tick and failing replay on the next boot.
-            log: [...this.game_.log],
-            tick: this.game_.state.tick,
-            hash: this.game_.hash(),
-            playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
-          };
-    this.doc = { ...this.doc, run, writtenBy: this.build };
+    const finished = phase === "won" || phase === "lost";
+    const run: RunSave | null = finished
+      ? null
+      : {
+          valleyId: content.valley.id,
+          seed: this.runSeed,
+          contentVersion: content.version,
+          startedBy: this.startedBy,
+          // Copied, not aliased: `IndexedDbSaveStore` may coalesce this
+          // write up to `COALESCE_MS` into the future, and `tick`/`hash`
+          // above are a snapshot of right now. A live reference to
+          // `game_.log` would pick up whatever commands land on it
+          // before the deferred write actually commits, landing a log
+          // past the saved tick and failing replay on the next boot.
+          log: [...this.game_.log],
+          tick: this.game_.state.tick,
+          hash: this.game_.hash(),
+          playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
+        };
+    // §1.7: a won or lost run writes `profile.best`, exactly once. `won`
+    // and `lost` are terminal, so the phase is still `finished` for as
+    // long as the "Play again" overlay is up, and `suspend()` calls
+    // `flush()` unconditionally on every later tab-hide or `pagehide` in
+    // that window -- without the latch, each of those would hand the
+    // already-finished run to `runFinished` again and double (or
+    // triple...) `fossilsEarned` and `runsFinished`. The award comes from
+    // `content.rules.fossilWeights`, never a number here -- rule 4.
+    const accountFinish = finished && !this.finishedAccounted;
+    const profile = accountFinish
+      ? runFinished(this.doc.profile, content.rules.fossilWeights, {
+          valleyId: content.valley.id,
+          seed: this.runSeed,
+          contentVersion: content.version,
+          migrationsCleared: this.game_.state.migration,
+          eggsLeft: this.game_.state.eggs,
+          meatUnspent: this.game_.state.meat,
+        })
+      : this.doc.profile;
+    if (accountFinish) this.finishedAccounted = true;
+    this.doc = { ...this.doc, run, profile, writtenBy: this.build };
     return services(this).saves.put(this.doc);
   }
 

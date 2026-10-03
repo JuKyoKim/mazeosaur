@@ -1,0 +1,61 @@
+import type { BestRunSave, FossilWeights, ProfileSave } from "@mazeosaur/sim";
+import { fossilAward } from "@mazeosaur/content";
+
+/**
+ * Pure profile accounting, kept out of `BoardScene` so it can be unit
+ * tested without Phaser: the scene only supplies the numbers a run ended
+ * with, never the formula (rule 4 — the weight table lives in
+ * `@mazeosaur/content`, not here and not in the sim).
+ */
+
+/** A run began with nothing to resume. §1.2's `runsStarted`; no formula. */
+export function runStarted(profile: ProfileSave): ProfileSave {
+  return { ...profile, runsStarted: profile.runsStarted + 1 };
+}
+
+export interface RunOutcome {
+  readonly valleyId: string;
+  readonly seed: number;
+  readonly contentVersion: string;
+  /** Highest migration index cleared this run. */
+  readonly migrationsCleared: number;
+  readonly eggsLeft: number;
+  readonly meatUnspent: number;
+}
+
+function isBetter(candidate: BestRunSave, existing: BestRunSave | undefined): boolean {
+  if (!existing) return true;
+  if (candidate.migrationsCleared !== existing.migrationsCleared) return candidate.migrationsCleared > existing.migrationsCleared;
+  return candidate.fossils > existing.fossils;
+}
+
+/**
+ * A run ended won or lost: §1.2's `runsFinished`, the fossil award (read
+ * from `weights`, never a constant here), and `profile.best` for the
+ * valley the run was played in.
+ *
+ * `fossilsEarned` is monotonic (§1.2), so `fossilsEarned - fossilsSpent`
+ * can never go negative; thrown rather than silently clamped, because a
+ * negative balance here means the award or the save itself is wrong, not
+ * that there is a sensible fallback value.
+ */
+export function runFinished(profile: ProfileSave, weights: FossilWeights, outcome: RunOutcome): ProfileSave {
+  const award = fossilAward(weights, {
+    eggsLeft: outcome.eggsLeft,
+    migrationsCleared: outcome.migrationsCleared,
+    meatUnspent: outcome.meatUnspent,
+  });
+  const fossilsEarned = profile.fossilsEarned + award;
+  if (fossilsEarned - profile.fossilsSpent < 0) {
+    throw new Error(`fossil balance would go negative: earned ${fossilsEarned}, spent ${profile.fossilsSpent}`);
+  }
+  const candidate: BestRunSave = {
+    migrationsCleared: outcome.migrationsCleared,
+    eggsLeft: outcome.eggsLeft,
+    fossils: award,
+    seed: outcome.seed,
+    contentVersion: outcome.contentVersion,
+  };
+  const best = isBetter(candidate, profile.best[outcome.valleyId]) ? { ...profile.best, [outcome.valleyId]: candidate } : profile.best;
+  return { ...profile, fossilsEarned, runsFinished: profile.runsFinished + 1, best };
+}

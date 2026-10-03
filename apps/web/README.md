@@ -38,11 +38,13 @@ In `src/main.ts` today:
   scene does async work in `create()`. A save from a newer build gets a
   `NULL_SAVE_STORE` for the rest of the session instead of the real
   store, so nothing here can clobber it.
+- **Lifecycle**, `wireSuspend` in `src/main.ts`. `visibilitychange` ->
+  hidden and `pagehide` both call `GameHandle.suspend()`, because the OS
+  can kill a backgrounded tab without warning and `pagehide` is the one
+  of the two iOS Safari sometimes skips `visibilitychange` for.
 
 Specified in section 2 and not written yet:
 
-- **Lifecycle.** The shell listens for the tab going hidden and calls
-  `GameHandle.suspend()` so an interrupted run is flushed.
 - **The network client**, if `apps/server` ever exists. It is injected as
   `NetPort`, no shell passes one in v1, and the mobile shell never will.
   Nothing under `packages/game` may import it.
