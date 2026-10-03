@@ -14,6 +14,7 @@ import {
 import { content, hatchlings } from "@mazeosaur/content";
 import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
 import { services } from "./platform.js";
+import { runFinished, runStarted } from "./profile.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 const BOARD_H = content.valley.height * CELL_PX;
@@ -164,6 +165,9 @@ export class BoardScene extends Phaser.Scene {
       this.game_ = new Game(content, this.runSeed);
       this.startedBy = this.build;
       this.playedMsBase = 0;
+      // A fresh run, resumed or not, is one `runsStarted` -- including
+      // every "Play again", which is its own fresh `Game` at tick 0.
+      this.doc = { ...this.doc, profile: runStarted(this.doc.profile) };
     }
     this.hasStarted = true;
     this.sessionStartMs = this.time.now;
@@ -651,26 +655,45 @@ export class BoardScene extends Phaser.Scene {
    */
   flush(): Promise<void> {
     const phase = this.game_.state.phase;
-    const run: RunSave | null =
-      phase === "won" || phase === "lost"
-        ? null
-        : {
-            valleyId: content.valley.id,
-            seed: this.runSeed,
-            contentVersion: content.version,
-            startedBy: this.startedBy,
-            // Copied, not aliased: `IndexedDbSaveStore` may coalesce this
-            // write up to `COALESCE_MS` into the future, and `tick`/`hash`
-            // above are a snapshot of right now. A live reference to
-            // `game_.log` would pick up whatever commands land on it
-            // before the deferred write actually commits, landing a log
-            // past the saved tick and failing replay on the next boot.
-            log: [...this.game_.log],
-            tick: this.game_.state.tick,
-            hash: this.game_.hash(),
-            playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
-          };
-    this.doc = { ...this.doc, run, writtenBy: this.build };
+    const finished = phase === "won" || phase === "lost";
+    const run: RunSave | null = finished
+      ? null
+      : {
+          valleyId: content.valley.id,
+          seed: this.runSeed,
+          contentVersion: content.version,
+          startedBy: this.startedBy,
+          // Copied, not aliased: `IndexedDbSaveStore` may coalesce this
+          // write up to `COALESCE_MS` into the future, and `tick`/`hash`
+          // above are a snapshot of right now. A live reference to
+          // `game_.log` would pick up whatever commands land on it
+          // before the deferred write actually commits, landing a log
+          // past the saved tick and failing replay on the next boot.
+          log: [...this.game_.log],
+          tick: this.game_.state.tick,
+          hash: this.game_.hash(),
+          playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
+        };
+    // §1.7: a won or lost run writes `profile.best`. The award comes from
+    // `content.rules.fossilWeights`, never a number here -- rule 4.
+    const profile = finished
+      ? runFinished(this.doc.profile, content.rules.fossilWeights, {
+          valleyId: content.valley.id,
+          seed: this.runSeed,
+          contentVersion: content.version,
+          migrationsCleared: this.game_.state.migration,
+          eggsLeft: this.game_.state.eggs,
+          meatUnspent: this.game_.state.meat,
+        })
+      : this.doc.profile;
+    this.doc = { ...this.doc, run, profile, writtenBy: this.build };
+    // Keep `initialDoc` in step with every flushed profile change: it is
+    // what the next `create()` (a "Play again" `scene.restart()`) rebuilds
+    // `doc` from, and it is otherwise frozen at the start of this run (see
+    // the consume-the-resume-once comment in `create()`). Without this, a
+    // won/lost run's fossil award and counters would be visible on disk
+    // for one write and then overwritten by the next run's autosave.
+    this.initialDoc = this.doc;
     return services(this).saves.put(this.doc);
   }
 

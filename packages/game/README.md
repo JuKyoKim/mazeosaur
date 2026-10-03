@@ -21,6 +21,10 @@ ports themselves are section 2 of
 - `src/BoardScene.ts` — the board, the HUD and all input. The only scene
   that constructs a `Game`. Resumes a saved run by calling `@mazeosaur/sim`'s
   `replay()`, and autosaves at phase boundaries through `services(this).saves`.
+- `src/profile.ts` — `runStarted` and `runFinished`, the `ProfileSave`
+  accounting `flush()` calls on a fresh run and on a won/lost one. Pure and
+  Phaser-free on purpose, so it is unit tested directly; the fossil award
+  itself reads `content.rules.fossilWeights` rather than a number here.
 - `src/theme.ts` — canvas size, colours, text styles. Shared constants
   live here rather than on a scene.
 
@@ -53,8 +57,9 @@ the transitions between them — is section 5 of
 
 ## Verifying a change
 
-There are no tests here; the client is checked by driving it
-(`npm run dev`, then port 5173). Three things have produced false
+`test/profile.test.ts` covers the pure accounting in `src/profile.ts`.
+Everything else here is Phaser and has no tests; it is checked by driving
+it (`npm run dev`, then port 5173). Three things have produced false
 conclusions:
 
 - **Drive drags at speed.** A fast pointer skips cells between move
