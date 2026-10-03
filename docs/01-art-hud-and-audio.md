@@ -62,18 +62,44 @@ wants to be smaller than `label` should instead not be on the screen.
 
 ---
 
-## 2. The art direction, as three candidates
+## 2. The art direction, as four candidates
 
 The proposal leaves two axes open: pixel versus hand-drawn vector, and
 cute-round versus fierce-realistic. Three points on that grid were rendered
 as the actual board at the actual size, so the choice can be made by
 looking rather than by imagining.
 
+The board rejected all three and asked for a fourth off that grid: blocks,
+in the Crossy Road register, "steer away from 2d". **Toy Box** is that
+brief, built the same way and rendered into the same frames.
+
 | direction | axes | authored | ink | atlas | the pitch |
 | --- | --- | --- | --- | --- | --- |
 | **Fossil Pixel** | pixel, fierce | 36px | 1px | **23 kB** | Hard edges, four shade bands, one ink pixel. One art pixel is one canvas pixel. Smallest atlas by a factor of five. |
 | **Clay Pack** | vector, cute-round | 48px | 2px | 126 kB | Sticker-weight line, heads a third too big, an eye you can still see at 20px. Friendliest read, easiest to animate. |
 | **Valley Naturalist** | vector, fierce | 48px | 1px | 121 kB | Skeletal proportions, hairline edge, deep belly shadow, cold rim light. Reads as an animal, not a mascot. |
+| **Toy Box** | blocks, cute-round | 64px | 2px | 68 kB | Six to fourteen boxes an animal under one fixed isometric camera, three flat tones a face. Reads as a solid toy rather than a drawing of one. |
+
+### What Toy Box is, and what it is not
+
+It is **pre-rendered** 3D: the models in
+[`tools/art/blocks.ts`](../tools/art/blocks.ts) are projected once by
+[`tools/art/voxel.ts`](../tools/art/voxel.ts) into ordinary sprites. The
+engine sees a texture atlas like any other — no runtime 3D, no depth
+buffer, no new dependency — and the atlas is *smaller* than either vector
+direction, because flat faces compress well.
+
+It is **not** a change of camera. The board is still a square top-down grid
+of 20x28 cells. Tilting the board — the other half of what makes the
+reference game look the way it does — changes how much of the maze is
+visible at once and therefore how the maze plays, so it is a gameplay
+decision rather than an art one and it is not taken here.
+
+That distinction is the honest caveat, and the frames show it: at the
+19.5pt cell, a solid and a drawing of a solid are nearly the same handful
+of pixels. **The block treatment reads in the shop tray, the dinosaur sheet
+and the boss, and barely reads in a wall cell.** The cell is the binding
+constraint, not the artwork.
 
 Each is a record of about fifteen numbers in
 [`tools/art/directions.ts`](../tools/art/directions.ts) — authored

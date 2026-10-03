@@ -94,7 +94,7 @@ export interface Direction {
   /** What it is called in the memo and in the decision log. */
   name: string;
   /** Where it sits on the proposal's two axes. */
-  axes: { render: "pixel" | "vector"; register: "cute-round" | "fierce-realistic" };
+  axes: { render: "pixel" | "vector" | "blocks"; register: "cute-round" | "fierce-realistic" };
   /** Authored sprite size in pixels, square. The 36px cell draws it scaled. */
   spritePx: number;
   /** Sub-pixel samples per axis when filling: 1 is a hard pixel edge. */
@@ -106,6 +106,15 @@ export interface Direction {
   /** How many authored pixels of top-edge rim light. */
   rim: number;
   proportions: Proportions;
+  /**
+   * How a sprite is built. `shapes` rasterises the 2D silhouettes in
+   * bestiary.ts; `blocks` renders the voxel models in blocks.ts under a
+   * fixed isometric camera. The kind chart is the same either way — only
+   * the body it is drawn in changes.
+   */
+  model?: "shapes" | "blocks";
+  /** Face brightness for a `blocks` direction: top, front, side. */
+  faces?: { top: number; front: number; side: number };
   /** One line for the memo: what the player sees. */
   pitch: string;
   palette(hue: number): Palette;
@@ -213,7 +222,59 @@ const valleyNaturalist: Direction = {
   },
 };
 
-export const DIRECTIONS: readonly Direction[] = [fossilPixel, clayPack, valleyNaturalist];
+/**
+ * Blocks, cute-round. The board's own brief after it rejected all three
+ * flat directions: "more 3d, steer away from 2d, something similar to how
+ * Crossy Road assets look in that block style."
+ *
+ * Each animal is six to fourteen axis-aligned boxes rendered under one
+ * fixed isometric camera, three flat tones per box — top, front, side — and
+ * no gradient anywhere. The solidity is doing the work that shading does in
+ * the other three, which is why the palette can stay saturated.
+ *
+ * What this is honestly not: the board is still a square top-down grid, and
+ * this changes the *assets*, not the camera the game is played through.
+ * Tilting the whole board is a separate and much larger decision — see the
+ * memo. These sprites are pre-rendered, so they cost the engine nothing and
+ * no runtime 3D is involved.
+ *
+ * Authored at 64px rather than 48: a box edge is a straight diagonal, and a
+ * diagonal is the one thing that shows its stair-steps when downsampled, so
+ * it gets more pixels to lose.
+ */
+const toyBox: Direction = {
+  id: "toy-box",
+  name: "Toy Box",
+  axes: { render: "blocks", register: "cute-round" },
+  spritePx: 64,
+  samples: 2,
+  outline: 2,
+  shade: 0,
+  rim: 0,
+  model: "blocks",
+  // Top brightest, side darkest. The spread is wide on purpose: it is the
+  // only cue that says "solid", and a narrow spread reads as a flat decal.
+  faces: { top: 1.12, front: 0.88, side: 0.64 },
+  proportions: { head: 1.3, eye: 0.42, spike: 0.8, round: 1.0 },
+  pitch: "Chunky blocks under one fixed camera, three flat tones a face. Reads as a solid toy on the board rather than a drawing of one.",
+  palette(hue) {
+    // Saturated and slightly lifted. Flat faces have no gradient to carry
+    // the form, so the colour has to stay bright enough that the three face
+    // tones are separable at a 20px cell.
+    const base = lighten(rgb(hue), 0.08);
+    return {
+      base,
+      dark: darken(base, 0.3),
+      light: lighten(base, 0.28),
+      accent: mix(lighten(base, 0.36), [255, 238, 198], 0.42),
+      ink: darken(mix(base, [28, 22, 24], 0.8), 0.34),
+      eye: rgb(0x191417),
+      glint: rgb(0xffffff),
+    };
+  },
+};
+
+export const DIRECTIONS: readonly Direction[] = [fossilPixel, clayPack, valleyNaturalist, toyBox];
 
 export function direction(id: string): Direction {
   const d = DIRECTIONS.find((x) => x.id === id);
