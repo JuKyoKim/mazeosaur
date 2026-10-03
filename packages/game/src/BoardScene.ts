@@ -1,12 +1,24 @@
 import Phaser from "phaser";
 import { CELL, Game, TICKS_PER_SECOND, type DinoDef, type GameEvent, type Refusal } from "@mazeosaur/sim";
 import { content, hatchlings } from "@mazeosaur/content";
-import { CANVAS_H, CANVAS_W, CELL_PX } from "./layout.js";
+import { BOARD_H, CANVAS_H, CANVAS_W, CELL_PX, HUD_H, HUD_Y, gridTop } from "./layout.js";
 import { COLORS, KIND_COLOR, text } from "./theme.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
-const BOARD_H = content.valley.height * CELL_PX;
-const HUD_Y = BOARD_H;
+/**
+ * The grid's own height in pixels. Content-derived, and the only vertical
+ * bound placement and the pointer care about — the HUD's position is not
+ * it, and neither is the board area's height.
+ */
+const GRID_PX_H = content.valley.height * CELL_PX;
+/**
+ * Where the grid starts inside the board area, so a short valley sits in
+ * the middle of it instead of against the top. Zero for the 28-tall valley
+ * that ships and 18 for a 27-tall one, which is why it is *not* a whole
+ * number of cells: add it to every cell-to-pixel conversion, and subtract
+ * it before any pixel-to-cell divide.
+ */
+const GRID_TOP = gridTop(content.valley.height);
 
 interface Effect {
   kind: "attack" | "kill" | "flash" | "leak";
@@ -211,12 +223,17 @@ export class BoardScene extends Phaser.Scene {
 
   // ------------------------------------------------------------- drawing
 
+  /** Top edge of grid row `y` on the canvas. Every row position goes here. */
+  private cellY(y: number): number {
+    return GRID_TOP + y * CELL_PX;
+  }
+
   private cellCenter(x: number, y: number): { x: number; y: number } {
-    return { x: x * CELL_PX + CELL_PX / 2, y: y * CELL_PX + CELL_PX / 2 };
+    return { x: x * CELL_PX + CELL_PX / 2, y: this.cellY(y) + CELL_PX / 2 };
   }
 
   private worldFromMilli(px: number, py: number): { x: number; y: number } {
-    return { x: (px * CELL_PX) / CELL, y: (py * CELL_PX) / CELL };
+    return { x: (px * CELL_PX) / CELL, y: GRID_TOP + (py * CELL_PX) / CELL };
   }
 
   private drawStatic(): void {
@@ -226,20 +243,22 @@ export class BoardScene extends Phaser.Scene {
     gfx.fillStyle(COLORS.boardBg, 1);
     gfx.fillRect(0, 0, CANVAS_W, BOARD_H);
     gfx.lineStyle(1, COLORS.gridLine, 1);
-    for (let x = 0; x <= v.width; x++) gfx.lineBetween(x * CELL_PX, 0, x * CELL_PX, BOARD_H);
-    for (let y = 0; y <= v.height; y++) gfx.lineBetween(0, y * CELL_PX, CANVAS_W, y * CELL_PX);
+    // The grid, not the board area: the lines stop where the cells do.
+    for (let x = 0; x <= v.width; x++) gfx.lineBetween(x * CELL_PX, GRID_TOP, x * CELL_PX, GRID_TOP + GRID_PX_H);
+    for (let y = 0; y <= v.height; y++) gfx.lineBetween(0, this.cellY(y), CANVAS_W, this.cellY(y));
 
     const mark = (p: { x: number; y: number }, color: number, label: string) => {
+      const c = this.cellCenter(p.x, p.y);
       gfx.fillStyle(color, 1);
-      gfx.fillRect(p.x * CELL_PX + 2, p.y * CELL_PX + 2, CELL_PX - 4, CELL_PX - 4);
-      this.add.text(p.x * CELL_PX + CELL_PX / 2, p.y * CELL_PX + CELL_PX / 2, label, text(16, "#111")).setOrigin(0.5);
+      gfx.fillRect(p.x * CELL_PX + 2, this.cellY(p.y) + 2, CELL_PX - 4, CELL_PX - 4);
+      this.add.text(c.x, c.y, label, text(16, "#111")).setOrigin(0.5);
     };
     mark(v.lane.spawn, COLORS.spawn, "S");
     v.lane.checkpoints.forEach((c, i) => mark(c, COLORS.checkpoint, String(i + 1)));
     mark(v.lane.exit, COLORS.nest, "N");
     for (const r of v.rock) {
       gfx.fillStyle(0x4a4a4a, 1);
-      gfx.fillRect(r.x * CELL_PX, r.y * CELL_PX, CELL_PX, CELL_PX);
+      gfx.fillRect(r.x * CELL_PX, this.cellY(r.y), CELL_PX, CELL_PX);
     }
   }
 
@@ -249,7 +268,7 @@ export class BoardScene extends Phaser.Scene {
     for (const d of this.game_.state.dinos) {
       const def = this.game_.dinoDef(d);
       const x = d.x * CELL_PX;
-      const y = d.y * CELL_PX;
+      const y = this.cellY(d.y);
       gfx.fillStyle(KIND_COLOR[def.kind], 1);
       gfx.fillRoundedRect(x + 3, y + 3, CELL_PX - 6, CELL_PX - 6, 6);
       // growth stage as pips
@@ -273,7 +292,7 @@ export class BoardScene extends Phaser.Scene {
         gfx.lineStyle(2, 0xffffff, 0.5);
         gfx.strokeCircle(c.x, c.y, (def.range * CELL_PX) / CELL);
         gfx.lineStyle(3, 0xffffff, 0.9);
-        gfx.strokeRect(d.x * CELL_PX + 1, d.y * CELL_PX + 1, CELL_PX - 2, CELL_PX - 2);
+        gfx.strokeRect(d.x * CELL_PX + 1, this.cellY(d.y) + 1, CELL_PX - 2, CELL_PX - 2);
       } else {
         this.selectedDino = null;
       }
@@ -281,7 +300,7 @@ export class BoardScene extends Phaser.Scene {
       const r = g.placeRefusal(this.selectedDef.id, this.hoverCell.x, this.hoverCell.y);
       const c = this.cellCenter(this.hoverCell.x, this.hoverCell.y);
       gfx.fillStyle(r ? COLORS.refusal : KIND_COLOR[this.selectedDef.kind], 0.45);
-      gfx.fillRoundedRect(this.hoverCell.x * CELL_PX + 3, this.hoverCell.y * CELL_PX + 3, CELL_PX - 6, CELL_PX - 6, 6);
+      gfx.fillRoundedRect(this.hoverCell.x * CELL_PX + 3, this.cellY(this.hoverCell.y) + 3, CELL_PX - 6, CELL_PX - 6, 6);
       if (!r) {
         gfx.lineStyle(1, 0xffffff, 0.35);
         gfx.strokeCircle(c.x, c.y, (this.selectedDef.range * CELL_PX) / CELL);
@@ -361,7 +380,7 @@ export class BoardScene extends Phaser.Scene {
 
   private buildHud(): void {
     const y0 = HUD_Y;
-    this.add.rectangle(0, y0, CANVAS_W, CANVAS_H - y0, COLORS.hud).setOrigin(0, 0);
+    this.add.rectangle(0, y0, CANVAS_W, HUD_H, COLORS.hud).setOrigin(0, 0);
 
     // row 1: numbers, then send and speed at the right
     this.meatText = this.add.text(16, y0 + 16, "", text(22, COLORS.meat));
@@ -535,8 +554,13 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private cellAt(p: Phaser.Input.Pointer): { x: number; y: number } | null {
-    if (p.y >= BOARD_H || p.y < 0 || p.x < 0 || p.x >= CANVAS_W) return null;
-    return { x: Math.floor(p.x / CELL_PX), y: Math.floor(p.y / CELL_PX) };
+    // Subtract the grid's offset *before* dividing. GRID_TOP is 0 for the
+    // 28-tall valley and 18 for a 27-tall one, so an integer divide alone
+    // would be off by a row on the first map that is not exactly 28 — and
+    // it would present as a drag-interpolation bug.
+    const gy = p.y - GRID_TOP;
+    if (gy < 0 || gy >= GRID_PX_H || p.x < 0 || p.x >= CANVAS_W) return null;
+    return { x: Math.floor(p.x / CELL_PX), y: Math.floor(gy / CELL_PX) };
   }
 
   private tryPlace(x: number, y: number, quiet = false): void {
