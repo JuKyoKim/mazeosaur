@@ -120,10 +120,18 @@ function wrap(s: string, cols: number, maxLines: number): string[] {
  * was in the sprite that failed to survive.
  *
  * It is also, measurably, the only plate that separates the directions from
- * each other. Differencing the committed frames pairwise: the `colBig`
- * column disagrees across 14.1-15.0% of its pixels and `colSmall` across
- * 8.0-8.7%, while the label and note columns are byte-identical because
- * nothing in them is drawn by a direction. So a reviewer comparing
+ * each other. Differencing the committed frames pairwise at a per-channel
+ * delta above 8, over a box twice the sprite size centred on each column:
+ * `colBig` disagrees across 11.3-14.8% of its pixels and `colSmall` across
+ * 7.4-8.9% — a consistent 1.5-1.7x per pixel of sprite. The box matters and
+ * is part of the claim: `colSmall` and `colBig` are centres, not edges, and
+ * measuring the whole span between them dilutes both figures to about 7%,
+ * at which point the two columns look equal and the conclusion inverts.
+ * Below the 92px header the note column is byte-identical and the label
+ * column differs across 0.04% of its pixels — that is the double-size boss
+ * sprite overhanging `colSmall - small`, not type. The header is the one
+ * part of those columns a direction touches, because it prints the
+ * direction's name. So a reviewer comparing
  * directions is sent here, and to `colBig` specifically — not to the sheet
  * frame, whose tray is direction-independent (see `doFrames`).
  */
@@ -206,10 +214,12 @@ function crop(src: Raster, x: number, y: number, w: number, h: number): Raster {
  * The per-direction frames answer "is this direction legible"; none of them
  * answers "which of these three do I want", because that question needs the
  * three held against each other and a reader cannot hold three screenshots
- * in their head. The board frames are nearly identical at phone scale and
- * the sheet tray is HUD type, which is direction-independent — so a reader
- * told to compare those compares three pictures that genuinely look alike
- * and learns nothing.
+ * in their head. And the two obvious candidates for the job mislead: at
+ * phone scale the board area of the frames differs across about one pixel
+ * in twelve, and the sheet frame's tray is HUD type, which no direction
+ * touches at all. Both of those are measured, beside the plate each is
+ * about — see `legibilitySheet` and `doFrames`. A reader sent to compare
+ * those compares three pictures that genuinely look alike.
  *
  * What separates them is the drawing: the outline weight, the proportions
  * and the palette. So each subject appears three times per direction — at

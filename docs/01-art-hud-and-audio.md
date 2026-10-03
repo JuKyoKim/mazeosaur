@@ -102,11 +102,22 @@ anything.
 
 **Which frame answers which question.** The board and sheet frames are the
 honest record of the product at true size, and at true size the three
-directions are much closer than a direction deck usually implies — the
-19.5pt cell flattens the treatment, and the sheet tray is HUD type, which
-is identical in all three. So they are the wrong frames to *choose* from
-even though they are the right frames to *ship* against. Choose from
-`directions-compared.png`, or from the 36px column of `*-legibility.png`.
+directions are much closer than a direction deck usually implies. The
+numbers, differencing the committed frames pairwise at a per-channel delta
+above 8: the board area disagrees across 6.6-8.2% of its pixels, the sheet
+frame's HUD tray across 0.25-0.39% — antialiasing on glyph edges, because no
+direction draws the tray — and the legibility sheet's 36px column across
+11.3-14.8%, its widest margin, with the note column beside it
+byte-identical. So the board and sheet plates are the wrong frames to
+*choose* from even though they are the right frames to *ship* against.
+Choose from `directions-compared.png`, or from the 36px column of
+`*-legibility.png`. The column figures are measured over a box twice the
+sprite size centred on the column; the comment on `legibilitySheet` in
+`tools/art/build.ts` says why the box is part of the claim.
+
+One pixel in twelve at the real cell is not a rounding error — the choice
+is real — but it is small enough that the right instruction is to decide on
+taste and quickly.
 
 **One honest caveat on Fossil Pixel.** True pixel-perfect rendering needs
 the canvas-to-device scale to be a whole number. FIT onto arbitrary phone
