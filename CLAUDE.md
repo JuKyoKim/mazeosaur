@@ -37,6 +37,8 @@ hatchling, juvenile, adult; upgrading is **growing**). Creeps are
 ## Working here
 
 - `npm run check` is the gate. Keep sim tests under a second.
+- CI is `docs/02-ci.md`: every step, how to run it locally, and why agents
+  propose workflow changes but cannot push them.
 - `npm run dev` serves the web prototype; `.claude/launch.json` has the
   same server for the in-app browser preview.
 - This repo deploys separately from arbor. Nothing here touches the fleet
