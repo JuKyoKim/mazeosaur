@@ -618,15 +618,26 @@ The sequence, all of it diegetic:
    greedy wall is one cell from sealing. When the player tries it, the
    blocked hatching plus `That would seal the maze` teaches the block rule
    at the exact moment the player's model predicts something else.
-6. **Migration 1 is six `normal` raptors, slow.** Enough to watch a kill,
-   see a meat pip, and see the count go up. Not enough to lose an egg even
-   with one dinosaur placed.
+6. **Migration 1 is six slow Parasaurolophus, at eight hit points.** Enough
+   to watch a kill, see a meat pip, and see the count go up. Not enough to
+   lose an egg even with one dinosaur placed. All three numbers are the
+   promise, not flavour: eight hit points is two hits from one Velociraptor
+   hatchling, so the strike reads as the cause of the fall, and half speed
+   is what keeps the herd inside that hatchling's range long enough to land
+   them. They are authored in `OVERRIDES` in `@mazeosaur/content` rather
+   than taken from the migration curve, and `content.test.ts` pins the
+   promise directly: one hatchling, at least one kill, no egg lost. A
+   longneck herd against a raptor is a neutral matchup on purpose —
+   migration 1 teaches that the towers are the walls, and nothing else.
 7. **The tray swaps on the first tap.** Tapping the placed dinosaur
    replaces the shop with the sheet, which has a **Grow** button on it. The
    swap is the teaching: growing is discovered, not announced.
-8. **Migration 2 is flying.** One archetype that ignores the maze, early,
-   while a leak costs one egg out of twenty. The lesson is cheap here and
-   expensive at migration 30.
+8. **Migration 5 is the first flying one.** One archetype that ignores the
+   maze, while a leak still costs one egg out of twenty. It is deliberately
+   not migration 2: at migration 2 the player owns a handful of hatchlings
+   and no maze yet, so "it ignores your maze" has nothing to land on.
+   By 5 there is a maze on the board to be flown over, and the lesson is
+   still cheap. It is ruinous at migration 30.
 
 The only words the first run shows are `Longer path`, `That would seal the
 maze` and `Not enough meat`. Everything else is the board.
