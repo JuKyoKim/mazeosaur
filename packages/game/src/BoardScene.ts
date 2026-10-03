@@ -125,12 +125,18 @@ export class BoardScene extends Phaser.Scene {
   private sellButton!: Button;
   private overlay!: Phaser.GameObjects.Container | null;
 
+  // Set once in the constructor, not per-run: whether a later create() is
+  // "Play again" rather than the scene's first create(). Per §5.3 that
+  // transition keeps the same seed instead of drawing a fresh one.
+  private hasStarted: boolean;
+
   constructor(
-    private readonly initialDoc: SaveDocument,
+    private initialDoc: SaveDocument,
     private readonly nextSeed: () => number,
     private readonly build: BuildStamp,
   ) {
     super("board");
+    this.hasStarted = false;
   }
 
   create(): void {
@@ -139,6 +145,10 @@ export class BoardScene extends Phaser.Scene {
     // here, or the HUD keeps touching destroyed objects.
     const run = this.initialDoc.run;
     this.doc = { ...this.initialDoc, run: null };
+    // Consume the resume once: `initialDoc` is otherwise never reassigned,
+    // so a later "Play again" (scene.restart()) would read this same `run`
+    // and resurrect the finished run instead of starting a new one.
+    this.initialDoc = this.doc;
     if (run) {
       // The shell already validated this run through loadSave; replaying
       // it here is how the game package turns saved data back into a
@@ -148,11 +158,14 @@ export class BoardScene extends Phaser.Scene {
       this.startedBy = run.startedBy;
       this.playedMsBase = run.playedMs;
     } else {
-      this.runSeed = this.nextSeed();
+      // §5.3: board draws a fresh seed on the title->board transition, but
+      // every later "again" keeps playing the same seed.
+      this.runSeed = this.hasStarted ? this.runSeed : this.nextSeed();
       this.game_ = new Game(content, this.runSeed);
       this.startedBy = this.build;
       this.playedMsBase = 0;
     }
+    this.hasStarted = true;
     this.sessionStartMs = this.time.now;
     this.acc = 0;
     this.speed = 1;
@@ -646,12 +659,18 @@ export class BoardScene extends Phaser.Scene {
             seed: this.runSeed,
             contentVersion: content.version,
             startedBy: this.startedBy,
-            log: this.game_.log,
+            // Copied, not aliased: `IndexedDbSaveStore` may coalesce this
+            // write up to `COALESCE_MS` into the future, and `tick`/`hash`
+            // above are a snapshot of right now. A live reference to
+            // `game_.log` would pick up whatever commands land on it
+            // before the deferred write actually commits, landing a log
+            // past the saved tick and failing replay on the next boot.
+            log: [...this.game_.log],
             tick: this.game_.state.tick,
             hash: this.game_.hash(),
             playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
           };
-    this.doc = { ...this.doc, run };
+    this.doc = { ...this.doc, run, writtenBy: this.build };
     return services(this).saves.put(this.doc);
   }
 
