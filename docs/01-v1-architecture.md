@@ -598,9 +598,18 @@ release. Layer 2 is live now.
 
 ## 4. Sim purity, mechanically
 
-Rule 1 was a convention enforced by review. It is now `npm run lint`, part
-of `npm run check`, and a CI step. The rules are in `tools/lint/rules.js`
-and each one says which repo rule it serves.
+Rule 1 was a convention enforced by review. It is now `npm run lint`, and
+`npm run check` runs it first, so it fails locally and on CI — the workflow
+runs `npm run check`, and `scripts/lint.mjs` installs its own toolchain on
+first use, so no workflow change was needed to make the gate real.
+
+An explicit `npm ci --prefix tools/lint` plus `npm run lint` step in
+`.github/workflows/check.yml` is still worth having, for a cached install
+and an honest timing split rather than for the gate. It needs a token with
+`workflow` scope, which this branch did not have; it is release's to land.
+
+The rules are in `tools/lint/rules.js` and each one says which repo rule it
+serves.
 
 Inside `packages/sim/src/**` and `packages/content/src/**`:
 

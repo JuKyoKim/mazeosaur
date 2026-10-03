@@ -376,8 +376,8 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   source-level import ban, a checked-in vendor allowlist, and removing
   `fetch`/`WebSocket`/`EventSource`/`sendBeacon` at runtime in the mobile
   entry point while wrapping XHR to same-origin reads only.
-- 2026-10-02: rule 1 is now `npm run lint` and a CI step rather than a
-  review habit. The linter carries its own TypeScript 6 in `tools/lint`
+- 2026-10-02: rule 1 is now `npm run lint`, which `npm run check` runs
+  first, so it fails on CI too rather than being a review habit. The linter carries its own TypeScript 6 in `tools/lint`
   because typescript-eslint will not load against the repo's TypeScript 7;
   holding the compiler back for a linter was the worse trade.
 - 2026-10-02: v1 has three scenes — title, board, results. The board draws
