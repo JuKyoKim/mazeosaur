@@ -14,16 +14,21 @@ ports themselves are section 2 of
 ## What is in here
 
 - `src/index.ts` — `mountGame(opts)`, the only export a shell uses.
+- `src/platform.ts` — the injected ports (`SaveStore`, `AudioPort`,
+  `NetPort`), `PlatformServices`, `MountOptions`, `GameHandle` and the
+  registry accessor, per section 2 of
+  [docs/01-v1-architecture.md](../../docs/01-v1-architecture.md).
 - `src/BoardScene.ts` — the board, the HUD and all input. The only scene
-  that constructs a `Game`.
+  that constructs a `Game`. Resumes a saved run by calling `@mazeosaur/sim`'s
+  `replay()`, and autosaves at phase boundaries through `services(this).saves`.
 - `src/theme.ts` — canvas size, colours, text styles. Shared constants
   live here rather than on a scene.
 
-That is the whole package today: `mountGame` starts `BoardScene` with a
-seed, and a shell injects nothing. Four more files are specified and not
-yet written — `src/platform.ts` (the injected ports, section 2),
+`mountGame` starts `BoardScene` with the save the shell already loaded
+and migrated, and a shell with nowhere to write injects `NULL_SAVE_STORE`.
+Two more files are specified and not yet written —
 `src/TitleScene.ts` and `src/ResultsScene.ts` (the other two v1 screens,
-section 5), and `src/ui.ts`, the button primitive they share. Write them
+section 5) — plus `src/ui.ts`, the button primitive they share. Write them
 against the doc rather than against this list, and extend this list when
 they land.
 

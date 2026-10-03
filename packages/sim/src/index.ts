@@ -53,3 +53,22 @@ export {
   type GameEvent,
   type LoggedCommand,
 } from "./game.js";
+export {
+  SAVE_FORMAT,
+  SAVE_VERSION,
+  ReplayDivergedError,
+  replay,
+  freshSave,
+  loadSave,
+  runMigrations,
+  type BuildStamp,
+  type BestRunSave,
+  type ProfileSave,
+  type SettingsSave,
+  type RunSave,
+  type SaveDocument,
+  type LoadFailure,
+  type RunDropReason,
+  type LoadOutcome,
+} from "./save.js";
+export { type SaveMigration, SAVE_MIGRATIONS } from "./save-migrations.js";

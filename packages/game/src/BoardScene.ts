@@ -1,7 +1,19 @@
 import Phaser from "phaser";
-import { CELL, Game, TICKS_PER_SECOND, type DinoDef, type GameEvent, type Refusal } from "@mazeosaur/sim";
+import {
+  CELL,
+  Game,
+  TICKS_PER_SECOND,
+  replay,
+  type BuildStamp,
+  type DinoDef,
+  type GameEvent,
+  type Refusal,
+  type RunSave,
+  type SaveDocument,
+} from "@mazeosaur/sim";
 import { content, hatchlings } from "@mazeosaur/content";
 import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
+import { services } from "./platform.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 const BOARD_H = content.valley.height * CELL_PX;
@@ -78,6 +90,14 @@ export class BoardScene extends Phaser.Scene {
   private prevPos!: Map<number, { x: number; y: number }>;
   private effects!: Effect[];
 
+  // Persistence. `doc` is the save as loaded, minus `run`, which is
+  // rebuilt from `game_` on every autosave; see `flush()`.
+  private doc!: SaveDocument;
+  private runSeed!: number;
+  private startedBy!: BuildStamp;
+  private playedMsBase!: number;
+  private sessionStartMs!: number;
+
   private staticGfx!: Phaser.GameObjects.Graphics;
   private towerGfx!: Phaser.GameObjects.Graphics;
   private dynGfx!: Phaser.GameObjects.Graphics;
@@ -105,15 +125,48 @@ export class BoardScene extends Phaser.Scene {
   private sellButton!: Button;
   private overlay!: Phaser.GameObjects.Container | null;
 
-  constructor(private readonly seed: number) {
+  // Set once in the constructor, not per-run: whether a later create() is
+  // "Play again" rather than the scene's first create(). Per §5.3 that
+  // transition keeps the same seed instead of drawing a fresh one.
+  private hasStarted: boolean;
+
+  constructor(
+    private initialDoc: SaveDocument,
+    private readonly nextSeed: () => number,
+    private readonly build: BuildStamp,
+  ) {
     super("board");
+    this.hasStarted = false;
   }
 
   create(): void {
     // scene.restart() re-runs create() on the same instance: every field
     // that refers to a display object or to the previous run must reset
     // here, or the HUD keeps touching destroyed objects.
-    this.game_ = new Game(content, this.seed);
+    const run = this.initialDoc.run;
+    this.doc = { ...this.initialDoc, run: null };
+    // Consume the resume once: `initialDoc` is otherwise never reassigned,
+    // so a later "Play again" (scene.restart()) would read this same `run`
+    // and resurrect the finished run instead of starting a new one.
+    this.initialDoc = this.doc;
+    if (run) {
+      // The shell already validated this run through loadSave; replaying
+      // it here is how the game package turns saved data back into a
+      // live Game, since the document carries no live object.
+      this.game_ = replay(content, run);
+      this.runSeed = run.seed;
+      this.startedBy = run.startedBy;
+      this.playedMsBase = run.playedMs;
+    } else {
+      // §5.3: board draws a fresh seed on the title->board transition, but
+      // every later "again" keeps playing the same seed.
+      this.runSeed = this.hasStarted ? this.runSeed : this.nextSeed();
+      this.game_ = new Game(content, this.runSeed);
+      this.startedBy = this.build;
+      this.playedMsBase = 0;
+    }
+    this.hasStarted = true;
+    this.sessionStartMs = this.time.now;
     this.acc = 0;
     this.speed = 1;
     this.prevPos = new Map();
@@ -193,15 +246,19 @@ export class BoardScene extends Phaser.Scene {
         }
         case "migration-started":
           this.status(e.bonus > 0 ? `Sent early: +${e.bonus} meat` : "The migration begins");
+          this.autosave();
           break;
         case "migration-cleared":
           this.status(`Migration cleared: +${e.bonus} meat`);
+          this.autosave();
           break;
         case "won":
           this.showOverlay("The nest is safe", `All ${content.migrations.length} migrations turned back with ${g.state.eggs} eggs left.`);
+          this.autosave();
           break;
         case "lost":
           this.showOverlay("The nest is lost", `Fell on migration ${g.state.migration + 1} of ${content.migrations.length}.`);
+          this.autosave();
           break;
         case "placed":
         case "sold":
@@ -582,6 +639,47 @@ export class BoardScene extends Phaser.Scene {
       this.selectedDino = null;
       this.setPanelVisible(false);
     }
+  }
+
+  // ---------------------------------------------------------- persistence
+
+  /**
+   * Writes the current run to the store. Called at phase boundaries
+   * (autosave) and by `GameHandle.suspend()` when the shell is about to
+   * background the app. A won or lost run is written with `run: null`:
+   * there is nothing left to resume.
+   */
+  flush(): Promise<void> {
+    const phase = this.game_.state.phase;
+    const run: RunSave | null =
+      phase === "won" || phase === "lost"
+        ? null
+        : {
+            valleyId: content.valley.id,
+            seed: this.runSeed,
+            contentVersion: content.version,
+            startedBy: this.startedBy,
+            // Copied, not aliased: `IndexedDbSaveStore` may coalesce this
+            // write up to `COALESCE_MS` into the future, and `tick`/`hash`
+            // above are a snapshot of right now. A live reference to
+            // `game_.log` would pick up whatever commands land on it
+            // before the deferred write actually commits, landing a log
+            // past the saved tick and failing replay on the next boot.
+            log: [...this.game_.log],
+            tick: this.game_.state.tick,
+            hash: this.game_.hash(),
+            playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
+          };
+    this.doc = { ...this.doc, run, writtenBy: this.build };
+    return services(this).saves.put(this.doc);
+  }
+
+  /** Fire-and-forget `flush()`: a storage error must never interrupt a running game. */
+  private autosave(): void {
+    this.flush().catch((err: unknown) => {
+      // No HUD surface for a background save failure; the player keeps playing.
+      console.error("mazeosaur: autosave failed", err);
+    });
   }
 
   /** For tests and debugging from the console. */

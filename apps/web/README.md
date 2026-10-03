@@ -31,12 +31,16 @@ In `src/main.ts` today:
   changes nothing; the game itself needs no network once the page has
   loaded. A failed registration is swallowed on purpose — it costs this
   session's cache and nothing else.
+- **Save storage**, in `src/save-store.ts`. IndexedDB, database
+  `mazeosaur`, object store `save`, key `default`, with one backup slot
+  for a record that fails to load. `main.ts` reads the raw record and
+  runs `@mazeosaur/sim`'s `loadSave` *before* calling `mountGame`, so no
+  scene does async work in `create()`. A save from a newer build gets a
+  `NULL_SAVE_STORE` for the rest of the session instead of the real
+  store, so nothing here can clobber it.
 
 Specified in section 2 and not written yet:
 
-- **Save storage.** IndexedDB, database `mazeosaur`, object store `save`,
-  key `default`. The shell reads and migrates the document *before*
-  mounting, so no scene does async work in `create()`.
 - **Lifecycle.** The shell listens for the tab going hidden and calls
   `GameHandle.suspend()` so an interrupted run is flushed.
 - **The network client**, if `apps/server` ever exists. It is injected as
