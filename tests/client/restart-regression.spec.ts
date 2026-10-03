@@ -27,10 +27,13 @@ test("scene.restart() leaves the canvas rendering with no renderer errors", asyn
   await waitAFrame(page);
 
   // A frozen canvas with a destroyed display object still referenced throws
-  // on (roughly) every frame, so give it several frames' worth of real time
-  // to make a static canvas visible as two identical snapshots.
+  // on (roughly) every frame, so give it real time to make a static canvas
+  // visible as two identical snapshots. A healthy idle build phase has
+  // nothing moving on screen except the HUD countdown, which only repaints
+  // once per whole second (TICKS_PER_SECOND = 20); wait past that boundary
+  // or a correctly-rendering canvas looks identical by coincidence, not bug.
   const snapA = await canvasSnapshot(page);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(1100);
   const snapB = await canvasSnapshot(page);
 
   expect(errors.messages, `renderer/page errors after restart:\n${errors.messages.join("\n")}`).toEqual([]);

@@ -98,9 +98,11 @@ test("full run: place, drag-paint at speed, grow, sell, send, leak, restart", as
 
   // The regression this harness exists for: a destroyed display object
   // referenced after restart freezes the canvas while the sim underneath
-  // keeps ticking. Prove the canvas is still being drawn.
+  // keeps ticking. Prove the canvas is still being drawn. The idle build
+  // phase only repaints its HUD countdown once per whole second
+  // (TICKS_PER_SECOND = 20), so wait past that boundary before comparing.
   const snapA = await canvasSnapshot(page);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(1100);
   const snapB = await canvasSnapshot(page);
   expect(snapB).not.toBe(snapA);
 
