@@ -24,7 +24,13 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // `devices["Desktop Chrome"]` carries its own 1280x720 viewport, which
+  // would otherwise replace (not merge with) the portrait viewport above —
+  // Playwright resolves `use` per project, not deep-merged by key. Re-assert
+  // it last so the game mounts at its real portrait aspect ratio instead of
+  // being letterboxed sideways, which silently shifts every pixel coordinate
+  // the tests click.
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 720, height: 1280 } } }],
   webServer: {
     command: "npm run dev",
     cwd: repoRoot,
