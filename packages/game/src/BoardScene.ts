@@ -1,11 +1,16 @@
 import Phaser from "phaser";
 import { CELL, Game, TICKS_PER_SECOND, type DinoDef, type GameEvent, type Refusal } from "@mazeosaur/sim";
 import { content, hatchlings } from "@mazeosaur/content";
+import type { ResumableRun } from "./platform.js";
+import type { RunSummary } from "./ResultsScene.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, COLORS, KIND_COLOR, text } from "./theme.js";
+import { makeButton, type Button } from "./ui.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 const BOARD_H = content.valley.height * CELL_PX;
 const HUD_Y = BOARD_H;
+/** How long the last kill or leak stays on screen before the results come up. */
+const END_DELAY_MS = 1100;
 
 interface Effect {
   kind: "attack" | "kill" | "flash" | "leak";
@@ -18,9 +23,10 @@ interface Effect {
   life: number;
 }
 
-interface Button {
-  bg: Phaser.GameObjects.Rectangle;
-  label: Phaser.GameObjects.Text;
+/** What starts a run: a fresh seed, or a saved run to replay into place. */
+export interface BoardData {
+  seed: number;
+  resume?: ResumableRun | null;
 }
 
 /** Cells on the line from `a` (exclusive) to `b` (inclusive), Bresenham. */
@@ -63,12 +69,15 @@ const REFUSAL_TEXT: Record<Refusal, string> = {
 };
 
 /**
- * The whole M1 client in one scene: board, HUD, input. It will split into
- * scenes once there is more than one screen. It never decides a rule; it
- * asks the Game and draws the answer.
+ * The run itself: board, HUD, input. It never decides a rule; it asks the
+ * Game and draws the answer, including whether the run is over — the sim
+ * raises "won" and "lost" and the scene only reacts by leaving.
  */
 export class BoardScene extends Phaser.Scene {
   private game_!: Game;
+  private seed = 1;
+  private resume: ResumableRun | null = null;
+  private ending = false;
   private acc = 0;
   private speed = 1;
   private prevPos = new Map<number, { x: number; y: number }>();
@@ -99,17 +108,24 @@ export class BoardScene extends Phaser.Scene {
   private panelStats!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
-  private overlay: Phaser.GameObjects.Container | null = null;
 
-  constructor(private readonly seed: number) {
+  constructor() {
     super("board");
   }
 
+  init(data: Partial<BoardData>): void {
+    // The title and results screens always supply a seed; the fallback
+    // only keeps a bare scene.start("board") from the console runnable.
+    this.seed = data.resume?.seed ?? data.seed ?? 1;
+    this.resume = data.resume ?? null;
+  }
+
   create(): void {
-    // scene.restart() re-runs create() on the same instance: every field
-    // that refers to a display object or to the previous run must reset
-    // here, or the HUD keeps touching destroyed objects.
+    // Starting this scene again re-runs create() on the same instance:
+    // every field that refers to a display object or to the previous run
+    // must reset here, or the HUD keeps touching destroyed objects.
     this.game_ = new Game(content, this.seed);
+    this.ending = false;
     this.acc = 0;
     this.speed = 1;
     this.prevPos.clear();
@@ -121,9 +137,10 @@ export class BoardScene extends Phaser.Scene {
     this.lastPaint = null;
     this.hoverCell = null;
     this.paletteButtons = [];
-    this.overlay = null;
     this.statusUntil = 0;
     this.cameras.main.setBackgroundColor(COLORS.bg);
+
+    if (this.resume) this.replay(this.resume);
 
     this.staticGfx = this.add.graphics();
     this.towerGfx = this.add.graphics();
@@ -132,6 +149,19 @@ export class BoardScene extends Phaser.Scene {
     this.buildHud();
     this.wireInput();
     this.refreshHud();
+  }
+
+  /**
+   * Put a saved run back on the board. The sim is deterministic, so
+   * ticking to each logged tick and re-applying the command rebuilds the
+   * exact state the player left. Storing that log is the shell's job.
+   */
+  private replay(run: ResumableRun): void {
+    for (const { tick, command } of run.log) {
+      while (this.game_.state.tick < tick) this.game_.tick();
+      this.game_.apply(command);
+    }
+    this.game_.drainEvents();
   }
 
   // ---------------------------------------------------------------- loop
@@ -194,10 +224,10 @@ export class BoardScene extends Phaser.Scene {
           this.status(`Migration cleared: +${e.bonus} meat`);
           break;
         case "won":
-          this.showOverlay("The nest is safe", `All ${content.migrations.length} migrations turned back with ${g.state.eggs} eggs left.`);
+          this.finish(true);
           break;
         case "lost":
-          this.showOverlay("The nest is lost", `Fell on migration ${g.state.migration + 1} of ${content.migrations.length}.`);
+          this.finish(false);
           break;
         case "placed":
         case "sold":
@@ -348,14 +378,7 @@ export class BoardScene extends Phaser.Scene {
   // ----------------------------------------------------------------- HUD
 
   private button(x: number, y: number, w: number, h: number, label: string, onClick: () => void, size = 20): Button {
-    const bg = this.add.rectangle(x, y, w, h, COLORS.button).setOrigin(0, 0).setInteractive({ useHandCursor: true });
-    const t = this.add.text(x + w / 2, y + h / 2, label, text(size)).setOrigin(0.5);
-    bg.on("pointerdown", (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
-      ev.stopPropagation();
-      onClick();
-      p.event.preventDefault?.();
-    });
-    return { bg, label: t };
+    return makeButton(this, x, y, w, h, label, onClick, { size });
   }
 
   private buildHud(): void {
@@ -475,22 +498,36 @@ export class BoardScene extends Phaser.Scene {
     this.statusUntil = this.time.now + 2000;
   }
 
-  private showOverlay(title: string, sub: string): void {
-    if (this.overlay) return;
-    const c = this.add.container(0, 0);
-    c.add(this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7).setOrigin(0, 0).setInteractive());
-    c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 - 60, title, text(48)).setOrigin(0.5));
-    c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 + 4, sub, text(22, COLORS.textDim)).setOrigin(0.5));
-    const b = this.button(CANVAS_W / 2 - 120, BOARD_H / 2 + 60, 240, 64, "Play again", () => this.scene.restart(), 22);
-    c.add([b.bg, b.label]);
-    this.overlay = c;
+  /**
+   * The run is over. The sim already decided which way; the scene only
+   * reads the final numbers, lets the last effect play, and leaves. The
+   * clock event dies with the scene, so the handover cannot fire twice
+   * or into a torn-down scene.
+   */
+  private finish(won: boolean): void {
+    if (this.ending) return;
+    this.ending = true;
+    this.painting = false;
+    this.lastPaint = null;
+    this.hoverCell = null;
+    const s = this.game_.state;
+    const summary: RunSummary = {
+      won,
+      seed: this.seed,
+      migrationsCleared: s.migration,
+      totalMigrations: content.migrations.length,
+      eggs: s.eggs,
+      meat: s.meat,
+    };
+    this.status(won ? "The nest holds" : "The nest is lost");
+    this.time.delayedCall(END_DELAY_MS, () => this.scene.start("results", summary));
   }
 
   // --------------------------------------------------------------- input
 
   private wireInput(): void {
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      if (this.overlay) return;
+      if (this.ending) return;
       const cell = this.cellAt(p);
       if (!cell) return;
       const dino = this.game_.dinoAt(cell.x, cell.y);
@@ -511,6 +548,7 @@ export class BoardScene extends Phaser.Scene {
       }
     });
     this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
+      if (this.ending) return;
       const cell = this.cellAt(p);
       this.hoverCell = cell;
       if (!this.painting || !p.isDown || !cell || !this.selectedDef) return;
