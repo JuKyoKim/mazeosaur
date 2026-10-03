@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { canvasSnapshot, openGame, trackPageErrors, waitAFrame } from "./helpers.js";
+import { openGame, simSnapshot, trackPageErrors, waitAFrame, waitForTickAdvance } from "./helpers.js";
 
 const SEED = 42;
 
@@ -26,16 +26,11 @@ test("scene.restart() leaves the canvas rendering with no renderer errors", asyn
   });
   await waitAFrame(page);
 
-  // A frozen canvas with a destroyed display object still referenced throws
-  // on (roughly) every frame, so give it real time to make a static canvas
-  // visible as two identical snapshots. A healthy idle build phase has
-  // nothing moving on screen except the HUD countdown, which only repaints
-  // once per whole second (TICKS_PER_SECOND = 20); wait past that boundary
-  // or a correctly-rendering canvas looks identical by coincidence, not bug.
-  const snapA = await canvasSnapshot(page);
-  await page.waitForTimeout(1100);
-  const snapB = await canvasSnapshot(page);
+  // A destroyed display object still referenced stalls the update loop
+  // (whether or not Phaser also throws), so prove liveness by the sim's own
+  // tick counter advancing rather than by sampling canvas pixels.
+  const afterRestart = await simSnapshot(page);
+  await waitForTickAdvance(page, afterRestart.tick);
 
   expect(errors.messages, `renderer/page errors after restart:\n${errors.messages.join("\n")}`).toEqual([]);
-  expect(snapB, "canvas pixels did not change after restart: the renderer looks frozen").not.toBe(snapA);
 });

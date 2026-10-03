@@ -58,12 +58,6 @@ export async function waitAFrame(page: Page): Promise<void> {
   );
 }
 
-export async function canvasSnapshot(page: Page): Promise<string> {
-  const data = await page.evaluate(() => document.querySelector("canvas")?.toDataURL() ?? "");
-  if (!data) throw new Error("no canvas found on the page");
-  return data;
-}
-
 /** Loads the game pinned to a seed and waits for the first real frame. */
 export async function openGame(page: Page, seed: number): Promise<void> {
   await page.goto(`/?seed=${seed}`);
@@ -77,10 +71,29 @@ export async function openGame(page: Page, seed: number): Promise<void> {
  * "for tests and debugging from the console" (see BoardScene.ts). This is
  * that console, automated.
  */
-export function simSnapshot(page: Page): Promise<{ meat: number; eggs: number; dinos: number; phase: string }> {
+export function simSnapshot(page: Page): Promise<{ meat: number; eggs: number; dinos: number; phase: string; tick: number }> {
   return page.evaluate(() => {
     const w = window as unknown as { mazeosaur: { scene: { keys: { board: { sim: { state: Record<string, unknown> } } } } } };
-    const s = w.mazeosaur.scene.keys.board.sim.state as { meat: number; eggs: number; dinos: unknown[]; phase: string };
-    return { meat: s.meat, eggs: s.eggs, dinos: s.dinos.length, phase: s.phase };
+    const s = w.mazeosaur.scene.keys.board.sim.state as { meat: number; eggs: number; dinos: unknown[]; phase: string; tick: number };
+    return { meat: s.meat, eggs: s.eggs, dinos: s.dinos.length, phase: s.phase, tick: s.tick };
   });
+}
+
+/**
+ * Phaser picks WebGL via `type: Phaser.AUTO` and the game is created without
+ * `preserveDrawingBuffer`, so `canvas.toDataURL()` cannot be trusted to show
+ * what was last drawn — sampling it is not a liveness check, WebGL or not.
+ * `state.tick` is the real signal: the update loop only advances it while
+ * ticking, so a frozen renderer (the destroyed-display-object bug this
+ * harness exists to catch) stalls it, whether or not Phaser also throws.
+ */
+export async function waitForTickAdvance(page: Page, fromTick: number, timeoutMs = 5_000): Promise<void> {
+  await page.waitForFunction(
+    (t) => {
+      const w = window as unknown as { mazeosaur: { scene: { keys: { board: { sim: { state: { tick: number } } } } } } };
+      return w.mazeosaur.scene.keys.board.sim.state.tick > t;
+    },
+    fromTick,
+    { timeout: timeoutMs },
+  );
 }

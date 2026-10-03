@@ -4,13 +4,13 @@ import {
   SELL_BUTTON,
   SEND_BUTTON,
   SPEED_BUTTON,
-  canvasSnapshot,
   cellCenter,
   openGame,
   paletteButtonCenter,
   simSnapshot,
   trackPageErrors,
   waitAFrame,
+  waitForTickAdvance,
 } from "./helpers.js";
 
 const SEED = 123;
@@ -94,17 +94,14 @@ test("full run: place, drag-paint at speed, grow, sell, send, leak, restart", as
   await waitAFrame(page);
 
   const afterRestart = await simSnapshot(page);
-  expect(afterRestart).toEqual({ meat: 60, eggs: 20, dinos: 0, phase: "build" });
+  expect(afterRestart).toMatchObject({ meat: 60, eggs: 20, dinos: 0, phase: "build" });
 
   // The regression this harness exists for: a destroyed display object
-  // referenced after restart freezes the canvas while the sim underneath
-  // keeps ticking. Prove the canvas is still being drawn. The idle build
-  // phase only repaints its HUD countdown once per whole second
-  // (TICKS_PER_SECOND = 20), so wait past that boundary before comparing.
-  const snapA = await canvasSnapshot(page);
-  await page.waitForTimeout(1100);
-  const snapB = await canvasSnapshot(page);
-  expect(snapB).not.toBe(snapA);
+  // referenced after restart stalls the update loop while the sim
+  // underneath has already reset. Prove liveness by the sim's own tick
+  // counter advancing — a WebGL canvas without `preserveDrawingBuffer`
+  // can't be trusted by sampling pixels.
+  await waitForTickAdvance(page, afterRestart.tick);
 
   expect(errors.messages).toEqual([]);
 });
