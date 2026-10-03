@@ -1,4 +1,5 @@
 import { mountGame } from "@mazeosaur/game";
+import { createWebAudio } from "./audio.js";
 
 // The shell decides the seed, and keeps deciding it: every run asks for a
 // new one, play-again included. `?seed=123` pins the lot so a bug can be
@@ -8,7 +9,15 @@ const fromUrl = Number(params.get("seed"));
 const pinned = Number.isFinite(fromUrl) && params.has("seed") ? fromUrl >>> 0 : null;
 const nextSeed = () => pinned ?? ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
 
-const game = mountGame({ parent: "game", seed: nextSeed(), nextSeed });
+// `?mute` plays the whole game silently, which is both how a phone is
+// usually held and the configuration a drive asserts against. The sink is
+// built from oscillators, so nothing here loads or fetches a clip.
+const game = mountGame({
+  parent: "game",
+  seed: nextSeed(),
+  nextSeed,
+  ...(params.has("mute") ? {} : { audio: createWebAudio() }),
+});
 
 // Dev only: poke the running sim from the console (`mazeosaur.scene.keys.board.sim`).
 if (import.meta.env.DEV) (window as unknown as { mazeosaur: unknown }).mazeosaur = game;
