@@ -17,7 +17,7 @@ export interface RunOutcome {
   readonly valleyId: string;
   readonly seed: number;
   readonly contentVersion: string;
-  /** Highest migration index cleared this run. */
+  /** How many migrations the run cleared. A win is content.migrations.length. */
   readonly migrationsCleared: number;
   readonly eggsLeft: number;
   readonly meatUnspent: number;

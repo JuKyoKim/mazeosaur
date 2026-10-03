@@ -18,7 +18,7 @@ export interface BuildStamp {
 }
 
 export interface BestRunSave {
-  /** Highest migration index cleared. */
+  /** How many migrations the run cleared. A win stores content.migrations.length. */
   readonly migrationsCleared: number;
   readonly eggsLeft: number;
   readonly fossils: number;

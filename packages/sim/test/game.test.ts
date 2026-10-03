@@ -129,6 +129,10 @@ describe("migrations", () => {
     g.apply({ type: "send" });
     runUntil(g, () => g.state.phase === "won" || g.state.phase === "lost");
     expect(g.state.phase).toBe("won");
+    // state.migration is a count of migrations cleared, not the highest index
+    // cleared: it is what BestRunSave.migrationsCleared stores, so a win has to
+    // read as all of them rather than as one short.
+    expect(g.state.migration).toBe(fixture.migrations.length);
   });
 
   it("ground-only dinosaurs ignore fliers", () => {
