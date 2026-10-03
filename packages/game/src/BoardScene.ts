@@ -12,6 +12,27 @@ const HUD_Y = BOARD_H;
 /** How long the last kill or leak stays on screen before the results come up. */
 const END_DELAY_MS = 1100;
 
+/**
+ * Nothing in the HUD is positioned by the measured width of a variable
+ * string: a changing string is either left-anchored with a wrap width
+ * equal to the gap it is allowed to fill, or right-anchored to a fixed
+ * edge. These three numbers are what the gaps are measured against, so
+ * moving a button means moving one of them too.
+ */
+/** Right edge of the build timer: 16px of air before Send at x=496. */
+const TIMER_RIGHT = 480;
+/** Left edge of the sheet's Grow button; the text column ends 12px short of it. */
+const GROW_X = CANVAS_W - 336;
+/** The sheet's text column: x=20 to the Grow button's 12px gutter. */
+const SHEET_WRAP = GROW_X - 12 - 20;
+/** Full-width HUD lines: x=16 to a 16px right margin. */
+const HUD_WRAP = CANVAS_W - 32;
+
+/** A one-line HUD label: wraps inside its column instead of overflowing it. */
+function line(size: number, wrap: number, color?: string): Phaser.Types.GameObjects.Text.TextStyle {
+  return { ...text(size, color), wordWrap: { width: wrap }, maxLines: 1 };
+}
+
 interface Effect {
   kind: "attack" | "kill" | "flash" | "leak";
   x: number;
@@ -106,6 +127,7 @@ export class BoardScene extends Phaser.Scene {
   private speedButton!: Button;
   private panelName!: Phaser.GameObjects.Text;
   private panelStats!: Phaser.GameObjects.Text;
+  private panelTraits!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
 
@@ -385,35 +407,43 @@ export class BoardScene extends Phaser.Scene {
     const y0 = HUD_Y;
     this.add.rectangle(0, y0, CANVAS_W, CANVAS_H - y0, COLORS.hud).setOrigin(0, 0);
 
-    // row 1: numbers, then send and speed at the right
-    this.meatText = this.add.text(16, y0 + 16, "", text(22, COLORS.meat));
-    this.eggsText = this.add.text(150, y0 + 16, "", text(22, COLORS.eggs));
-    this.waveText = this.add.text(272, y0 + 16, "", text(22));
-    this.timerText = this.add.text(420, y0 + 16, "", text(22, COLORS.textDim));
-    this.sendButton = this.button(496, y0 + 8, 144, 42, "Send", () => this.send(), 19);
-    this.speedButton = this.button(648, y0 + 8, 56, 42, "1x", () => this.cycleSpeed(), 19);
+    // row 1: the numbers that change every second, then send and speed.
+    // The migration counter is not one of those — it changes once a
+    // migration and it is the same fact as the migration's name, so it
+    // lives in row 3 and the timer gets the room.
+    this.meatText = this.add.text(16, y0 + 14, "", text(22, COLORS.meat));
+    this.eggsText = this.add.text(168, y0 + 14, "", text(22, COLORS.eggs));
+    // Right-aligned to a 16px gutter in front of Send at x=496: neither
+    // "45s" nor "24 left" can reach the button, whatever the digits do.
+    this.timerText = this.add.text(TIMER_RIGHT, y0 + 14, "", text(22, COLORS.textDim)).setOrigin(1, 0);
+    this.sendButton = this.button(496, y0 + 6, 144, 42, "Send", () => this.send(), 19);
+    this.speedButton = this.button(648, y0 + 6, 56, 42, "1x", () => this.cycleSpeed(), 19);
 
     // row 2: one button per kind
-    const py = y0 + 58;
+    const py = y0 + 54;
     const bw = Math.floor((CANVAS_W - 32 - (hatchlings.length - 1) * 4) / hatchlings.length);
     hatchlings.forEach((def, i) => {
-      const b = this.button(16 + i * (bw + 4), py, bw, 62, "", () => this.selectDef(def), 14);
+      const b = this.button(16 + i * (bw + 4), py, bw, 58, "", () => this.selectDef(def), 14);
       b.bg.setFillStyle(KIND_COLOR[def.kind], 0.25);
       b.label.setText(`${def.name}\n${def.cost} meat`).setAlign("center");
       this.paletteButtons.push({ def, button: b });
     });
 
-    // row 3: status + next migration
-    this.statusText = this.add.text(16, y0 + 132, "", text(18, COLORS.textDim));
-    this.previewText = this.add.text(16, y0 + 160, "", text(18));
+    // row 3: what just happened, which migration, and what is in it. All
+    // three are variable-width, so all three wrap at the full HUD width
+    // rather than trusting the content to stay short.
+    this.statusText = this.add.text(16, y0 + 118, "", line(18, HUD_WRAP, COLORS.textDim));
+    this.waveText = this.add.text(16, y0 + 142, "", line(18, HUD_WRAP));
+    this.previewText = this.add.text(16, y0 + 166, "", line(15, HUD_WRAP, COLORS.textDim));
 
-    // row 4: selected dino panel
-    const panelY = y0 + 196;
-    this.add.rectangle(8, panelY, CANVAS_W - 16, 68, COLORS.hudPanel).setOrigin(0, 0);
-    this.panelName = this.add.text(20, panelY + 8, "", text(20));
-    this.panelStats = this.add.text(20, panelY + 36, "", text(15, COLORS.textDim));
-    this.growButton = this.button(CANVAS_W - 336, panelY + 8, 190, 52, "Grow", () => this.grow(), 17);
-    this.sellButton = this.button(CANVAS_W - 136, panelY + 8, 120, 52, "Sell", () => this.sell(), 17);
+    // row 4: selected dino panel, flush to the bottom edge of the canvas
+    const panelY = y0 + 192;
+    this.add.rectangle(8, panelY, CANVAS_W - 16, CANVAS_H - panelY, COLORS.hudPanel).setOrigin(0, 0);
+    this.panelName = this.add.text(20, panelY + 8, "", line(20, SHEET_WRAP));
+    this.panelStats = this.add.text(20, panelY + 34, "", line(15, SHEET_WRAP, COLORS.textDim));
+    this.panelTraits = this.add.text(20, panelY + 54, "", line(15, SHEET_WRAP, COLORS.textDim));
+    this.growButton = this.button(GROW_X, panelY + 14, 190, 52, "Grow", () => this.grow(), 17);
+    this.sellButton = this.button(CANVAS_W - 136, panelY + 14, 120, 52, "Sell", () => this.sell(), 17);
     this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
     this.setPanelVisible(false);
 
@@ -423,6 +453,7 @@ export class BoardScene extends Phaser.Scene {
   private setPanelVisible(v: boolean): void {
     this.panelName.setVisible(v);
     this.panelStats.setVisible(v);
+    this.panelTraits.setVisible(v);
     this.growButton.bg.setVisible(v);
     this.growButton.label.setVisible(v);
     this.sellButton.bg.setVisible(v);
@@ -436,7 +467,6 @@ export class BoardScene extends Phaser.Scene {
     this.eggsText.setText(`Eggs ${s.eggs}`);
     const total = content.migrations.length;
     const shown = Math.min(s.migration + 1, total);
-    this.waveText.setText(`Migration ${shown}/${total}`);
     if (s.phase === "build") {
       this.timerText.setText(`${Math.ceil(s.buildTimer / TICKS_PER_SECOND)}s`);
       const bonus = g.earlySendBonus();
@@ -448,7 +478,12 @@ export class BoardScene extends Phaser.Scene {
       this.sendButton.bg.setFillStyle(COLORS.button);
     }
 
+    // The counter and the migration's name are one fact, so they share a
+    // line; what is in the migration goes under it. A boss migration is
+    // named after its genus, so the old single line printed the genus
+    // twice — split across the two lines it reads once each.
     const m = g.currentMigration();
+    this.waveText.setText(m ? `Migration ${shown}/${total} · ${m.name}` : `Migration ${shown}/${total}`);
     if (m) {
       const desc = m.groups
         .map((gr) => {
@@ -456,7 +491,7 @@ export class BoardScene extends Phaser.Scene {
           return inv ? `${gr.count}× ${inv.name} · ${inv.archetype} ${inv.kind}` : gr.invader;
         })
         .join(", ");
-      this.previewText.setText(`${s.phase === "migration" ? "Now" : "Next"}: ${m.name} — ${desc}`);
+      this.previewText.setText(`${s.phase === "migration" ? "Now" : "Next"}: ${desc}`);
     } else {
       this.previewText.setText("");
     }
@@ -474,16 +509,23 @@ export class BoardScene extends Phaser.Scene {
       if (d) {
         const def = g.dinoDef(d);
         const stage = ["", "hatchling", "juvenile", "adult"][def.stage];
-        this.panelName.setText(`${def.name}  ·  ${def.kind} ${stage}`);
+        this.panelName.setText(`${def.name} · ${def.kind} ${stage}`);
+        // Three lines, because one cannot carry six facts in the column's
+        // 352px. Per-hit damage stays beside dps: 200 a bite that one-shots
+        // is not the same thing as 77 dps of chip, and that difference is
+        // the reason to grow a tyrant.
         const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(1);
-        const extras = [
-          def.splash ? "splash" : "",
-          def.slow ? `slow ${def.slow.percent}%` : "",
-          def.stun ? `stun ${(def.stun.ticks / TICKS_PER_SECOND).toFixed(1)}s` : "",
-          def.targetCount && def.targetCount > 1 ? `${def.targetCount} targets` : "",
-        ].filter(Boolean);
-        this.panelStats.setText(
-          `${def.damage} dmg every ${(def.cooldown / TICKS_PER_SECOND).toFixed(2)}s (${dps}/s) · range ${(def.range / CELL).toFixed(1)} · hits ${def.targets}${extras.length ? " · " + extras.join(", ") : ""}`,
+        const hits = def.targets === "both" ? "ground+air" : def.targets;
+        this.panelStats.setText(`${def.damage} dmg · ${dps} dps · range ${(def.range / CELL).toFixed(1)} · ${hits}`);
+        this.panelTraits.setText(
+          [
+            def.splash ? "splash" : "",
+            def.slow ? `slow ${def.slow.percent}%` : "",
+            def.stun ? `stun ${(def.stun.ticks / TICKS_PER_SECOND).toFixed(1)}s` : "",
+            def.targetCount && def.targetCount > 1 ? `${def.targetCount} targets` : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
         );
         const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
         this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "Fully grown").setAlign("center");

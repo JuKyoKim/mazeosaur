@@ -345,6 +345,14 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   so late meat still buys late dinosaurs. The balance harness (a scripted
   player in `packages/content/test`) must survive at least 35 of 50;
   it reached 46 at this tuning, losing eggs mostly to bosses.
+- 2026-10-02: **HUD layout.** Nothing in the HUD is positioned by the
+  measured width of a variable string: variable-width text is
+  left-anchored with a wrap width equal to the gap it may fill, or
+  right-anchored to a fixed edge. The build timer right-aligns to x=480;
+  the migration counter lives with the migration's name, not with the
+  timer; the dinosaur sheet's text column is 20..372 and wraps at 352.
+  The results screen anchors its actions to the bottom for one-handed
+  reach rather than centring the block.
 - 2026-10-03: the HUD layout, sprite manifest, audio list and onboarding
   are specified in [docs/01-art-hud-and-audio.md](01-art-hud-and-audio.md),
   with the numbers shared with `tools/art/layout.ts` so the spec and the
