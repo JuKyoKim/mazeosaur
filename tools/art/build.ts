@@ -94,6 +94,30 @@ const PHONE_H = Math.round(CANVAS_H * SCALE);
  * brief asks; the right column is there so a reviewer can see what detail
  * was in the sprite that failed to survive.
  */
+/**
+ * Break a note into lines that fit `cols` characters without splitting a
+ * word. The 5x7 font is fixed-pitch, so a character count is a width; the
+ * notes are the one place on this sheet where a reviewer is reading prose
+ * rather than looking at a sprite, and a sentence cut off mid-clause is
+ * worse than no sentence at all.
+ */
+function wrap(s: string, cols: number, maxLines: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of s.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length <= cols) {
+      line = next;
+      continue;
+    }
+    lines.push(line);
+    line = word;
+    if (lines.length === maxLines) break;
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  return lines.slice(0, maxLines);
+}
+
 function legibilitySheet(d: Direction): Raster {
   const small = Math.round(CELL_PX * SCALE); // 20px: the real cell on a 390pt phone
   const big = CELL_PX;
@@ -102,6 +126,9 @@ function legibilitySheet(d: Direction): Raster {
   const colSmall = 300;
   const colBig = 400;
   const noteX = 470;
+  // The 5x7 font at TYPE.label advances 12px per character, so the note
+  // column holds 46 characters per line and the row holds two of them.
+  const noteCols = Math.floor((1040 - noteX - 16) / 12);
   const rows = KINDS.length * 3 + ARCHETYPES.length;
   const r = new Raster(1040, rows * rowH + 92);
   r.clear(BOARD.hud, 1);
@@ -121,7 +148,7 @@ function legibilitySheet(d: Direction): Raster {
       drawText(r, labelX, y + 28, `${kind} ${["", "hatchling", "juvenile", "adult"][stage]}`, TYPE.label, BOARD.textDim);
       r.blit(resample(sprite, small, small), colSmall - small / 2, y + (rowH - small) / 2);
       r.blit(resample(sprite, big, big), colBig - big / 2, y + (rowH - big) / 2);
-      drawText(r, noteX, y + 16, KIND_SILHOUETTE_NOTE[kind].slice(0, 46), TYPE.label, BOARD.textDim);
+      wrap(KIND_SILHOUETTE_NOTE[kind], noteCols, 2).forEach((line, i) => drawText(r, noteX, y + 9 + i * 18, line, TYPE.label, BOARD.textDim));
       y += rowH;
     }
   }
@@ -142,7 +169,7 @@ function legibilitySheet(d: Direction): Raster {
       r.blit(resample(sprite, sm, sm), colSmall - sm / 2, y + (rowH - sm) / 2);
       r.blit(resample(sprite, bg, bg), colBig - bg / 2, y + (rowH - bg) / 2);
     }
-    drawText(r, noteX, y + 16, ARCHETYPE_TELL[a].slice(0, 46), TYPE.label, BOARD.textDim);
+    wrap(ARCHETYPE_TELL[a], noteCols, 2).forEach((line, i) => drawText(r, noteX, y + 9 + i * 18, line, TYPE.label, BOARD.textDim));
     y += rowH;
   }
   return r;

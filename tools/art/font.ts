@@ -97,8 +97,16 @@ export const GLYPH_H = 7;
 export const CAP_H = 5;
 
 /** Columns of ink for one character, or null for an unmapped one. */
+/**
+ * Punctuation this 5x7 font does not carry, folded onto something it does.
+ * Without this an em-dash renders as a hole in a sentence, which reads as a
+ * bug in the mock rather than as a missing glyph.
+ */
+const FOLD: Record<string, string> = { "—": "-", "–": "-", "’": "'", "“": '"', "”": '"' };
+
 export function glyph(ch: string): boolean[][] | null {
-  const spec = GLYPHS[ch] ?? GLYPHS[ch.toUpperCase()];
+  const c = FOLD[ch] ?? ch;
+  const spec = GLYPHS[c] ?? GLYPHS[c.toUpperCase()];
   if (!spec) return null;
   return spec.split("/").map((row) => row.split("").map((c) => c === "1"));
 }
