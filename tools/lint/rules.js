@@ -107,6 +107,10 @@ export default [
       "apps/mobile/ios/**",
       "apps/mobile/android/**",
       "tools/**/dist/**",
+      // `npm run test:client` writes these; a failed client run must not
+      // then fail the linter on Playwright's own generated report.
+      "playwright-report/**",
+      "test-results/**",
     ],
   },
 
