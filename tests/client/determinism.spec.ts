@@ -4,6 +4,26 @@ import { openGame } from "./helpers.js";
 const SEED = 777;
 
 /**
+ * The tick both runs are wound forward to before the first command, so that
+ * "the same command log" is actually the same.
+ *
+ * `BoardScene.update()` ticks the very `Game` this test drives, and it does
+ * so from wall-clock `delta`. So by the time `openGame()` returns, the
+ * render loop has already applied *some* number of ticks, and that number
+ * depends on how long the mount happened to take. Two contexts therefore
+ * start from different ticks, and since `hash()` covers `state.tick`, the
+ * hashes differ for a reason that has nothing to do with determinism.
+ *
+ * Ticks are pure and carry no clock, so N ticks from the seed always give
+ * the same state whether the render loop or this test asked for them.
+ * Pinning the count is what makes the two runs comparable; it does not
+ * weaken the check. 60 is far above the two or three ticks a mount costs,
+ * and the guard below fails loudly rather than silently skipping ahead if a
+ * slow mount ever overshoots it.
+ */
+const START_TICK = 60;
+
+/**
  * Drives the exact `Game` instance the real, bundled client creates (via
  * `BoardScene.sim`) through an identical command log twice, in two separate
  * browser contexts, and compares `Game.hash()` — the same fingerprint
@@ -20,8 +40,21 @@ const SEED = 777;
  */
 async function playScript(page: import("@playwright/test").Page): Promise<{ hash: number; tick: number; phase: string }> {
   await openGame(page, SEED);
-  return page.evaluate(() => {
-    const g = window.mazeosaurBoard!().sim;
+  return page.evaluate((startTick) => {
+    const board = window.mazeosaurBoard!();
+
+    // Stop `BoardScene.update()` so the render loop cannot add a tick of its
+    // own while this script runs. Everything below is one synchronous task,
+    // so no frame could interleave anyway; pausing keeps that true for
+    // anyone who later splits this into two `evaluate` calls.
+    board.scene.pause();
+
+    const g = board.sim;
+
+    if (g.state.tick > startTick) {
+      throw new Error(`mount ticked past the pinned start: ${g.state.tick} > ${startTick}`);
+    }
+    while (g.state.tick < startTick) g.tick();
 
     // Every command is checked for a refusal. A refused command still
     // replays identically, so without this the whole script could stop
@@ -40,7 +73,7 @@ async function playScript(page: import("@playwright/test").Page): Promise<{ hash
     if (g.state.phase === "migration") throw new Error("migration never ended within 5000 ticks");
 
     return { hash: g.hash(), tick: g.state.tick, phase: g.state.phase as string };
-  });
+  }, START_TICK);
 }
 
 test("same seed and command log produce the same state hash through the real client", async ({ page, browser }) => {
