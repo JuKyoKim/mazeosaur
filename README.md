@@ -31,6 +31,7 @@ packages/game/      Phaser client
 apps/web/           Vite site + web-only network client
 apps/mobile/        Capacitor shell for iOS and Android
 apps/server/        web-only API: saves, leaderboards, replay verification
+tests/client/       Playwright specs that drive the real client in a browser
 docs/               proposals and decisions, numbered
 ```
 
@@ -41,10 +42,19 @@ npm install
 npm run check      # lint + typecheck + tests; the merge gate
 npm run lint       # the sim-purity and scene-restart rules on their own
 npm run dev        # the web prototype on http://localhost:5173
+npm run test:client  # drive the real client in a headless browser
 ```
 
 Node 22 or newer. The simulation package has no dependencies and its
 tests run in well under a second; keep it that way.
+
+`npm run test:client` is the one gate `npm run check` does not include:
+it boots a browser and a dev server, so it belongs outside the
+under-a-second budget. It needs `npx playwright install chromium` once.
+It starts its own dev server and never reuses one it finds, because a
+server already on the port is serving *some* checkout and that is
+routinely not the one under test; set `MAZEOSAUR_CLIENT_PORT` to run it
+while another worktree holds 5173.
 
 `npm run lint` is where the repo's rules stop being conventions: no
 clock, no timers, no DOM, no `Math.random` and no inexact `Math` inside
