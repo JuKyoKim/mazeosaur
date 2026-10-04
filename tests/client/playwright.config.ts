@@ -25,7 +25,11 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false, // one dev server, one port; keep it simple
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // No retry net: these specs drive a local dev server and a local browser
+  // with a pinned seed, so a failure is a real defect or a real race, not a
+  // flaky third party. A retry here hid a genuine determinism-spec race
+  // once, reporting it as `1 flaky, 2 passed`.
+  retries: 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: "../../playwright-report" }]] : "list",
   outputDir: "../../test-results",
   use: {
