@@ -321,49 +321,35 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * 2px diagonal hatching across a square, which is the refused preview's
+   * Diagonal hatching across a square, which is the refused preview's
    * second channel (§4: "the hatching is not decoration"). Section 8 step 5
    * calls it "the blocked hatching" by name.
+   *
+   * **Every number here is §4's** — 3px stripes of `ink` at alpha 1, 8px
+   * apart, over the fill at 0.45 — and §4 carries the measurements behind
+   * them. Change them there, not here.
+   *
+   * The one thing worth keeping next to the code is why the width is what
+   * moved. Contrast ratio does not distinguish these options at all: once a
+   * tenth of the cell is solid ink and a tenth is solid fill, the 10th/90th
+   * percentile is just measuring the two colours and reads the same for 2px,
+   * 3px and a tighter spacing alike. What separates them is how much of the
+   * cell is actually at those extremes rather than smeared between them by
+   * antialiasing a diagonal, which is RMS luminance modulation: 3px lifts it
+   * from 61% to 81%, where a tighter spacing gives 74% and raising the fill
+   * to 0.60 gives only 64%.
    *
    * Clipped by arithmetic rather than by a mask or a render texture: each
    * stripe is a chord of the square clamped to its own edges, so this is
    * `lineBetween` calls into the graphics object already being filled and
    * allocates nothing. A mask here would cost a second draw and a texture
    * per preview cell, on the one draw path that runs every frame.
-   *
-   * The stripes are `ink`, not `refusal`, and §4 does not say which — see
-   * the note on `ink`. Hatching in `refusal` makes the stripe and the fill
-   * the same hue at two alphas, so the contrast between them is set by
-   * whatever the cell already had on it, and the fill is only 0.45. Measured
-   * off a 720x1280 drive, luminance contrast of stripe against fill (10th
-   * and 90th percentile over the cell interior, so one antialiased pixel
-   * cannot set it):
-   *
-   *            refusal @0.9   ink @1
-   *   plain cell     1.20:1   1.56:1
-   *   spawn marker   1.25:1   5.04:1
-   *
-   * The second row is the one that justifies the change: spawn, both
-   * checkpoints and the nest carry a bright marker that lifted the fill to
-   * the stripe's own luminance and erased the hatching, leaving exactly the
-   * four cells a new player tries first — all of which always refuse —
-   * signalling by hue alone.
-   *
-   * The first row is the honest limit and is **not** good enough on its own:
-   * over a dark valley cell the fill is only 45% opaque, so there is not
-   * much luminance there for a stripe to contrast against, and a 2px
-   * diagonal antialiases away a good part of what there is. The hatching is
-   * a supporting channel here, not a sufficient one; the toast and the cell
-   * flash carry the refusal. Raised on ARB-168 with these numbers.
-   *
-   * The alpha is 1 and not the pips' 0.85 because §4 pins the width and the
-   * spacing but not the alpha, and at 2px on a diagonal every point of
-   * coverage is already being spent on antialiasing.
    */
   private hatchCell(gfx: Phaser.GameObjects.Graphics, x: number, y: number, size: number): void {
-    gfx.lineStyle(2, COLORS.ink, 1);
-    // Lines of slope -1, i.e. x + y = k. Stepping k by 8 gives 2px of ink
-    // on ~5.7px of gap, which reads as hatching rather than as a fill.
+    gfx.lineStyle(3, COLORS.ink, 1);
+    // Lines of slope -1, i.e. x + y = k. Stepping k by 8 puts them 8/√2 =
+    // 5.7px apart measured across the stripes, so 3px of ink leaves ~2.7px
+    // of gap — still gaps, so it reads as hatching rather than as a fill.
     for (let k = 8; k < size * 2; k += 8) {
       // Where x + y = k meets the square: clamp both ends into [0, size].
       const ax = Math.max(0, k - size);
