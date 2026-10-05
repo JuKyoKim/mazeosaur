@@ -14,7 +14,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          # Both lockfiles, because this key replaces setup-node's default
+          # rather than adding to it: dropping the root entry would change
+          # the cache key for the main install. These are the only two
+          # lockfiles in the repo.
+          cache-dependency-path: |
+            package-lock.json
+            tools/lint/package-lock.json
       - run: npm ci
+      # `npm run check` runs the linter first, so this is a second lint run
+      # of about a second. It buys a named step in the Actions UI, so a lint
+      # failure reads as "lint" instead of as a failure inside "check".
+      - run: npm run lint
       - run: npm run check
       - run: npm run build
       - name: bundle size budget
@@ -44,12 +55,40 @@ jobs:
           done
           echo "bundle clean of sockets and beacons"
 
-  # Builds and pushes the deployable web image only after `check` is green,
-  # and only from main — never from a PR, which has no packages:write token.
+  client-smoke:
+    # Separate job from `check`: it boots a real browser against the real
+    # dev server, which is slower than the sim's under-a-second budget and
+    # has no business gating on the same runner step as typecheck/vitest.
+    runs-on: ubuntu-latest
+    # The suite takes ~31s. The job waits on a dev server coming up, so a
+    # server that never does would otherwise hang on the 6-hour default.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:client
+      - name: upload playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+  # Builds and pushes the deployable web image only after `check` and
+  # `client-smoke` are both green, and only from main — never from a PR,
+  # which has no packages:write token.
   # The beelink stack (JuKyoKim/arbor, stacks/beelink/mazeosaur) pins a tag
   # from here; see the ARB-62 handoff comment for the compose diff.
   publish:
-    needs: check
+    needs: [check, client-smoke]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
