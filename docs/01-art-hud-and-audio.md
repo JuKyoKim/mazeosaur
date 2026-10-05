@@ -124,6 +124,9 @@ anything.
 - `*-legibility.png` — every dinosaur and every invader at 20px (the real
   cell) beside 36px (the logical cell), with the tell to look for.
 - `*-effects.png` — hit, kill, leak, blocked and slow at board scale.
+- `toy-box-strikes.png` — the six attack strikes, three steps each, on the
+  cell of the adult that throws them (section 5.4.1). Only the shipped
+  direction has one, because only it has strikes.
 - `kind-hues.png` — the six hues under normal, protan, deutan and tritan
   vision.
 - `directions-compared.png` — all three in one picture: eight subjects at
@@ -929,22 +932,127 @@ screen: a 120ms `refusal` vignette at 30% and five egg pips falling.
 Blocked placement does not animate the dinosaur at all, because the
 placement did not happen — animating it would say that it nearly did.
 
+### 5.4.1 The attack strike: the hit says which kind is hitting
+
+The `hit` row above is a tracer in the dinosaur's hue and nothing else, and
+on a live board that is one shape for all six kinds with the colour doing
+all the work. The owner looked at the demo and said so: *"the elemental
+factors does get reflected well with the color, but the attack animation
+sprite will need to properly reflect this."* Colour is never the only
+channel — section 3 holds that line for the dinosaurs themselves and the
+attack effect was the place it was not held.
+
+So `hit` is two things, with one job each:
+
+| layer | says | where it is drawn |
+| --- | --- | --- |
+| the tracer | *which invader* is being hit | from the dinosaur to the target, 1–3 cells |
+| the **strike** | *which kind* is hitting | on the dinosaur's own cell, never pointed |
+
+The strike is not pointed at anything, and that is deliberate. An isometric
+block render cannot be rotated without reading as a second camera, and the
+tracer already carries the direction. Splitting the two is what lets the
+strike be a fixed silhouette the player learns once.
+
+**Six strikes, six silhouettes.** Each is the animal's own weapon, taken
+from the palaeontology and not from a film — rule 5 — and the shapes were
+chosen so that shape alone separates them at a 36px cell with sixty
+invaders on the board:
+
+| kind | strike | the silhouette | the motion |
+| --- | --- | --- | --- |
+| tyrant | bite | two converging wedges | closes along the facing, horizontal |
+| longneck | stomp | a slab and a flat ring | drops, then goes out radially |
+| horned | horn charge | one long thin spike | thrusts along the facing, the longest reach |
+| raptor | leap | a stepped crescent | arcs up over the animal and hooks down |
+| flier | dive | a narrow dart | descends steeply from above the cell |
+| armored | tail club | a ball on a stalk | sweeps across the facing, laterally |
+
+A V, a ring, a line, an arc, a diagonal and a ball. No two of them are the
+same shape at any size, which is the same bar section 3 sets for the kind
+hues and the same reason the kinds have six silhouettes of their own.
+
+**Hue stays the kind channel it already is.** A strike is drawn in the
+palette of the dinosaur throwing it, so the kind is now carried three ways
+at once — hue, the animal's silhouette, and the strike's — and none of them
+is doing it alone.
+
+**Three steps, and the third never holds the weapon.**
+
+| step | what it is | why |
+| --- | --- | --- |
+| 1 | the wind-up | shows where the weapon was, so the strike has somewhere to come from |
+| 2 | full extension | the frame that reads; the one a player actually sees at speed |
+| 3 | the mark left behind | dust, a lit seam, a ground crack — never the weapon |
+
+Step 3 holding no weapon is the rule that keeps the clip from looking like
+it rewinds when the client holds the last frame while the effect fades.
+
+**The client's contract**, in full, with no input but the atlas and the cell
+the sim gives you. It is the dinosaur's own rule from 5.5 with one line
+changed, because a strike is anchored on the cell rather than on a pair of
+feet:
+
+```ts
+const { authored, cell, drawCells } = strikes.meta;  // 64, 36, 1.25
+sprite.setOrigin(0.5, 0.5);                          // the cell centre
+sprite.setScale((cell * drawCells) / authored);      // 45/64, a dinosaur's own scale
+sprite.setPosition(cellX * cell + cell / 2, cellY * cell + cell / 2);
+```
+
+Frame names are `strike-<kind>-<step>`, so the clip is
+`generateFrameNames({ prefix: 'strike-tyrant-', start: 1, end: 3 })` and
+nothing is looked up. Play the three steps across the effect's life and
+fade on the last; **never gate the hit behind the clip** — the damage has
+already happened in the sim, and the strike is drawn over the committed
+state exactly as a placement animation is.
+
+Timings, and they are the `hit` row's 80ms spent rather than added to:
+
+| step | held |
+| --- | --- |
+| 1 | 50ms |
+| 2 | 90ms |
+| 3 | 120ms, fading to zero alpha |
+
+Under reduced motion (section 7) the clip does not play: step 2 alone is
+drawn for 90ms and fades. It is the frame that carries the kind, so the
+information survives and the movement does not.
+
+The plate the client implements against is
+`docs/art/toy-box-strikes.png`: all eighteen frames at board scale, each on
+the cell of the adult that throws it, drawn with the four lines above and
+not with a layout invented for the picture. A strike alone cannot be judged
+— the question is whether the shape still reads on top of the animal.
+
+**What this does and does not settle.** The attack effect is in v1. Idle
+breath and walk cycles are still not — see section 10 item 3, which this
+narrows rather than repeals.
+
 ### 5.5 The atlas
 
-Two atlases, Phaser JSON Hash format, shelf-packed by descending height into
-a 512px width with 1px padding. **Only the chosen direction is shipped**;
-`npm run art:atlas` writes it, and `tools/art/build.ts atlas <direction>`
-will write any of the four for a comparison. Which one is chosen is `CHOSEN`
-in `tools/art/directions.ts` and nowhere else, so the atlas command and the
-border check below cannot disagree about it.
+Three atlases, Phaser JSON Hash format, shelf-packed by descending height
+into a 512px width with 1px padding. **Only the chosen direction is
+shipped**; `npm run art:atlas` writes it, and
+`tools/art/build.ts atlas <direction>` will write any of the four for a
+comparison. Which one is chosen is `CHOSEN` in `tools/art/directions.ts` and
+nowhere else, so the atlas command and the border check below cannot
+disagree about it.
 
 ```
 packages/game/assets/toy-box/dinos.png    + dinos.json
 packages/game/assets/toy-box/invaders.png + invaders.json
+packages/game/assets/toy-box/strikes.png  + strikes.json
 ```
 
-Frame names are `<kind>-<stage>` and `<archetype>-<kind>`, both lowercase,
-so the client can build a frame name from sim state without a lookup table.
+Frame names are `<kind>-<stage>`, `<archetype>-<kind>` and
+`strike-<kind>-<step>`, all lowercase, so the client can build a frame name
+from sim state without a lookup table.
+
+`strikes` exists only for a `blocks` direction and the three archived ones
+have two atlases, not three. They are the record of how the choice was made
+and nothing in them is in an atlas, so the honest answer for them is that
+they have no strikes rather than a half-converted one.
 
 What keeps those four files current is `tools/art/test/assets.test.ts`, which
 `npm run check` runs: the committed PNG's pixels and the committed JSON's text
@@ -955,13 +1063,24 @@ has been run and the result committed. Nothing else would catch it — the
 board frames in `docs/art/` blit the in-memory sprite, so they agree with the
 code whether or not the atlas does.
 
-**Frames are trimmed to the ink**, and are declared as untrimmed frames whose
-`sourceSize` is the trimmed size. That is deliberate, and it is the whole
+**Dinosaur and invader frames are trimmed to the ink**, and are declared as
+untrimmed frames whose `sourceSize` is the trimmed size. That is deliberate, and it is the whole
 reason 5.0's anchor costs the client one line: Phaser resolves `setOrigin`
 against `sourceSize`, so a frame that claims to have been authored at its own
 ink size puts `setOrigin(0.5, 1)` exactly on the animal's feet. Declaring
 `trimmed: true` and carrying the offset would be the same pixels and would
 move the origin back off them.
+
+**Strike frames are the one set packed untrimmed**, and for the opposite
+reason. Trimming answers "where is the animal" by throwing away the answer
+to "where in the cell was this drawn", and for an attack effect that second
+question is the whole content of the frame: the club swings out to one side,
+the dive comes down from above, the stomp's ring goes out past the cell on
+all four sides. Trimmed, the three steps of a swing would be centred on top
+of each other and the swing would be gone. So a strike frame is the full
+128px square — `STRIKE_FRAMES` authored squares on a side, exactly as the
+boss is — the client's anchor is the square's own centre, and the cost is
+transparent pixels, which is what PNG compresses best: 12.4 kB for all 18.
 
 The scale's denominator therefore cannot come from the frame, so it is in
 `meta`, per atlas rather than per frame:
@@ -1013,9 +1132,23 @@ four cells. `INVADER_BOX_CELLS` and `INVADER_FRAMES` in `tools/art/sprites.ts`
 carry both halves, and `tools/art/test/atlas.test.ts` asserts that the scale
 above reproduces the board frames for all 54 invader frames.
 
+**A strike is the same trap as the boss, in the same direction.** Its frame
+is two authored squares wide and `meta.authored` is still 64, because the
+double frame buys reach at the dinosaur's own world scale rather than
+drawing the effect twice as large. Read the frame's own 128 as the
+denominator and every strike comes out at half the size of the animal
+swinging it. `strikeFit` in `tools/art/sprites.ts` is what makes the two
+world scales equal, and `tools/art/test/atlas.test.ts` asserts it both ways:
+that the client's rule gives a strike a dinosaur's scale, and that every
+strike frame is still the whole square.
+
 **Nothing may touch the edge of its authored square.** `art:check` measures
-every one of the 72 frames in a direction against its own border and fails
-the build for the shipped direction. Trimming is not a safety net: `pack`
+every one of the 90 frames in a direction against its own border and fails
+the build for the shipped direction. The strikes are the frames most able to
+fail it: `project`'s screen `v` is `(x + z)/2 - y`, so height in the model
+costs twice what reach does, and the flier's wind-up was authored above
+y = 1 and clipped off the top of its own square until the check said so.
+Trimming is not a safety net: `pack`
 trims to the ink that survived, so the authored square is a working area and
 a pixel on its edge is a pixel that was thrown away — usually the outline,
 which is why it is nearly invisible and worth asserting rather than looking
@@ -1031,7 +1164,7 @@ archetype, so it comes from the shared silhouette reaching x = 0:
 
 | direction | frames touching | border pixels | worst frame |
 | --- | --- | --- | --- |
-| **Toy Box** (shipped, gated) | 0 of 72 | 0 | — |
+| **Toy Box** (shipped, gated) | 0 of 90 | 0 | — |
 | Fossil Pixel | 48 of 72 | 133 | `flier-3`, 16 |
 | Clay Pack | 57 of 72 | 606 | `longneck-3`, 40 |
 | Valley Naturalist | 42 of 72 | 150 | `flier-3`, 21 |
@@ -1045,10 +1178,15 @@ inside it. Measured by `art:check`:
 
 | direction | authored | frames | atlas bytes |
 | --- | --- | --- | --- |
-| **Toy Box** (shipped) | 64px | 72 | **57.7 kB** |
+| **Toy Box** (shipped) | 64px | 90 | **70.0 kB** |
 | Fossil Pixel | 36px | 72 | 23.0 kB |
 | Clay Pack | 48px | 72 | 124.9 kB |
 | Valley Naturalist | 48px | 72 | 119.7 kB |
+
+Toy Box carries 18 frames the other three do not: the attack strikes. They
+cost 12.4 kB, which is also the measured answer to the question section 10
+item 3 asks about animation — a frame in this direction is a camera pass
+over a model, and eighteen of them did not move the budget.
 
 All four are irrelevant against 40 MB, which is the useful finding: **the
 atlas is not what will blow the budget, and the direction was therefore
@@ -1219,12 +1357,16 @@ button was, so the thumb does not move.
 2. **The kind-hue change** in section 3 is a proposed replacement for
    `KIND_COLOR` and can land independently of the art — it is measured, and
    it is an improvement on M2 under every eye.
-3. **Animation.** v1 is static sprites plus the five effects. Idle breath
-   and a two-frame walk are the obvious next thing and are not specified
-   here. In blocks they are cheap in a way they would not have been in the
-   flat directions — a frame is a camera pass over a model, so a bob is a
-   translation of a few boxes rather than a redrawn sprite — but they are
-   still frames in the atlas, and 57.7 kB is the number they multiply.
+3. **Animation, minus the attack.** The owner has since asked for the
+   attack effect by name, so **the attack strike is in v1 and is specified**:
+   section 5.4.1, eighteen frames in the atlas. What is still open is
+   everything about the *animal*: **idle breath and a two-frame walk are not
+   in v1 and are not specified here.** In blocks they are cheap in a way
+   they would not have been in the flat directions — a frame is a camera
+   pass over a model, so a bob is a translation of a few boxes rather than a
+   redrawn sprite — and the strikes are now the measurement of that: 18
+   frames for 12.4 kB against a 40 MB binary. Size is not what defers them.
+   Nobody has specified what a Toy Box dinosaur does standing still.
 4. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
    it stands. The proposal says "a final one to be designed", so this is a
    placeholder the content can change without touching this document.
