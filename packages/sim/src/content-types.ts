@@ -21,10 +21,13 @@ export const CELL = 1000;
  * run is still exactly (seed, content, command log) and there is no
  * difficulty switch anywhere in the simulation — rule 4 holds.
  *
- * The type lives here anyway because the save format does: a resumed run
- * has to say which difficulty it was played at, and `narrowRunSave` can
- * only check that exhaustively against a closed union. `SettingsSave.speed`
- * is here for the same reason.
+ * The type lives here anyway because the save format does, and a resumed
+ * run will have to say which difficulty it was played at. `RunSave` does
+ * not carry that field yet — it is ARB-220 — but when it does,
+ * `narrowRunSave` can only check it exhaustively against a closed union,
+ * which is the same reason `SettingsSave.speed` is `1 | 2 | 3` here and
+ * not `number`. Until then the difficulty rides inside `content.version`,
+ * which `loadSave` already compares.
  */
 export type Difficulty = "easy" | "medium" | "hard";
 

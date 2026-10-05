@@ -382,9 +382,14 @@ is **dropped** with `runDropped: "content-version"` instead of replaying
 at numbers the player never played. The guarantee is in the format, not in
 the shell remembering.
 
-The save still carries the difficulty as its own field, so the shell knows
-which `Content` to build *before* it asks; the `===` check is the backstop
-for when it gets that wrong, not the mechanism.
+Today that version check is the *whole* of the protection, not a backstop.
+`RunSave` has no difficulty field, so a shell resuming a run has nothing to
+read and has to guess which `Content` to hand in; the `===` is what catches
+it guessing wrong. Giving the save its own `difficulty` field — so the
+shell can know rather than guess, and the version check goes back to being
+the second line of defence — is [ARB-220](/ARB/issues/ARB-220), which bumps
+`SAVE_VERSION` and appends the first migration entry. Nothing above this
+paragraph waits on it.
 
 ### 1.6 Size, measured
 
