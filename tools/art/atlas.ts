@@ -24,7 +24,7 @@ import { CHOSEN, DIRECTIONS, KINDS, type Direction } from "./directions.js";
 import { CELL_PX, DRAW_CELLS } from "./layout.js";
 import { pngHasPixels } from "./png.js";
 import { type Raster } from "./raster.js";
-import { atlasJson, dinoSprite, invaderSprite, pack } from "./sprites.js";
+import { atlasJson, dinoSprite, invaderSprite, pack, strikeEntries } from "./sprites.js";
 
 /** Where a direction's atlas lives, relative to the repo root. */
 export const assetDir = (id: string): string => `packages/game/assets/${id}`;
@@ -34,27 +34,38 @@ export type AtlasFile =
   | { rel: string; kind: "json"; text: string };
 
 /**
- * Both atlases for a direction, generated in memory and not yet written.
+ * Every atlas for a direction, generated in memory and not yet written.
  *
  * The 256px sheet is for a direction authored at 24px or smaller; anything
  * larger needs 512, and Toy Box's 64px square is the case that decides it.
+ *
+ * `strikes` is the third set and the one that is packed **untrimmed**: an
+ * attack effect's position inside its frame is the content of the frame, so
+ * there is nothing to trim away without losing it. It is also empty for a
+ * direction that is not `blocks` — `strikeEntries` says why — and an empty
+ * set is skipped rather than written as a sheet with no frames in it, so
+ * the three archived directions keep exactly the two atlases they had.
  */
 export function atlasFiles(d: Direction): AtlasFile[] {
   const sets = [
     {
       name: "dinos",
+      trim: true,
       entries: KINDS.flatMap((kind) => ([1, 2, 3] as const).map((stage) => ({ name: `${kind}-${stage}`, raster: dinoSprite(kind, stage, d) }))),
     },
     {
       name: "invaders",
+      trim: true,
       entries: ARCHETYPES.flatMap((a) => KINDS.map((kind) => ({ name: `${a}-${kind}`, raster: invaderSprite(a, kind, d) }))),
     },
+    { name: "strikes", trim: false, entries: strikeEntries(d) },
   ];
   const width = d.spritePx <= 24 ? 256 : 512;
 
   const out: AtlasFile[] = [];
-  for (const { name, entries } of sets) {
-    const packed = pack(entries, width);
+  for (const { name, trim, entries } of sets) {
+    if (!entries.length) continue;
+    const packed = pack(entries, width, 1, trim);
     out.push({ rel: `${assetDir(d.id)}/${name}.png`, kind: "image", raster: packed.raster, frames: packed.frames.length });
     out.push({
       rel: `${assetDir(d.id)}/${name}.json`,
