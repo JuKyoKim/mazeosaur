@@ -348,7 +348,7 @@ the thumb already are. Left-aligned `body` on a 78%-opaque panel with a
 event. 1.6 seconds, then a 200ms fade.
 
 Messages are short and say what, not why-not: `That would seal the maze`,
-`Not enough meat`, `Rock`, `+96 meat`.
+`Not enough meat`, `Solid rock`, `+96 meat`.
 
 ### Why the tray is a bottom row, and what the references actually do
 
@@ -378,8 +378,12 @@ Where ours differs, and why:
   reachable part of the screen and the bottom third is the thumb's arc. The
   bank moves to the bottom or the player re-grips on every purchase.
 - **It fits; it never scrolls or pages.** BTD6 pages because it has over
-  twenty towers. We have exactly six kinds and six 109px cards fit 720 with
-  5 gaps of 6 and 37px spare. Fitting is worth more than being able to grow:
+  twenty towers. We have exactly six kinds, and six 109px cards with 5 gaps
+  of 6 come to 684 — 4px inside the 688 of `CONTENT_W`, which is the width
+  the tray actually gets once the 16px gutters are taken off, and 36px inside
+  the full 720. The card width is derived from that and not chosen:
+  `(688 - 5*6) / 6 = 109.6`, floored (`tools/art/layout.ts:155`). Fitting is
+  worth more than being able to grow:
   a scrolling bottom row competes with the system's own edge gestures, and a
   paged tray hides part of the kind chart, which is six facts the player is
   in the middle of learning.
@@ -478,9 +482,16 @@ animation: it is state, not feedback (section 7).
 **The selection survives the placement.** Place a raptor and the raptor card
 stays selected; the next cell is one tap. The alternative — one-shot, which is
 what every reference above does — was modelled against the 30-second build timer
-with Fitts's law (`a = 0.2s`, `b = 0.15 s/bit`) over 381pt between the tray and
-mid-board. The targets are measured along the direction of travel, which is
-vertical: a card is 65pt tall and a cell 19.5pt.
+with Fitts's law in the Shannon form, `MT = a + b·log₂(D/W + 1)` (`a = 0.2s`,
+`b = 0.15 s/bit`), over 381pt between the tray and mid-board. The form is worth
+naming because it changes the answer: the older `log₂(2D/W)` gives 25.9s for
+one-shot rather than 22.1s. The targets are measured along the direction of
+travel, which is vertical: a card is 65pt tall and a cell 19.5pt.
+
+The two rows below are that formula applied twice, so a reader can recompute
+them: sticky is one trip to the card plus fifteen cell-to-cell hops,
+`MT(381,65) + 15·MT(19.5,19.5)`; one-shot is fifteen round trips,
+`15·(MT(381,65) + MT(381,19.5))`.
 
 | a 15-cell wall | taps | thumb travel | time | of the build timer |
 | --- | --- | --- | --- | --- |
@@ -542,17 +553,18 @@ toast by 1.6 seconds.
 
 **Refusal is enough as it stands, and it is located at the cause.**
 `tryPlace()` flashes the cell and toasts `REFUSAL_TEXT[r]` — `That would seal
-the maze`, `Not enough meat`, `Rock`. That is the cell plus the toast plus the
-hatching, three channels, and **the selection always survives a refusal**. One
-addition, because one of the three is not the cell's fault: on `no-meat` the
-*card's* cost also flashes `refusal` once, since the card is where the problem
-is and where the fix is. Feedback goes where the cause is, not where the
-finger was. The card never flashes for `would-block` or `Rock`.
+the maze`, `Not enough meat`, `Solid rock`. That is the cell plus the toast
+plus the hatching, three channels, and **the selection always survives a
+refusal**. One addition, because one of the three is not the cell's fault: on
+`no-meat` the *card's* cost also flashes `refusal` once, since the card is
+where the problem is and where the fix is. Feedback goes where the cause is,
+not where the finger was. The card never flashes for `would-block` or `rock`.
 
 A refusal on a sealed maze is the one refusal the game *wants* the player to
 reach — onboarding step 5 is built on it — so it is never pre-empted by
 greying cells out. Terrain is the exception, because rock and water already
-look unbuildable: a tap on one refuses with `Rock` rather than cancelling.
+look unbuildable: a tap on one refuses with `Solid rock` rather than
+cancelling.
 
 **Cancel.** Two ways, both of which must exist, because today there is no way
 to deselect at all:

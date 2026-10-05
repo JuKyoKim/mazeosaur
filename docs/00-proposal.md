@@ -188,9 +188,9 @@ terrain cells (rock, water) that can never be built on.
 **Dinosaurs (towers).** 1x1 cells (touch-friendly; a 2x2 WC3 footprint on
 a phone makes gaps too fiddly to place, and one cell is one tap — the
 smallest piece of maze a thumb can commit, which is what makes a wall feel
-fast when each cell is placed by hand). Six **kinds**, each a line of three growth stages
-grown in place. Each stage is a real genus, so growing is also a small
-collection:
+fast when each cell is placed by hand). Six **kinds**, each a line of three
+growth stages grown in place. Each stage is a real genus, so growing is also
+a small collection:
 
 | kind | hatchling → juvenile → adult | role |
 | --- | --- | --- |
