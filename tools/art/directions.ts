@@ -101,6 +101,14 @@ export interface Direction {
   samples: number;
   /** Ink outline weight in authored pixels. */
   outline: number;
+  /**
+   * Pixels of air reserved inside the authored square, so the outline has
+   * somewhere to go — see `fitShape`. 0 for every direction authored at 36px
+   * and up, where the bestiary's appendage overhang is already wider than the
+   * ink; a low-resolution direction needs it, because clipping at 15px costs
+   * a seventh of the animal.
+   */
+  inset?: number;
   /** How far the bottom of a body darkens, 0..1. */
   shade: number;
   /** How many authored pixels of top-edge rim light. */
@@ -274,7 +282,83 @@ const toyBox: Direction = {
   },
 };
 
-export const DIRECTIONS: readonly Direction[] = [fossilPixel, clayPack, valleyNaturalist, toyBox];
+/**
+ * Pixel art in the GBA tactics idiom, which is the owner's brief after all
+ * four earlier directions were turned down: small readable map sprites, a
+ * limited palette, a clean dark outline, and — the part that is actually the
+ * signature of that generation — **an idle loop and an attack cycle on every
+ * unit**. An homage, drawn by this generator: no sheet from any other game
+ * is read, copied or traced, and the palettes are derived from our own six
+ * kind hues (rule 5).
+ *
+ * **Authored at 15px, which looks arbitrary and is the whole trick.** A
+ * dinosaur is drawn into a box of `CELL_PX * DRAW_CELLS` = 45 logical pixels
+ * (section 5.0), and 45/15 is exactly 3 — so one authored pixel is a 3x3
+ * block of canvas pixels and the pixel grid survives on the logical canvas.
+ * 16px, the obvious choice, gives 2.8125 and smears every edge. The honest
+ * limits of that claim, both of which also apply to Fossil Pixel:
+ *
+ * - **Invaders are not integer-scaled.** They are drawn at one cell, so the
+ *   scale is 36/15 = 2.4 and a run of authored pixels comes out 2 and 3
+ *   canvas pixels wide alternately. Dinosaurs are what the player stares at
+ *   while building, so dinosaurs get the exact scale.
+ * - **The device scale is never integral.** The canvas is FIT-scaled to the
+ *   phone (0.5417 on the reference device), so the display resamples once
+ *   whatever we do. This is pixel-art *style* with the pixel grid intact in
+ *   logical space, not a pixel-perfect renderer.
+ *
+ * Flat, banded shading with `samples: 1`: `sculpt` quantises to four steps
+ * when a direction is unsampled, which is what a GBA sprite's two or three
+ * body tones plus an outline look like. `round: 1` is load-bearing rather
+ * than stylistic — at 15px an authored limb radius of 0.05 is 0.75 of a
+ * pixel and a leg can vanish between pixel centres; `round` fattens limbs by
+ * 45% and puts them back over 1px.
+ */
+const tacticsPixel: Direction = {
+  id: "tactics-pixel",
+  name: "Tactics Pixel",
+  axes: { render: "pixel", register: "cute-round" },
+  spritePx: 15,
+  samples: 1,
+  outline: 1,
+  inset: 1,
+  shade: 0.34,
+  rim: 1,
+  // A big head and a big eye: at 15px the head is about five pixels across
+  // and the eye is one, and one pixel is all the face there is.
+  proportions: { head: 1.34, eye: 0.46, spike: 1.15, round: 1.0 },
+  pitch: "GBA map sprites: 15px of chunky pixels, two body tones and a dark outline, with an idle bob and an attack lunge on every kind.",
+  palette(hue) {
+    // **The raw kind hue, and that was not the first attempt.** A GBA palette
+    // reads chalky — the hardware had no backlight, so the art was authored
+    // bright and a little desaturated — and lifting the base 16% toward a
+    // warm grey is what that looks like. It also costs the colour-blindness
+    // margin, measured rather than guessed: the tightest pair
+    // (longneck/flier under tritanopia) falls from distance 147 at the raw
+    // hue to 97 at a 12% grey mix, and raptor/longneck fails under
+    // protanopia as well at a 16% lift. Nothing between 0 and 16% passes.
+    //
+    // So the chalk comes from everything except the base: four shade bands
+    // rather than a ramp, a hue-tinted outline instead of black, and 15px of
+    // resolution. The direction keeps its register and keeps the margin, and
+    // it is the only one of the four repainting directions that does — see
+    // the advisory line in `art:check`.
+    const base = rgb(hue);
+    return {
+      base,
+      dark: darken(base, 0.33),
+      light: lighten(base, 0.28),
+      accent: mix(lighten(base, 0.42), [255, 244, 214], 0.5),
+      // Not black: a very dark tint of the kind hue, so sixty outlines do
+      // not add up to a black grid.
+      ink: darken(mix(base, [26, 20, 24], 0.8), 0.3),
+      eye: rgb(0x14100f),
+      glint: rgb(0xfffdf4),
+    };
+  },
+};
+
+export const DIRECTIONS: readonly Direction[] = [fossilPixel, clayPack, valleyNaturalist, toyBox, tacticsPixel];
 
 export function direction(id: string): Direction {
   const d = DIRECTIONS.find((x) => x.id === id);

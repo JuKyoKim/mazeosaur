@@ -166,6 +166,28 @@ export function scaleShape(s: Shape, n: number): Shape {
   };
 }
 
+/**
+ * Scale the unit box into `n - 2 * inset` pixels and centre it, so a
+ * direction can reserve room for its own outline. At 36px and up the
+ * bestiary's appendage overhang (unit 0..0.125) is wider than any ink
+ * dilation and nothing is lost; at 15px a 1px outline on an appendage that
+ * already reaches the edge is clipped, and clipping at 15px costs a seventh
+ * of the animal.
+ */
+export function fitShape(s: Shape, n: number, inset: number): Shape {
+  const k = n - 2 * inset;
+  const scaled = scaleShape(s, k);
+  return {
+    bbox: [scaled.bbox[0] + inset, scaled.bbox[1] + inset, scaled.bbox[2] + inset, scaled.bbox[3] + inset],
+    contains(x, y) {
+      return scaled.contains(x - inset, y - inset);
+    },
+    expand(j) {
+      return fitShape(s.expand(j / k), n, inset);
+    },
+  };
+}
+
 export function union(...parts: Shape[]): Shape {
   const bb: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const p of parts) {

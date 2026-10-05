@@ -14,6 +14,7 @@
 import { CELL, Game, type Dino, type Invader } from "@mazeosaur/sim";
 import { content } from "@mazeosaur/content";
 import { sheetLines } from "@mazeosaur/game/sheet";
+import { clipFrames, type Clip } from "./animate.js";
 import { ARCHETYPE_SILHOUETTE, type Archetype } from "./bestiary.js";
 import { BOARD, KIND_HUE, KINDS, type Direction, type Kind } from "./directions.js";
 import { CAP_H, GLYPH_W, glyph } from "./font.js";
@@ -177,13 +178,27 @@ class Sheet {
   private dinos = new Map<string, Raster>();
   private invaders = new Map<string, Raster>();
 
-  constructor(readonly d: Direction) {}
+  /**
+   * `phase` draws every dinosaur on one frame of one clip instead of at rest
+   * — the whole board mid-breath, or mid-lunge. It is per-sheet rather than
+   * per-call because a frame of the board is one instant: a plate where half
+   * the maze is breathing and half is not would be a prettier picture and a
+   * dishonest one.
+   *
+   * Invaders are unaffected. They move continuously, so their animation is a
+   * walk cycle, which is a different piece of work (section 5.6).
+   */
+  constructor(
+    readonly d: Direction,
+    readonly phase?: { clip: Clip; index: number },
+  ) {}
 
   dino(kind: Kind, stage: 1 | 2 | 3): Raster {
     const key = `${kind}${stage}`;
     let s = this.dinos.get(key);
     if (!s) {
       s = dinoSprite(kind, stage, this.d);
+      if (this.phase) s = clipFrames(s, this.phase.clip, this.d.palette(KIND_HUE[kind]))[this.phase.index] ?? s;
       this.dinos.set(key, s);
     }
     return s;
@@ -317,6 +332,8 @@ export interface SceneOptions {
   eggs: number;
   /** Shown selected, so the frame includes the dinosaur sheet instead of the shop. */
   selectSheet: boolean;
+  /** Which animation frame every dinosaur is drawn on; at rest if absent. */
+  phase?: { clip: Clip; index: number };
 }
 
 /**
@@ -403,7 +420,7 @@ export function buildScene(d: Direction, opts: SceneOptions): Scene {
   for (let i = 0; i < opts.ticks; i++) g.tick();
   g.drainEvents();
 
-  const sheet = new Sheet(d);
+  const sheet = new Sheet(d, opts.phase);
   const selected = opts.selectSheet ? (g.state.dinos.find((x) => g.dinoDef(x).stage === 3) ?? null) : null;
   return { game: g, sheet, selected, opts };
 }
@@ -839,6 +856,7 @@ export function renderBoardFrame(d: Direction, o: FrameOptions = {}): Raster {
     meat: o.meat ?? 184,
     eggs: o.eggs ?? 14,
     selectSheet: o.selectSheet ?? false,
+    ...(o.phase ? { phase: o.phase } : {}),
   };
   const scene = buildScene(d, opts);
   const r = new Raster(CANVAS_W, CANVAS_H);

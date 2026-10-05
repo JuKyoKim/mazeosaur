@@ -555,6 +555,20 @@ reasoning is
   atlas is trimmed to the ink so the client's placement is
   `setOrigin(0.5, 1)` plus a scale from `meta.authored`, with no per-frame
   table.
+- 2026-10-05: **the art direction is reopened, and animation is part of the
+  brief.** The owner turned down all four directions — including `toy-box`,
+  chosen the day before — and asked for the GBA tactics idiom: small readable
+  map sprites, a limited palette, a clean dark outline, and an idle loop and
+  an attack cycle on every kind. `tactics-pixel` is that candidate, authored
+  at 15px because 45/15 is exactly 3 and the pixel grid therefore survives
+  into the logical canvas. It is an homage built by our own generator from
+  the same `bestiary.ts` silhouettes and our own kind hues; nothing is traced
+  or copied, which is rule 5. The clips are in section 5.6 of
+  `docs/01-art-hud-and-audio.md` and are **not** specific to the direction —
+  they transform a finished sprite, so whichever direction wins can breathe.
+  `toy-box` keeps `CHOSEN` and the shipped atlas until the owner answers,
+  because the client integration is live against it and a half-swapped
+  direction would have the game loading an atlas no document describes.
 - 2026-10-05: **the frame-border check gates the direction that ships and
   reports the other three, which are formally exempt.** A sprite touching
   the edge of its authored square has lost ink there, and trimming does not

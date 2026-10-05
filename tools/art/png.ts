@@ -73,6 +73,83 @@ export function encodePng(width: number, height: number, rgba: Uint8Array): Buff
   ]);
 }
 
+/**
+ * The same thing with more than one frame: APNG.
+ *
+ * It exists for one reason. The decision in front of the owner is about
+ * *animation*, and a still strip cannot answer whether a one-pixel breath
+ * reads at a 19.5pt cell — the honest artifact for that question has to move.
+ * APNG rather than GIF because the framing is the only new code: `acTL`
+ * declares the frame count, each frame gets an `fcTL`, and every frame after
+ * the first carries its pixels in `fdAT` instead of `IDAT`. No LZW encoder,
+ * no palette quantisation, and the alpha stays 8-bit.
+ *
+ * Frame 0 is also the still PNG as far as any decoder that ignores the
+ * animation chunks is concerned, which is what makes these safe to hand to a
+ * viewer that does not know APNG: it shows the sprite at rest.
+ *
+ * `delays` is one duration in milliseconds per frame. Sequence numbers run
+ * across `fcTL` and `fdAT` together, which is the one part of the spec that
+ * is easy to get wrong and silently produces a file that shows frame 0 only.
+ */
+export function encodeApng(width: number, height: number, frames: readonly Uint8Array[], delays: readonly number[]): Buffer {
+  if (!frames.length) throw new Error("encodeApng: no frames");
+  if (frames.length !== delays.length) throw new Error(`encodeApng: ${frames.length} frames, ${delays.length} delays`);
+
+  const stride = width * 4;
+  const scanlines = (rgba: Uint8Array): Buffer => {
+    const raw = Buffer.alloc((stride + 1) * height);
+    for (let y = 0; y < height; y++) {
+      raw[y * (stride + 1)] = 0;
+      Buffer.from(rgba.buffer, rgba.byteOffset + y * stride, stride).copy(raw, y * (stride + 1) + 1);
+    }
+    return raw;
+  };
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+
+  const actl = Buffer.alloc(8);
+  actl.writeUInt32BE(frames.length, 0);
+  actl.writeUInt32BE(0, 4); // play forever
+
+  let seq = 0;
+  const fctl = (ms: number): Buffer => {
+    const b = Buffer.alloc(26);
+    b.writeUInt32BE(seq++, 0);
+    b.writeUInt32BE(width, 4);
+    b.writeUInt32BE(height, 8);
+    b.writeUInt32BE(0, 12); // x offset
+    b.writeUInt32BE(0, 16); // y offset
+    // Milliseconds as a /1000 fraction rather than the customary /100: the
+    // attack frames are 90 and 110ms, which /100 cannot express.
+    b.writeUInt16BE(Math.round(ms), 20);
+    b.writeUInt16BE(1000, 22);
+    b[24] = 1; // dispose: clear to transparent black before the next frame
+    b[25] = 0; // blend: replace, not over — every frame here is full-size
+    return b;
+  };
+
+  const out: Buffer[] = [SIGNATURE, chunk("IHDR", ihdr), chunk("acTL", actl)];
+  frames.forEach((rgba, i) => {
+    out.push(chunk("fcTL", fctl(delays[i] as number)));
+    const data = deflateSync(scanlines(rgba), { level: 9 });
+    if (i === 0) {
+      out.push(chunk("IDAT", data));
+    } else {
+      const fdat = Buffer.alloc(4 + data.length);
+      fdat.writeUInt32BE(seq++, 0);
+      data.copy(fdat, 4);
+      out.push(chunk("fdAT", fdat));
+    }
+  });
+  out.push(chunk("IEND", new Uint8Array(0)));
+  return Buffer.concat(out);
+}
+
 /** Raw filter types, PNG spec 9.2. `bpp` here is always 4: RGBA8. */
 function paeth(a: number, b: number, c: number): number {
   const p = a + b - c;
