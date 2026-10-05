@@ -290,6 +290,35 @@ affordance: the amount left *is* the bonus.
 Meat and eggs are an icon plus a count rather than a labelled field, for
 the same reason. 214 and 14 are read as shapes.
 
+**Every x in the table above is the previous field's widest value, not a
+gap that looked right.** Row 1 is five variable-length fields on 720px and
+it is the one row in the HUD that can over-subscribe itself silently: a
+field grows by a digit, lands on its neighbour, and the HUD renders two
+strings on top of each other rather than failing. Measured in the shipping
+font at the sizes above:
+
+| field | widest value | width | ends at | next origin |
+| --- | --- | --- | --- | --- |
+| meat | `9999` at `vital` | 88 | 148 | 192, the egg icon |
+| eggs | `20` at `vital` | 44 | 274 | 320 |
+| migration | `MIGRATION` at `label` | 108 | 428 | 444, **Send** |
+
+The migration readout is `label` over `body` — two lines at one x — and not
+one line, and that is what buys the 16px it clears Send by: on one line
+`MIGRATION 49 / 50` is 108 + 77 = 185 before the space between the two
+parts, so from x=320 it ends at 505 against Send's origin at 444 — **61px
+into the button**. Stacking it is the reason row 1 is 96 tall rather than
+the 82 the hit floor asks for.
+
+This is also why there are no timer digits competing for the same band. A
+digit field between the migration counter and Send does not fit at any
+value, and the prototype is the demonstration: its counter sits at 272 and
+its Send at 496 (`BoardScene.ts`, `buildHud`), so the counter and a
+`60 left` readout are 173 + 72 at `body` against a band of 224 — which is
+why it renders `Migration 1/5` and `30s` on top of each other today. The
+layout above has less room still: 124, from the counter at 320 to Send at
+444. The bar is the design, and the arithmetic is the second reason for it.
+
 ### Row 2 — the next migration, y=1104, 40 tall
 
 One line: a 28px kind chip (hue plus the kind's silhouette), then the count
@@ -522,12 +551,70 @@ the cell would refuse and why.
 | state | what is drawn |
 | --- | --- |
 | valid cell | the kind's hue at 0.45 in a rounded rect inset 3px, radius 6, plus a 1px `#ffffff` range ring at 0.35 |
-| invalid cell | `refusal` at 0.45 in the same rect, **plus 2px diagonal hatching**, and no range ring |
+| invalid cell | `refusal` at 0.45 in the same rect, **plus diagonal hatching: 3px stripes of `ink` at alpha 1, stepped 8px**, and no range ring |
 | any tap, the instant it lands | a 2px `#ecf0f1` ring at 0.6 from the cell centre out to a **54px radius**, 120ms, then gone — drawn on `pointerdown` before the sim is called |
 
 The hatching is not decoration: it is the second channel for a *state*, which
 section 3's rule covers as much as it covers kinds, and section 8 step 5
 already promises it by name ("the blocked hatching").
+
+**The three hatching numbers, and why the contrast ratio is the wrong
+instrument for two of them.** Hatching in `refusal` makes the stripe and the
+fill one hue at two alphas, so the only thing separating them is whatever the
+cell already carried — and spawn, both checkpoints and the nest carry a bright
+marker that lifts the fill to the stripe's own luminance and erases the
+hatching outright. Those four cells always refuse and are the landmarks a new
+player tries first, so they would be refusing by hue alone, which is the one
+thing this hatching exists to prevent. The stripes are therefore `ink` at
+alpha 1: a fixed dark that the cell underneath cannot climb to.
+
+The other two numbers are a stripe width and a spacing, and they do not move
+a contrast ratio at all. The window below is **the 30x30 hatched square, the
+cell inset by its own 3px** — the rect `hatchCell` is handed, nothing else —
+at 720x1280, 10th/90th percentile, driven against the real client. State the
+window whenever one of these numbers is quoted: a figure of 1.56:1 for the
+same 2px configuration came off a different one, and the two have never been
+reconciled. Neither is above 3:1 and neither changes the ranking, because the
+ranking does not come from this column at all.
+
+| stripe / step / fill | contrast, plain cell | texture, plain cell |
+| --- | --- | --- |
+| 2px / 8 / 0.45 | 2.28:1 | 61% |
+| **3px / 8 / 0.45** | **2.28:1** | **81%** |
+| 2px / 6 / 0.45 | 2.28:1 | 74% |
+| 2px / 8 / 0.60 | 2.81:1 | 64% |
+
+Once at least a tenth of the cell is solid ink and a tenth is solid fill, the
+percentile ratio is a property of the two colours and nothing else — it is
+identical for the first three rows, which differ by a third in how much
+texture they actually have. The number that tracks what an eye sees is the
+**RMS luminance modulation across the cell interior**, the second column, and
+it is what governs the hatching here.
+
+So:
+
+- **3px, not 2.** At the reference device a canvas pixel is 0.5417pt, so a 2px
+  stripe is 1.08pt — barely over one device pixel at DPR 1, so most of its
+  width is spent on the two antialiased edges and little of the ink lands at
+  full strength. 3px is 1.63pt and keeps a covered core. The measurement is
+  the claim, not the pixel arithmetic: 57% against 76% at the reference
+  device. This is the strongest of the three levers and the only one that is
+  free — it changes no colour and no alpha.
+- **8px spacing stays.** The gap of fill must stay strictly wider than the
+  stripe, or the cell reads as a darker flat tone rather than as stripes; at
+  3/8 the gap is 5px to the stripe's 3. Tightening to 6 instead buys less
+  texture than widening the stripe does (74% against 81%) while adding a third
+  more stripes, and at 1x it reads as noise rather than as hatching.
+- **The fill stays at 0.45.** It is the same rect at the same alpha as the
+  valid preview, which is what makes the two states a comparison rather than
+  two unrelated marks, and it is the only thing still letting the player see
+  the terrain they are deciding about. It is also, measured, the weakest of
+  the three levers: it moves the ratio the most and the texture the least.
+
+At the reference device the 3px figure holds: 76% at 390x693 DPR 1 and 76% at
+DPR 3, against 57% for 2px at either. The hatching is one of three channels on
+a refusal — the toast and the cell flash are the other two — but at 3px it is
+a channel a player can actually use rather than a supporting one.
 
 **The hover preview is mouse-only, and that is not a gap.** A finger has no
 hover — its first contact with a cell is the tap. Gating the placement on
