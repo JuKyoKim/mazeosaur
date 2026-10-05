@@ -364,6 +364,28 @@ is bumped in the same commit, which is exactly the commit where somebody
 should be thinking about whose run it ends. Cosmetic edits never touch the
 digest and never fail.
 
+#### The difficulty is in the version string
+
+There is no single `content.version` any more. `@mazeosaur/content`
+exports `contentFor(difficulty)`, which returns one of three complete
+`Content` values, and each carries its own version: `m3.0-easy`,
+`m3.0-medium`, `m3.0-hard`. The generation prefix follows the rule above —
+it bumps when a sim-visible number changes — and the suffix is the
+difficulty the numbers belong to.
+
+That is deliberate, and it is what makes difficulty safe to resume. A run
+is `(seed, content, command log)`; difficulty is not a fourth input, it is
+*which content*. So the only thing that could silently change a resumed
+run's difficulty is a shell handing `loadSave` the wrong one — and because
+the difficulty is in the string the `===` above already compares, that run
+is **dropped** with `runDropped: "content-version"` instead of replaying
+at numbers the player never played. The guarantee is in the format, not in
+the shell remembering.
+
+The save still carries the difficulty as its own field, so the shell knows
+which `Content` to build *before* it asks; the `===` check is the backstop
+for when it gets that wrong, not the mechanism.
+
 ### 1.6 Size, measured
 
 A full run of the scripted player in `packages/content/test/balance.test.ts`
