@@ -15,6 +15,7 @@ import {
   ROW1,
   ROW2,
   ROW3,
+  SHEET_COL_W,
   TOAST,
   TYPE,
   colAt,
@@ -140,11 +141,19 @@ describe("row 3, the tray", () => {
     expect(right(ROW3.sell)).toBeLessThanOrEqual(CONTENT_RIGHT);
   });
 
-  it("holds the genus column at 15 characters, the longest name in the content", () => {
+  it("gives all four sheet lines the same column, wide enough for the widest", () => {
     // Rhamphorhynchus is the longest hatchling; Argentinosaurus ties it at
-    // stage 3. The column exists so neither truncates.
+    // stage 3. The column exists so neither truncates — but the genus is
+    // not the widest line in it. See `SHEET_COL_W` for the measurements and
+    // `sheet.ts` for what each line says.
     expect(Math.max(...hatchlings.map((h) => h.name.length))).toBe(15);
-    expect(ROW3.sheetName.w).toBe(272);
+    for (const slot of [ROW3.sheetName, ROW3.sheetKind, ROW3.sheetStats, ROW3.sheetExtras]) {
+      expect(slot.w).toBe(SHEET_COL_W);
+      expect(slot.x).toBe(ROW3.sheetName.x);
+      // The column ends before Grow begins, for every line and not just the
+      // genus. One line wider than the column is one line under the button.
+      expect(slot.x + slot.w).toBeLessThanOrEqual(ROW3.grow.x);
+    }
   });
 });
 

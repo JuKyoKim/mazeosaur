@@ -11,8 +11,9 @@
 // can show a mid-game maze without replaying twenty migrations. It is
 // marked where it happens.
 
-import { CELL, Game, TICKS_PER_SECOND, type Dino, type Invader } from "@mazeosaur/sim";
+import { CELL, Game, type Dino, type Invader } from "@mazeosaur/sim";
 import { content } from "@mazeosaur/content";
+import { sheetLines } from "@mazeosaur/game/sheet";
 import { ARCHETYPE_SILHOUETTE, type Archetype } from "./bestiary.js";
 import { BOARD, KIND_HUE, KINDS, type Direction, type Kind } from "./directions.js";
 import { CAP_H, GLYPH_W, glyph } from "./font.js";
@@ -90,6 +91,54 @@ function drawText(r: Raster, x: number, y: number, s: string, size: number, c: R
 /** Cap-height box for a size, so text can be centred in a button. */
 function capHeight(size: number): number {
   return CAP_H * fontScale(size);
+}
+
+/** What `drawText` will come to, without drawing it. */
+function textWidth(s: string, size: number): number {
+  const k = fontScale(size);
+  return [...s].length * (GLYPH_W + 1) * k - k;
+}
+
+/**
+ * The largest size in the scale at which `s` fits `maxWidth`.
+ *
+ * The 5x7 font advances a fixed `GLYPH_W + 1` units per character, so at a
+ * given nominal size it is around half again as wide as the proportional UI
+ * font the client draws with — `153.8 dmg/s · range 2.6` is 264px in the
+ * running client at `TYPE.body` and 411 here. A string that fits the real
+ * HUD can therefore still overrun the mock's, and when it does the honest
+ * move is to draw it smaller, not to cut it: the figure then shows the same
+ * words the player sees. The sheet lines used to be truncated to 23
+ * characters instead, which made the picture a picture of a sheet the game
+ * never draws.
+ *
+ * Returns the smallest size in the scale when nothing fits; `wrapTo` is for
+ * the lines that still do not.
+ */
+function fitSize(s: string, size: number, maxWidth: number): number {
+  const steps = [34, 26, 22, 19];
+  for (const step of steps) {
+    if (step > size) continue;
+    if (textWidth(s, step) <= maxWidth) return step;
+  }
+  return 19;
+}
+
+/** `s` broken on spaces into rows no wider than `maxWidth`. */
+function wrapTo(s: string, size: number, maxWidth: number): string[] {
+  const rows: string[] = [];
+  let row = "";
+  for (const word of s.split(" ")) {
+    const next = row ? `${row} ${word}` : word;
+    if (row && textWidth(next, size) > maxWidth) {
+      rows.push(row);
+      row = word;
+    } else {
+      row = next;
+    }
+  }
+  if (row) rows.push(row);
+  return rows;
 }
 
 // ------------------------------------------------------------------- icons
@@ -604,11 +653,16 @@ function drawButton(r: Raster, b: { x: number; y: number; w: number; h: number }
   r.fill(roundRect(b.x, b.y, b.w, b.h, 10), darken(fill, 0.45));
   r.fill(roundRect(b.x, b.y, b.w, b.h - 3, 10), fill);
   const cx = b.x + b.w / 2;
+  // A label is laid out against the button it is in, not against a size
+  // picked once: `FULLY GROWN` is 195 units wide at `TYPE.body` in the 5x7
+  // font and Grow is 192 across. See `fitSize`.
+  const pad = 12;
+  const fit = (s: string, want: number) => fitSize(s, want, b.w - pad);
   if (sub) {
-    drawText(r, cx, b.y + b.h / 2 - capHeight(size) - 6, label, size, c, "center");
-    drawText(r, cx, b.y + b.h / 2 + 6, sub, TYPE.label, mix(c, fill, 0.35), "center");
+    drawText(r, cx, b.y + b.h / 2 - capHeight(size) - 6, label, fit(label, size), c, "center");
+    drawText(r, cx, b.y + b.h / 2 + 6, sub, fit(sub, TYPE.label), mix(c, fill, 0.35), "center");
   } else {
-    drawText(r, cx, b.y + (b.h - capHeight(size)) / 2, label, size, c, "center");
+    drawText(r, cx, b.y + (b.h - capHeight(size)) / 2, label, fit(label, size), c, "center");
   }
 }
 
@@ -688,23 +742,25 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
   } else {
     const dn = scene.selected;
     const def = g.dinoDef(dn);
-    const stage = ["", "hatchling", "juvenile", "adult"][def.stage] as string;
     r.fill(roundRect(GUTTER - 8, ROW3.y + 4, CONTENT_WIDE, ROW3.h - 12, 10), BOARD.hudPanel);
     // A thumbnail of the thing being talked about, so the sheet is anchored
     // to the dinosaur the player just tapped rather than to a name.
     blitScaled(r, sheet.dino(def.kind, def.stage), CANVAS_W - 44, ROW3.y + 34, 46);
-    drawText(r, ROW3.sheetName.x, ROW3.sheetName.y, def.name, TYPE.body, BOARD.text);
-    drawText(r, ROW3.sheetKind.x, ROW3.sheetKind.y, `${def.kind} ${stage}`, TYPE.label, BOARD.textDim);
-    const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(0);
-    drawText(r, ROW3.sheetStats.x, ROW3.sheetStats.y, `${dps} dmg/s`, TYPE.body, BOARD.text);
-    const extras = [
-      `range ${(def.range / CELL).toFixed(1)}`,
-      def.splash ? "splash" : "",
-      def.slow ? `slow ${def.slow.percent}%` : "",
-      def.stun ? "stun" : "",
-      def.targets === "both" ? "hits fliers" : "",
-    ].filter(Boolean);
-    drawText(r, ROW3.sheetExtras.x, ROW3.sheetExtras.y, extras.join(" · ").slice(0, 23), TYPE.label, BOARD.textDim);
+    // The same four lines the client shows, from the same builder, each
+    // inside `SHEET_COL_W` — see `fitSize` for why the mock may have to
+    // draw one of them a size smaller than the client does.
+    const lines = sheetLines(def);
+    const col = ROW3.sheetName.w;
+    const line = (slot: { x: number; y: number }, s: string, size: number, c: Rgb) =>
+      drawText(r, slot.x, slot.y, s, fitSize(s, size, col), c);
+    line(ROW3.sheetName, lines.name, TYPE.body, BOARD.text);
+    line(ROW3.sheetKind, lines.kind, TYPE.label, BOARD.textDim);
+    line(ROW3.sheetStats, lines.stats, TYPE.body, BOARD.text);
+    // The modifier line is the one that does not fit at any size in the
+    // mock's font, so it wraps. The client draws it on one row.
+    wrapTo(lines.extras, TYPE.label, col).forEach((row, i) => {
+      drawText(r, ROW3.sheetExtras.x, ROW3.sheetExtras.y + i * (capHeight(TYPE.label) + 6), row, TYPE.label, BOARD.textDim);
+    });
     const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
     drawButton(r, ROW3.grow, next ? BOARD.buttonActive : BOARD.button, next ? "GROW" : "FULLY GROWN", TYPE.body, BOARD.text, next ? `${next.name} · ${next.cost}` : undefined);
     drawButton(r, ROW3.sell, BOARD.buttonDanger, "SELL", TYPE.body, BOARD.text, `+${g.sellValue(dn)} meat`);
