@@ -987,6 +987,14 @@ export class BoardScene extends Phaser.Scene {
    */
   private abandonRun(): void {
     this.abandoned = true;
+    // The tray goes with the run. `drawDynamic` draws a placement preview
+    // wherever a card is armed and the pointer has been, and that ghost
+    // sits on the board behind the results screen — a run that is over
+    // showing a cell it is about to build on. Seen in the drive.
+    this.selectedDef = null;
+    this.selectedDino = null;
+    this.hoverCell = null;
+    this.setPanelVisible(false);
     this.autosave();
   }
 
