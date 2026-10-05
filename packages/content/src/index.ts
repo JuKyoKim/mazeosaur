@@ -1,4 +1,5 @@
-import type { Archetype, Content, DinoDef, InvaderDef, Kind, MigrationDef, ValleyDef } from "@mazeosaur/sim";
+import { DIFFICULTIES, TICKS_PER_SECOND } from "@mazeosaur/sim";
+import type { Archetype, Content, Difficulty, DinoDef, InvaderDef, Kind, MigrationDef, ValleyDef } from "@mazeosaur/sim";
 
 /**
  * The game's numbers. Every value here is tuning, not rules: the sim
@@ -9,6 +10,10 @@ import type { Archetype, Content, DinoDef, InvaderDef, Kind, MigrationDef, Valle
  *
  * Units, from the sim: milli-cells (1000 = one cell), ticks (20 per
  * second), integer damage and meat.
+ *
+ * Difficulty is here too, and only here. `contentFor(difficulty)` returns
+ * one of three complete `Content` values; the sim is handed one of them and
+ * never learns there were others.
  */
 
 // ------------------------------------------------------------ dinosaurs
@@ -45,12 +50,88 @@ const dinoList: DinoDef[] = [
   { id: "flier-3", name: "Quetzalcoatlus", kind: "flier", stage: 3, cost: 60, range: 2800, damage: 36, cooldown: 12, targets: "both", targetCount: 3 },
 ];
 
+// ----------------------------------------------------------- difficulty
+
+/**
+ * What a difficulty is allowed to change. The owner's model
+ * ([ARB-216](/ARB/issues/ARB-216) item 3) is three levers — how many
+ * invaders come, how much punishment each one takes, and how long the
+ * player gets to maze between migrations — plus one the model needs in
+ * order to mean what it says, `bountyPercent`.
+ *
+ * Percents, not floats, so every derived number stays integer arithmetic
+ * — the same convention as `kindMultiplier`, `slow.percent` and the sell
+ * refunds. `percentOf` rounds once, at the end.
+ *
+ * Levers deliberately *not* here, so the table stays small enough to
+ * reason about: `shield` (an attack count, not hit points, so it is a
+ * different kind of tanky), speed, spacing, starting meat, eggs, the
+ * clear bonus and the fossil weights.
+ */
+export interface DifficultyTuning {
+  /** Applied to every group's size, including migration 1's override. */
+  readonly countPercent: number;
+  /** Applied to every invader's hit points, and to a regenerator's regen. */
+  readonly hpPercent: number;
+  /**
+   * Applied to every invader's bounty. Roughly the inverse of
+   * `countPercent`, so a migration pays about the same meat however many
+   * invaders are in it. Without this lever "more invaders" is *income*,
+   * not pressure: the scripted player is meat-bound, not hit-point-bound,
+   * and at 100 percent it reaches further on medium than on easy and wins
+   * the valley outright. The numbers are in the pull request for ARB-219.
+   */
+  readonly bountyPercent: number;
+  /** Build phase before each migration. The owner's "timer in between wave". */
+  readonly buildPhaseSeconds: number;
+}
+
+/**
+ * The first pass. The owner said in [ARB-216](/ARB/issues/ARB-216) that
+ * they will tune these, so the shape is the deliverable and the values are
+ * a starting point:
+ *
+ * - **easy is today's game.** Every invader number is bit-for-bit what it
+ *   was before this table existed (`hpPercent`/`countPercent` of 100 are
+ *   the identity), and the only change is the build phase: 30s -> 35s, the
+ *   "bit more time to the mob/wave spawn" of item 8. Easy is the default
+ *   and the one the onboarding promise in `content.test.ts` is pinned to.
+ * - **medium is more invaders, same hit points, same timer.** 130% is
+ *   ten Parasaurolophus becoming thirteen and a swarm of twenty-four
+ *   becoming thirty-one. A boss stays one: `percentOf(1, 130)` rounds to 1.
+ *   `bountyPercent` of 77 is 100/1.3, so thirteen invaders pay about what
+ *   ten did and the extra three are pressure rather than income.
+ * - **hard is medium plus tankier, minus three seconds.** 140% hit points
+ *   on the same 130% counts, and 32s = easy's 35 - 3. Item 3's point was
+ *   that the harder it is, the faster the player has to maze.
+ */
+export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> = {
+  easy: { countPercent: 100, hpPercent: 100, bountyPercent: 100, buildPhaseSeconds: 35 },
+  medium: { countPercent: 130, hpPercent: 100, bountyPercent: 77, buildPhaseSeconds: 35 },
+  hard: { countPercent: 130, hpPercent: 140, bountyPercent: 77, buildPhaseSeconds: 32 },
+};
+
+/** The difficulty a new run starts at, and the one a v1 save migrates to. */
+export const DEFAULT_DIFFICULTY: Difficulty = "easy";
+
+/**
+ * `base * percent / 100`, rounded once and never below 1. At 100 percent
+ * an integer `base` comes back unchanged, which is what makes easy
+ * identical to the pre-difficulty numbers rather than merely close.
+ */
+function percentOf(base: number, percent: number): number {
+  return Math.max(1, Math.round((base * percent) / 100));
+}
+
 // ------------------------------------------------------------- invaders
 
 /**
  * Each archetype is a shape; the migration number sets the size. hp is a
  * multiple of the curve below, speed is milli-cells per tick, count and
  * spacing are the group, bounty is a multiple of the bounty curve.
+ *
+ * These are easy's numbers. The difficulty table above scales `hp` and
+ * `count`; speed, spacing and bounty are the same on all three.
  */
 const ARCHETYPES: Record<Archetype, { hp: number; speed: number; count: number; spacing: number; bounty: number; eggs: number }> = {
   normal: { hp: 1, speed: 100, count: 10, spacing: 16, bounty: 1, eggs: 1 },
@@ -181,7 +262,7 @@ function slug(genus: string): string {
   return genus.toLowerCase();
 }
 
-function buildInvadersAndMigrations(): { invaders: Record<string, InvaderDef>; migrations: MigrationDef[] } {
+function buildInvadersAndMigrations(t: DifficultyTuning): { invaders: Record<string, InvaderDef>; migrations: MigrationDef[] } {
   const invaders: Record<string, InvaderDef> = {};
   const migrations: MigrationDef[] = [];
   SCHEDULE.forEach(([archetype, genus, kind], i) => {
@@ -197,12 +278,15 @@ function buildInvadersAndMigrations(): { invaders: Record<string, InvaderDef>; m
       name: genus,
       kind,
       archetype,
-      hp: over.hp ?? Math.max(1, Math.round(baseHp * a.hp)),
+      hp: percentOf(over.hp ?? Math.max(1, Math.round(baseHp * a.hp)), t.hpPercent),
       speed: over.speed ?? a.speed,
       flying,
-      bounty: Math.max(1, Math.round(baseBounty * a.bounty)),
+      bounty: percentOf(Math.max(1, Math.round(baseBounty * a.bounty)), t.bountyPercent),
       eggs: a.eggs,
-      ...(archetype === "regenerator" ? { regen: Math.max(1, Math.round(baseHp * a.hp * 0.04)) } : {}),
+      // Regen scales with hp so a regenerator stays the same fraction of
+      // itself per second on every difficulty, rather than getting
+      // relatively weaker the tankier it is.
+      ...(archetype === "regenerator" ? { regen: percentOf(Math.max(1, Math.round(baseHp * a.hp * 0.04)), t.hpPercent) } : {}),
       ...(archetype === "shielded" ? { shield: 2 + Math.floor(w / 10) } : {}),
       ...(archetype === "splitter" ? { splitsInto: { invader: `${id}-young`, count: 2 } } : {}),
     };
@@ -213,10 +297,10 @@ function buildInvadersAndMigrations(): { invaders: Record<string, InvaderDef>; m
         name: `young ${genus}`,
         kind,
         archetype: "normal",
-        hp: Math.max(1, Math.round(baseHp * 0.4)),
+        hp: percentOf(Math.max(1, Math.round(baseHp * 0.4)), t.hpPercent),
         speed: 130,
         flying: false,
-        bounty: Math.max(1, Math.round(baseBounty * 0.3)),
+        bounty: percentOf(Math.max(1, Math.round(baseBounty * 0.3)), t.bountyPercent),
         eggs: 1,
       };
     }
@@ -224,7 +308,7 @@ function buildInvadersAndMigrations(): { invaders: Record<string, InvaderDef>; m
     migrations.push({
       id: `m${String(w).padStart(2, "0")}`,
       name,
-      groups: [{ invader: id, count: over.count ?? a.count, spacing: a.spacing }],
+      groups: [{ invader: id, count: percentOf(over.count ?? a.count, t.countPercent), spacing: a.spacing }],
       clearBonus: clearBonus(w),
     });
   });
@@ -265,8 +349,6 @@ function byId<T extends { id: string }>(list: T[]): Record<string, T> {
   return out;
 }
 
-const generated = buildInvadersAndMigrations();
-
 /**
  * The fossil award on a finished run: eggs kept, migrations cleared and
  * meat unspent, each worth a flat amount. Migrations cleared dominates
@@ -290,22 +372,75 @@ export function fossilAward(
   );
 }
 
-export const content: Content = {
-  version: "m2.0",
-  rules: {
-    startingMeat: 60,
-    eggs: 20,
-    buildPhaseTicks: 30 * 20,
-    earlyBonusPerSecond: 1,
-    sellRefundBuildPercent: 80,
-    sellRefundMigrationPercent: 60,
-    fossilWeights: FOSSIL_WEIGHTS,
-  },
-  dinos: byId(dinoList),
-  invaders: generated.invaders,
-  migrations: generated.migrations,
-  valley,
+/**
+ * The content-version generation, bumped when a sim-visible number changes
+ * (section 1.5 of `docs/01-v1-architecture.md`). This change is one of
+ * those: easy's build phase went from 30s to 35s, so m2.0 runs stop
+ * resuming, which is the designed cost of the rule.
+ *
+ * The difficulty is part of the version string on purpose. `loadSave`
+ * compares `run.contentVersion` with `content.version` using `===`, so a
+ * resume handed the wrong difficulty's `Content` *drops the run* instead of
+ * quietly replaying it at numbers the player never played. That makes the
+ * determinism guarantee mechanical rather than a thing the shell has to
+ * remember.
+ */
+const VERSION_GENERATION = "m3.0";
+
+function buildContent(difficulty: Difficulty): Content {
+  const t = DIFFICULTY_TUNING[difficulty];
+  const generated = buildInvadersAndMigrations(t);
+  return {
+    version: `${VERSION_GENERATION}-${difficulty}`,
+    difficulty,
+    rules: {
+      startingMeat: 60,
+      eggs: 20,
+      buildPhaseTicks: t.buildPhaseSeconds * TICKS_PER_SECOND,
+      earlyBonusPerSecond: 1,
+      sellRefundBuildPercent: 80,
+      sellRefundMigrationPercent: 60,
+      fossilWeights: FOSSIL_WEIGHTS,
+    },
+    dinos: byId(dinoList),
+    invaders: generated.invaders,
+    migrations: generated.migrations,
+    valley,
+  };
+}
+
+/**
+ * Built once each, eagerly, so `contentFor(d)` is referentially stable:
+ * `Game` holds the `Content` it was constructed with for the life of a
+ * run, and two calls returning two equal-but-distinct objects would be a
+ * trap waiting for the first identity comparison.
+ */
+const BY_DIFFICULTY: Readonly<Record<Difficulty, Content>> = {
+  easy: buildContent("easy"),
+  medium: buildContent("medium"),
+  hard: buildContent("hard"),
 };
+
+/**
+ * The content for a difficulty. This is the only way to get a `Content`,
+ * and a run is `(seed, this Content, command log)` — difficulty is not a
+ * fourth input to the sim, it is which of these three it was handed.
+ */
+export function contentFor(difficulty: Difficulty): Content {
+  return BY_DIFFICULTY[difficulty];
+}
+
+/** All three, ascending by difficulty. For a menu, and for a test to sweep. */
+export const allContent: readonly Content[] = DIFFICULTIES.map(contentFor);
+
+/**
+ * The default difficulty's content, for a call site that has no run to
+ * read a difficulty from: the art tools, a fixture, a module that only
+ * wants the dinosaur table. **A call site that starts or resumes a run
+ * must use `contentFor(difficulty)`** — the run's own difficulty, from the
+ * menu or from the save — never this.
+ */
+export const content: Content = contentFor(DEFAULT_DIFFICULTY);
 
 /** The stage-1 dinosaurs the player can buy, in palette order. */
 export const hatchlings: readonly DinoDef[] = dinoList.filter((d) => d.stage === 1);
