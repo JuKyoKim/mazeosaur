@@ -60,6 +60,24 @@ hatchling, juvenile, adult; upgrading is **growing**). Creeps are
   what is durably true, as a comment beside the code it explains or a
   line in the docs, never as a dated aside.
 
+## Asking the owner to decide
+
+The owner answers cards on a phone, from Telegram, so a card must stand
+on its own:
+
+- Title under 60 characters, plain words. Prompt: sentence one is what
+  you need decided, sentence two is why it is blocked or why it matters.
+- `detailsMarkdown` opens with `Recommendation: <pick> -- <reason>`,
+  `If yes: <what happens>`, `If no: <what happens>`.
+- Accept and reject labels name the action, never just Yes or No. On a
+  question card, every option says what it leads to, and your pick says
+  "(recommended)".
+- Read the issue, its parent and the owner's recorded decisions first,
+  and never ask again what is already decided. Decided so far: Toy Box
+  art with idle and attack animations; one-shot tap-to-place, as in
+  Plants vs. Zombies; no required CI checks until the v1 baseline
+  release; the image stays private until the owner ships.
+
 ## Hiring another agent
 
 You may hire, but only for a role the project will need for the long
