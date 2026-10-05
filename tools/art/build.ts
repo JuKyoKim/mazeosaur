@@ -31,7 +31,7 @@ import {
   type Kind,
 } from "./directions.js";
 import { drawText, effectsPlate, renderBoardFrame } from "./frame.js";
-import { CANVAS_H, CANVAS_W, CELL_PX, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
+import { CANVAS_H, CANVAS_W, CELL_PX, DRAW_CELLS, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
 import { encodePng, pngHasPixels } from "./png.js";
 import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
 import { atlasJson, dinoSprite, invaderSprite, pack } from "./sprites.js";
@@ -501,11 +501,11 @@ function doAtlas(id: string): void {
 
   const da = pack(dinos, width);
   png(`packages/game/assets/${d.id}/dinos.png`, da.raster);
-  write(`packages/game/assets/${d.id}/dinos.json`, atlasJson(da, "dinos.png"));
+  write(`packages/game/assets/${d.id}/dinos.json`, atlasJson(da, "dinos.png", CELL_PX, DRAW_CELLS));
 
   const ia = pack(invaders, width);
   png(`packages/game/assets/${d.id}/invaders.png`, ia.raster);
-  write(`packages/game/assets/${d.id}/invaders.json`, atlasJson(ia, "invaders.png"));
+  write(`packages/game/assets/${d.id}/invaders.json`, atlasJson(ia, "invaders.png", CELL_PX, DRAW_CELLS));
 
   console.log(`  ${da.frames.length} dinosaur frames, ${ia.frames.length} invader frames`);
 }
