@@ -319,9 +319,8 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
 2. **Tower footprint.** 1x1 as proposed, or WC3's 2x2 with 1-cell gaps?
 3. **Juggling.** Allowed (proposed), or lock cells near invaders
    mid-wave?
-4. **Art direction.** Pixel art keeps assets small and the offline
-   binary lean; hand-drawn vector reads better on retina. Either works
-   with the plan. Cute-round or fierce-realistic is the bigger choice.
+4. ~~**Art direction.**~~ **Settled 2026-10-04: blocks, the `toy-box`
+   direction.** See section 10 and `docs/01-art-hud-and-audio.md`.
 5. **Web identity.** Anonymous device IDs only, or accounts (email or
    OAuth) from the start?
 6. **Monetization.** Assumed none. Say so if that changes; it affects
@@ -495,3 +494,32 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   is, and the hash check that validated the run is what produced it. It is
   consumed once, by the first `create()`, because a `Game` is mutable and
   `scene.restart()` is a fresh run (sections 1.4, 2 and 5.2).
+- 2026-10-04: **the art direction is blocks — the `toy-box` direction —
+  which closes section 9 item 4.** The board rejected all three points on
+  the pixel/vector x cute/fierce grid and briefed a fourth off it: blocks,
+  in the Crossy Road register. Shown that fourth, it chose it with the
+  instruction to keep working the models. Only `toy-box` has a shipped
+  atlas (`packages/game/assets/toy-box`, 57.7 kB for 72 frames); the other
+  three stay in `tools/art/directions.ts` and `docs/art/` as the record of
+  how the choice was made, and `tools/art/build.ts atlas <direction>` will
+  still emit any of them. The useful finding from the comparison is that
+  the atlas is nowhere near the 40 MB budget in any direction, so size was
+  rightly not an input.
+- 2026-10-04: a dinosaur is **drawn 1.25 cells tall, anchored by its ink to
+  the bottom edge of the cell it occupies**; the footprint stays one cell
+  and the sim is untouched. Section 5.0 of `docs/01-art-hud-and-audio.md`
+  had settled 1.5 and nothing drew it — the board frame still blitted each
+  dinosaur centred in a 40px box, so the rule the client was about to
+  implement had never been looked at. Rendering it corrected two things.
+  The anchor has to be on the ink rather than on the authored square,
+  because the camera centres its subject and the gap under the feet runs
+  from 18px for a hatchling raptor to 2px for an adult longneck out of 64 —
+  anchoring the square floats the hatchling half a cell off the floor of
+  its own cell. And 1.5 was argued from vertical occlusion alone; at 1.5
+  the widest adults reach ~7px into each *horizontal* neighbour too, and
+  twenty adjacent cells at the phone's 19.5pt cell read as one pile.
+  Rendered at 1.0, 1.15, 1.25, 1.35 and 1.5 and chosen by looking: 1.25 is
+  the largest value where that block stays twenty dinosaurs. The shipped
+  atlas is trimmed to the ink so the client's placement is
+  `setOrigin(0.5, 1)` plus a scale from `meta.authored`, with no per-frame
+  table.
