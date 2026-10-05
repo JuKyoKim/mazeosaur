@@ -493,8 +493,13 @@ export class BoardScene extends Phaser.Scene {
     this.sellButton = this.button(CANVAS_W - 136, panelY + 8, 120, 52, "Sell", () => this.sell(), 17);
     this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
     this.setPanelVisible(false);
-
-    if (hatchlings[0]) this.selectDef(hatchlings[0]);
+    // Nothing is armed at the start of a run, and that is a change from
+    // the drag era, where `selectDef(hatchlings[0])` ran here. Under a
+    // drag an armed tray was harmless: you had to press and move to
+    // spend anything. Under tap-to-place it means the first tap anywhere
+    // on the valley buys a dinosaur the player never chose — and worse,
+    // their first tap on the lit card *cancels* it, because the card is
+    // a toggle, so the tray reads as a card that cannot be selected.
   }
 
   private setPanelVisible(v: boolean): void {

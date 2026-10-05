@@ -47,9 +47,9 @@ test("full run: arm, place four taps, grow, sell, send, leak, lose, play again",
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 
-  // Explicitly arm the cheapest hatchling rather than relying on the
-  // tray's default selection, so the test still means something if that
-  // default changes.
+  // Nothing is armed until a card is tapped, which is the state a run
+  // starts in. Arming has to be a step of the test because it is a step
+  // for the player.
   await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
   // Phaser queues DOM pointer events and processes them in its own step,
   // so every assertion about input here has to be one frame behind the
