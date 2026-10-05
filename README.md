@@ -68,7 +68,7 @@ rest of the repo must not see — `tools/lint/package.json` says why.
 Playable in a browser (`npm run dev`, then open it on a phone over the
 LAN to feel the mazing). One valley, all six kinds with three growth
 stages, the kind chart, eight invader archetypes plus bosses, fifty
-migrations, meat, eggs, build timer with early-send bonus, drag-to-paint
+migrations, meat, eggs, build timer with early-send bonus, tap-to-place
 walls, grow and sell. Placeholder shapes, no audio. The sim is fully
 tested and a scripted player in the balance harness must survive at
 least 35 migrations; the client is verified by hand.

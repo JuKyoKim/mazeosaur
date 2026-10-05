@@ -79,12 +79,8 @@ work it owns, so the owner can check the reasoning later.
 ## Verifying the client
 
 The sim is tested; the client is not, so it is checked by driving it.
-Two things that produced false conclusions once:
+Three things that produced false conclusions once:
 
-- **Drive drags at speed.** A fast pointer skips cells between move
-  events. Placement interpolates the line between events for that
-  reason; a change that drops the interpolation will pass a slow drag
-  and fail a real finger.
 - **Wait a frame before screenshotting after an input.** The renderer
   draws on the next animation frame; a capture in the same instant shows
   the state before the click and looks like a bug that is not there.

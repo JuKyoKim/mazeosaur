@@ -27,6 +27,16 @@ export function paletteButtonCenter(index: number, kindCount = 6): { x: number; 
 export const SEND_BUTTON = { x: 496 + 144 / 2, y: HUD_Y + 8 + 42 / 2 };
 export const SPEED_BUTTON = { x: 648 + 56 / 2, y: HUD_Y + 8 + 42 / 2 };
 
+/**
+ * A point in the HUD that is not any control: the status/preview text
+ * rows, between the kind buttons (which end at `HUD_Y + 120`) and the
+ * dinosaur panel (which starts at `HUD_Y + 196`). Text objects are not
+ * interactive, so a tap here reaches the scene's own `pointerdown` — this
+ * is the "tap away to cancel" gesture, and the only place on the canvas
+ * that is neither a cell nor a button.
+ */
+export const HUD_BARE = { x: CANVAS_W / 2, y: HUD_Y + 158 };
+
 const PANEL_Y = HUD_Y + 196;
 export const GROW_BUTTON = { x: CANVAS_W - 336 + 190 / 2, y: PANEL_Y + 8 + 52 / 2 };
 export const SELL_BUTTON = { x: CANVAS_W - 136 + 120 / 2, y: PANEL_Y + 8 + 52 / 2 };
@@ -126,6 +136,17 @@ export function simSnapshot(page: Page): Promise<{ meat: number; eggs: number; d
     const s = window.mazeosaurBoard!().sim.state;
     return { meat: s.meat, eggs: s.eggs, dinos: s.dinos.length, phase: s.phase as string, tick: s.tick };
   });
+}
+
+/**
+ * What the tray has armed, which cell the placement preview is on, and
+ * which dinosaur's sheet is open. Placement is two taps now, so a sim
+ * snapshot is no longer enough to tell the cases apart: a tap that
+ * refused and a tap that was swallowed by a cleared selection both leave
+ * `dinos` where it was.
+ */
+export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; dinoId: number | null; preview: { x: number; y: number } | null }> {
+  return page.evaluate(() => window.mazeosaurBoard!().selection);
 }
 
 /**

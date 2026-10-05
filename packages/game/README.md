@@ -70,10 +70,12 @@ the transitions between them — is section 5 of
 checked by driving it (`npm run dev`, then port 5173). Three things have
 produced false conclusions:
 
-- **Drive drags at speed.** A fast pointer skips cells between move
-  events, which is why placement interpolates the line between them. A
-  change that drops the interpolation passes a slow drag and fails a real
-  finger.
+- **Tap a tray card and check it did not also cancel.** Placement is two
+  taps, and a tap on bare HUD clears the selection. The only thing
+  keeping a tray card from doing both is the `ev.stopPropagation()` in
+  `button()`, which suppresses the scene-level `pointerdown`. Drop it and
+  every card tap selects and immediately deselects, which looks like a
+  card that cannot be selected at all.
 - **Wait a frame before screenshotting after an input.** The renderer
   draws on the next animation frame, so a capture in the same instant
   shows the state before the click.
