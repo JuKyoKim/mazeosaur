@@ -239,8 +239,8 @@ field makes it work exactly as in WC3. Easy to restrict later by locking
 cells within N of an invader during a wave.
 
 **Controls.** Tap a kind in the tray to select it, then tap a cell to
-place it; the selection persists, so the second cell of a wall is one tap.
-Tap a placed dinosaur for its sheet (grow, sell, range, stats). Pinch to
+place it; the placement spends the selection, so every dinosaur is two
+taps. Tap a placed dinosaur for its sheet (grow, sell, range, stats). Pinch to
 zoom; free undo of the last placement during a build phase. Dragging does
 nothing and there is no long-press: both were dropped on 2026-10-05, see
 section 10. Selling is the Sell button on the sheet. Web adds hotkeys and
@@ -560,15 +560,26 @@ we find out.
   deliberate thumb tap on a 19.5pt cell, so the gesture mis-fires on the
   careful player, and it is a destructive unconfirmed action competing with
   a Sell button that is one tap away on the sheet and shows the refund.
-  What carries "wall fast" now is that the tray selection **persists across a
-  placement**, which is the one part of this still with the owner: a
-  fifteen-cell wall is sixteen taps and, modelled with Fitts's law against the
-  30-second build timer, 5.9 seconds, where re-selecting per cell would be 30
-  taps, 2.1 metres of thumb travel and 22.1 seconds — three quarters of the
-  build phase spent travelling. Dropping drag does not depend on that answer;
-  only what replaces it does. Section 4 of `docs/01-art-hud-and-audio.md`
-  carries the interaction spec, the model, the one-shot delta and the
-  reference comparison that produced them.
+  Nothing replaces "wall fast", and that is also the owner's call — see the
+  next entry. Section 4 of `docs/01-art-hud-and-audio.md` carries the
+  interaction spec and the reference comparison that produced it.
+- 2026-10-05: **selection is one-shot — a placement spends the card.** The
+  owner's call, closing the question the entry above left open, and it is
+  PvZ-exact: every dinosaur is tap the card, then tap the cell. The argument
+  against was modelled and is real — a fifteen-cell wall is 30 taps rather
+  than 16, and against the 30-second build timer Fitts's law puts it at 22.1
+  seconds rather than 5.9, which is three quarters of the build phase and
+  about 2.1 metres of thumb travel. The owner **accepted that cost** for what
+  it buys: with nothing armed after a placement, a stray tap on the valley
+  does nothing, where a persisting selection would spend meat on whatever the
+  thumb brushed on its way somewhere else. A maul build phase is deliberate
+  rather than fast, and the extra tap is the deliberation made explicit.
+  Nothing compensates for the tap count — no repeat affordance, no
+  hold-to-repeat, no retuned timer — because a mechanism that gave the speed
+  back would give the stray taps back with it.
+  **A refusal does not spend the selection**, only a placement does: a refused
+  tap built nothing, so there is nothing to spend, and re-arming after one
+  would charge the player a tap for something the game rejected.
 - 2026-10-05: the refused preview's hatching is **3px stripes of `ink` at
   alpha 1, stepped 8px, over `refusal` at 0.45**. `ink` because hatching in
   `refusal` is one hue at two alphas, which the bright spawn, checkpoint and
