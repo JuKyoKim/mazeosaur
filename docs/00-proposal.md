@@ -523,3 +523,18 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   atlas is trimmed to the ink so the client's placement is
   `setOrigin(0.5, 1)` plus a scale from `meta.authored`, with no per-frame
   table.
+- 2026-10-05: **the frame-border check gates the direction that ships and
+  reports the other three, which are formally exempt.** A sprite touching
+  the edge of its authored square has lost ink there, and trimming does not
+  recover it. The exemption is not a difference of art intent: the three
+  flat directions are the record of how the choice was made, their frames
+  in `docs/art/` are what the board looked at, and pulling their silhouettes
+  in a pixel would edit that evidence while fixing nothing that ships.
+  Measured, the contact is also not the per-genus appendage overhang
+  `tools/art/bestiary.ts` licenses — it is on the left edge in the same
+  amount for every kind of a given archetype, so it comes from the shared
+  silhouette reaching x = 0. Fossil Pixel touches on 48 of 72 frames,
+  Clay Pack on 57 (the only one losing feet), Valley Naturalist on 42;
+  `toy-box` on none. The chosen direction is `CHOSEN` in
+  `tools/art/directions.ts`, read by both the gate and `npm run art:atlas`,
+  so changing direction is one line rather than three agreeing by luck.

@@ -22,7 +22,7 @@
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "art:check": "tsx tools/art/build.ts check",
     "art:frames": "tsx tools/art/build.ts frames",
-    "art:atlas": "tsx tools/art/build.ts atlas toy-box",
+    "art:atlas": "tsx tools/art/build.ts atlas",
     "art:verify": "tsx tools/art/build.ts verify"
   },
   "engines": {

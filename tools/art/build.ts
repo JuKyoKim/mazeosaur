@@ -19,6 +19,7 @@ import { content, hatchlings } from "@mazeosaur/content";
 import { ARCHETYPE_TELL, KIND_SILHOUETTE_NOTE, type Archetype } from "./bestiary.js";
 import {
   BOARD,
+  CHOSEN,
   DIRECTIONS,
   KINDS,
   KIND_HUE,
@@ -577,15 +578,28 @@ function doCheck(): void {
   // first is the ink dilation drawn *outside* the body — so the sprite still
   // looks like a sprite and simply loses its outline on one edge. The boss
   // did exactly that: 26 border pixels and a flat-topped crown, with nothing
-  // in any check that noticed. Cheap to assert, nearly invisible to the eye.
-  // Advisory, not a gate, and the reason is a real difference of intent.
-  // The 2D bestiary deliberately lets appendages — wing tips, tail clubs,
-  // horn tips — into a 6px overhang, so those three directions clip on
-  // purpose and have shipped that way. A block model has no such licence:
-  // `FILL` exists to reserve room for the ink, so any border pixel there is
-  // a scale bug. Until the three flat directions are either trimmed or
-  // explicitly exempted this prints rather than fails.
-  console.log("\nsprites clear of their frame border (advisory; clipping eats the ink first)");
+  // in any check that noticed. Trimming the atlas does not recover it: `pack`
+  // trims to the ink that survived, so the authored square is a working area
+  // and a pixel at its edge is a pixel that was thrown away.
+  //
+  // Gated for the direction that ships and reported for the other three,
+  // which is the exemption that was left open when this check was added.
+  // The reason is not a difference of art intent — it is that those three are
+  // the *record of how the choice was made*. Their frames in `docs/art/` are
+  // what the board looked at; regenerating them to pull the ink in a pixel
+  // would edit the evidence, and nothing in them is in an atlas. Measured, it
+  // is also not the per-genus appendage overhang the bestiary licenses: the
+  // contact is on the left edge, in the same amount for every kind of a given
+  // archetype, so it comes from the shared silhouette reaching x = 0 rather
+  // than from a wing tip. Fossil Pixel touches on 48 of 72 frames (133 px in
+  // all), Clay Pack on 57 (606 px, and the only one losing *feet* — cute
+  // proportions inflate mass into the bottom edge), Valley Naturalist on 42
+  // (150 px). Toy Box: none.
+  //
+  // Every frame in the atlas is measured, not one kind per archetype. The
+  // first version of this check sampled `tyrant` only, so it was gating the
+  // shipping direction on 9 of its 54 invader frames.
+  console.log("\nsprites clear of their frame border (gated for the chosen direction)");
   const edge = (r: Raster): number => {
     let n = 0;
     for (let x = 0; x < r.w; x++) {
@@ -601,19 +615,26 @@ function doCheck(): void {
   for (const d of DIRECTIONS) {
     let worst = 0;
     let worstName = "";
+    let touching = 0;
+    let total = 0;
+    let frames = 0;
     const note = (name: string, r: Raster): void => {
       const n = edge(r);
+      frames++;
+      total += n;
+      if (n) touching++;
       if (n > worst) {
         worst = n;
         worstName = name;
       }
     };
     for (const k of KINDS) for (const s of [1, 2, 3] as const) note(`${k}-${s}`, dinoSprite(k, s, d));
-    for (const a of ARCHETYPES) note(a, invaderSprite(a, "tyrant", d));
-    // Block directions are gated; the flat ones are reported (see above).
-    if (worst && d.model === "blocks") bad++;
-    const tag = !worst ? "ok  " : d.model === "blocks" ? "FAIL" : "warn";
-    console.log(`  ${tag} ${d.id.padEnd(20)} worst ${String(worst).padStart(3)} px${worst ? ` on ${worstName}` : ""}`);
+    for (const a of ARCHETYPES) for (const k of KINDS) note(`${a}-${k}`, invaderSprite(a, k, d));
+    const shipped = d.id === CHOSEN.id;
+    if (worst && shipped) bad++;
+    const tag = !worst ? "ok  " : shipped ? "FAIL" : "warn";
+    const detail = worst ? `${touching}/${frames} frames, ${total} px, worst ${worst} on ${worstName}` : `${frames} frames clear`;
+    console.log(`  ${tag} ${d.id.padEnd(20)} ${detail}${shipped ? "  (shipped)" : ""}`);
   }
 
   console.log("\natlas bytes per direction");
@@ -643,7 +664,7 @@ const [cmd, arg] = process.argv.slice(2);
 if (cmd === "frames") doFrames();
 else if (cmd === "verify") doVerify();
 else if (cmd === "compare") png("docs/art/directions-compared.png", compareSheet());
-else if (cmd === "atlas") doAtlas(arg ?? "fossil-pixel");
+else if (cmd === "atlas") doAtlas(arg ?? CHOSEN.id);
 else if (cmd === "check") doCheck();
 else {
   console.log("usage: node tools/art/build.ts [frames|verify|atlas <direction>|check]");

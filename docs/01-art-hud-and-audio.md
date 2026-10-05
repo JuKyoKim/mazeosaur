@@ -528,7 +528,9 @@ placement did not happen — animating it would say that it nearly did.
 Two atlases, Phaser JSON Hash format, shelf-packed by descending height into
 a 512px width with 1px padding. **Only the chosen direction is shipped**;
 `npm run art:atlas` writes it, and `tools/art/build.ts atlas <direction>`
-will write any of the four for a comparison.
+will write any of the four for a comparison. Which one is chosen is `CHOSEN`
+in `tools/art/directions.ts` and nowhere else, so the atlas command and the
+border check below cannot disagree about it.
 
 ```
 packages/game/assets/toy-box/dinos.png    + dinos.json
@@ -569,6 +571,33 @@ sprite.setDepth(cellY * GRID_W + cellX);        // row, then x within the row
 Invaders are not anchored: they are not in a cell, they move continuously,
 and they are drawn centred on their interpolated position at one cell (the
 `boss` archetype at two, `swarm` at 0.8), as the board frames do.
+
+**Nothing may touch the edge of its authored square.** `art:check` measures
+every one of the 72 frames in a direction against its own border and fails
+the build for the shipped direction. Trimming is not a safety net: `pack`
+trims to the ink that survived, so the authored square is a working area and
+a pixel on its edge is a pixel that was thrown away — usually the outline,
+which is why it is nearly invisible and worth asserting rather than looking
+for. Toy Box is clear on all 72.
+
+The three archived directions are **formally exempt and reported instead**.
+They are the record of how the choice was made; their frames in `docs/art/`
+are what the board looked at, and redrawing a silhouette to pull it in a
+pixel would edit that evidence while fixing nothing that ships. Measured,
+their contact is not the appendage overhang `bestiary.ts` licenses either —
+it sits on the left edge in the same amount for every kind of a given
+archetype, so it comes from the shared silhouette reaching x = 0:
+
+| direction | frames touching | border pixels | worst frame |
+| --- | --- | --- | --- |
+| **Toy Box** (shipped, gated) | 0 of 72 | 0 | — |
+| Fossil Pixel | 48 of 72 | 133 | `flier-3`, 16 |
+| Clay Pack | 57 of 72 | 606 | `longneck-3`, 40 |
+| Valley Naturalist | 42 of 72 | 150 | `flier-3`, 21 |
+
+Clay Pack is the only one that loses *feet* as well as outline — cute
+proportions inflate mass into the bottom edge — which is the one place the
+measurement says something about the art rather than about the geometry.
 
 **The budget.** The offline binary targets under 40 MB with every asset
 inside it. Measured by `art:check`:
@@ -742,14 +771,19 @@ button was, so the thumb does not move.
 
 ## 10. What this leaves open
 
-1. **The direction.** Section 2. The board's call; nothing else waits on
-   anything but this.
+1. **The models, not the direction.** The direction is settled — blocks,
+   section 2 — and the board's instruction with it was to keep working the
+   models. `tools/art/blocks.ts` is where that happens and it does not
+   change anything in this document.
 2. **The kind-hue change** in section 3 is a proposed replacement for
-   `KIND_COLOR` and can land before the direction does — it is measured,
-   and it is an improvement on M2 under every eye.
+   `KIND_COLOR` and can land independently of the art — it is measured, and
+   it is an improvement on M2 under every eye.
 3. **Animation.** v1 is static sprites plus the five effects. Idle breath
    and a two-frame walk are the obvious next thing and are not specified
-   here, because whether they are affordable depends on the direction.
+   here. In blocks they are cheap in a way they would not have been in the
+   flat directions — a frame is a camera pass over a model, so a bob is a
+   translation of a few boxes rather than a redrawn sprite — but they are
+   still frames in the atlas, and 57.7 kB is the number they multiply.
 4. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
    it stands. The proposal says "a final one to be designed", so this is a
    placeholder the content can change without touching this document.
