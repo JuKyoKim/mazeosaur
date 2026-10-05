@@ -27,6 +27,30 @@ describe("flow field", () => {
     expect(distanceAt(sealed, g, { x: 1, y: 1 })).not.toBe(UNREACHABLE);
   });
 
+  it("takes several targets at once, measuring every cell to the nearest one", () => {
+    const g = new Grid(5, 5);
+    const both = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+    ];
+    const f = computeFlowField(g, both);
+    expect(distanceAt(f, g, { x: 0, y: 0 })).toBe(0);
+    expect(distanceAt(f, g, { x: 4, y: 0 })).toBe(0);
+    expect(distanceAt(f, g, { x: 1, y: 0 })).toBe(STEP_COST);
+    expect(distanceAt(f, g, { x: 3, y: 0 })).toBe(STEP_COST);
+    expect(distanceAt(f, g, { x: 2, y: 0 })).toBe(2 * STEP_COST);
+
+    // a blocked target is dropped, not rejected: the rest still measure
+    g.setBlocked(0, 0, true);
+    const one = computeFlowField(g, both);
+    expect(distanceAt(one, g, { x: 1, y: 0 })).toBe(3 * STEP_COST);
+
+    // drop them all and nothing is reachable, which is how a sealed leg reads
+    g.setBlocked(4, 0, true);
+    const none = computeFlowField(g, both);
+    expect(distanceAt(none, g, { x: 2, y: 2 })).toBe(UNREACHABLE);
+  });
+
   it("does not cut corners between two diagonally touching towers", () => {
     const g = new Grid(3, 3);
     // towers at (1,0) and (0,1): the diagonal from (0,0) to (1,1) is a wall

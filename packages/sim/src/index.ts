@@ -21,6 +21,8 @@ export {
   type Lane,
   type BuildRefusal,
   laneTargets,
+  legCount,
+  legTargetCells,
   computeLaneFields,
   laneIsOpen,
   buildRefusal,
