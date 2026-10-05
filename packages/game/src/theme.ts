@@ -37,6 +37,17 @@ export const COLORS = {
    * token, 15.9:1 on `hud` — per §4 of docs/01-art-hud-and-audio.md.
    */
   selection: 0xecf0f1,
+  /**
+   * The board's dark ink: the growth pips, and the refused preview's
+   * hatching. Both are marks laid over a cell whose colour the mark does
+   * not control — a pip sits on any kind's fill, hatching on any terrain —
+   * so both need a value that contrasts with all of them rather than with
+   * one. Everything on this board is mid-to-bright, so dark is that value.
+   *
+   * §4 of docs/01-art-hud-and-audio.md specifies the hatching's width and
+   * spacing but not its colour; this is the gap, raised on ARB-168.
+   */
+  ink: 0x111111,
 } as const;
 
 /**

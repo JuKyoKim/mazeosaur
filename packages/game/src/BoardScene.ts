@@ -330,9 +330,38 @@ export class BoardScene extends Phaser.Scene {
    * `lineBetween` calls into the graphics object already being filled and
    * allocates nothing. A mask here would cost a second draw and a texture
    * per preview cell, on the one draw path that runs every frame.
+   *
+   * The stripes are `ink`, not `refusal`, and §4 does not say which — see
+   * the note on `ink`. Hatching in `refusal` makes the stripe and the fill
+   * the same hue at two alphas, so the contrast between them is set by
+   * whatever the cell already had on it, and the fill is only 0.45. Measured
+   * off a 720x1280 drive, luminance contrast of stripe against fill (10th
+   * and 90th percentile over the cell interior, so one antialiased pixel
+   * cannot set it):
+   *
+   *            refusal @0.9   ink @1
+   *   plain cell     1.20:1   1.56:1
+   *   spawn marker   1.25:1   5.04:1
+   *
+   * The second row is the one that justifies the change: spawn, both
+   * checkpoints and the nest carry a bright marker that lifted the fill to
+   * the stripe's own luminance and erased the hatching, leaving exactly the
+   * four cells a new player tries first — all of which always refuse —
+   * signalling by hue alone.
+   *
+   * The first row is the honest limit and is **not** good enough on its own:
+   * over a dark valley cell the fill is only 45% opaque, so there is not
+   * much luminance there for a stripe to contrast against, and a 2px
+   * diagonal antialiases away a good part of what there is. The hatching is
+   * a supporting channel here, not a sufficient one; the toast and the cell
+   * flash carry the refusal. Raised on ARB-168 with these numbers.
+   *
+   * The alpha is 1 and not the pips' 0.85 because §4 pins the width and the
+   * spacing but not the alpha, and at 2px on a diagonal every point of
+   * coverage is already being spent on antialiasing.
    */
   private hatchCell(gfx: Phaser.GameObjects.Graphics, x: number, y: number, size: number): void {
-    gfx.lineStyle(2, COLORS.refusal, 0.9);
+    gfx.lineStyle(2, COLORS.ink, 1);
     // Lines of slope -1, i.e. x + y = k. Stepping k by 8 gives 2px of ink
     // on ~5.7px of gap, which reads as hatching rather than as a fill.
     for (let k = 8; k < size * 2; k += 8) {
@@ -383,7 +412,7 @@ export class BoardScene extends Phaser.Scene {
       gfx.fillStyle(KIND_COLOR[def.kind], 1);
       gfx.fillRoundedRect(x + 3, y + 3, CELL_PX - 6, CELL_PX - 6, 6);
       // growth stage as pips
-      gfx.fillStyle(0x111111, 0.85);
+      gfx.fillStyle(COLORS.ink, 0.85);
       for (let i = 0; i < def.stage; i++) gfx.fillCircle(x + 9 + i * 9, y + CELL_PX - 8, 3);
     }
     this.towersDirty = false;
