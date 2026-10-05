@@ -85,19 +85,56 @@ function breathe(src: Raster, feet = 2): Raster {
 /**
  * A lunge: the head leads, the body follows, the feet stay.
  *
- * `lead` is the head band's shift and `follow` the body's. Both are clamped
- * to the room actually left in the square, because clipping the snout is
- * worse than a smaller lunge — and at 15px with `inset: 1` the room is
- * usually one pixel, which is the right size for this anyway.
+ * `lead` is the head band's shift and `follow` the body's, both relative to
+ * the feet. **Only the differences between the three are visible** — a frame
+ * where all three moved by the same amount is the same picture translated,
+ * and at a 19.5pt cell nobody sees the translation. So the shape of the
+ * lunge is preserved and the whole figure slides to wherever that shape
+ * fits.
+ *
+ * It does not always fit. A Tactics Pixel adult is 15px of ink in a 15px
+ * square — measured, raptor, tyrant and flier adults have **no free column
+ * on either side**, and no adult has one behind. Clamping each band into the
+ * square independently, which is what this used to do, silently turns that
+ * case into no animation at all: the wind-up's `-1` became `0` on all six
+ * kinds and the strike's `+2` became `0` on three of them, so three of the
+ * six "attacks" were a three-pixel flash on a sprite that never moved.
+ *
+ * The order of preference when the square is full:
+ *
+ * 1. **Slide, do not shrink.** Spend the free columns on whichever side has
+ *    them before giving up any of the lunge.
+ * 2. **Spend the trailing edge, never the leading one.** If the shape still
+ *    does not fit, push it as far back as the square allows and let the
+ *    *rear* of the lower bands fall off — a tail or a back leg losing a
+ *    column. Clipping the snout to buy the same pixel costs the one feature
+ *    the strike frame exists to show.
+ *
+ * At 15px the worst case is two columns off the back of a raptor, and the
+ * head still leads the feet by the full two pixels the clip asks for.
  */
 function lunge(src: Raster, lead: number, follow: number): Raster {
   const ink = inkBox(src);
-  const room = src.w - 1 - (ink.x + ink.w - 1);
+  const ahead = src.w - (ink.x + ink.w);
   const head = ink.y + Math.ceil(ink.h / 3);
   const body = ink.y + ink.h - 2;
-  const l = Math.max(Math.min(lead, room), -ink.x);
-  const f = Math.max(Math.min(follow, room), -ink.x);
-  return warp(src, (y) => ({ dx: y < head ? l : y < body ? f : 0, dy: 0 }));
+
+  // The shape, as the three band offsets, and the span it needs.
+  const hi = Math.max(lead, follow, 0);
+  const lo = Math.min(lead, follow, 0);
+  // A global slide of `g` keeps the shape and moves where it sits. It is
+  // clipping-free while `hi + g <= ahead` and `lo + g >= -ink.x`.
+  const back = -ink.x - lo;
+  const forward = ahead - hi;
+  // `back > forward` means the span is wider than the square's free columns:
+  // take `forward`, the furthest back the shape goes, which is the choice
+  // that clips the trailing edge instead of the leading one.
+  const g = back > forward ? forward : Math.min(Math.max(0, back), forward);
+
+  const l = lead + g;
+  const f = follow + g;
+  const s = g;
+  return warp(src, (y) => ({ dx: y < head ? l : y < body ? f : s, dy: 0 }));
 }
 
 /**

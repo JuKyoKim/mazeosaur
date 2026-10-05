@@ -1301,6 +1301,42 @@ sprite's contact with the cell floor — 5.0's anchor — does not move. An idle
 that changed the anchor would make every dinosaur on the board jitter against
 its own tile.
 
+**The attack may move it, and on half the kinds it has to.** The lunge is a
+shape — head ahead of body ahead of feet — and only the *differences* between
+the three bands are visible at a 19.5pt cell; the same picture translated is
+the same picture. So the shape is preserved and the whole figure slides to
+wherever it fits.
+
+It does not always fit, and Tactics Pixel is the direction where it does not.
+A 15px square holding 15px of ink has no free column to lunge into:
+
+| adult | ink | free behind | free ahead |
+| --- | --- | --- | --- |
+| raptor, tyrant, flier | 15 wide | 0 | 0 |
+| armored, horned | 14 wide | 0 | 1 |
+| longneck | 13 wide | 0 | 2 |
+
+**No adult has a free column behind it, and three have none on either side.**
+Clamping each band into the square independently — the obvious
+implementation, and the one this started as — turns that into *no animation
+at all*: the wind-up's one pixel back became zero on all six kinds, and the
+strike's two forward became zero on three of them, leaving a three-pixel
+flash on a sprite that never moved. The plate said "an attack lunge on every
+kind" and the pixels did it on half.
+
+So when the square is full the figure is pushed **back** until the shape fits
+and the *trailing* edge is what falls off — a tail or a back leg losing a
+column, never the snout, because the snout is the one feature the strike
+frame exists to show. Measured across the six adults the cost is 0 to 2
+pixels of ink, and every kind now differs from its rest frame on every
+attack frame.
+
+The honest consequence: on a full-square kind the feet are what visibly
+travel, and the animal recoils by a pixel or two over the clip rather than
+planting. At 90–130ms that reads as a strike. It is also why `attack` and
+`idle` are specified separately rather than as one rule — **the idle's
+promise not to move the anchor is not a promise the attack makes.**
+
 **Frame names** extend 5.5's rule rather than replacing it:
 `<kind>-<stage>` stays the rest frame, and an animated atlas adds
 `<kind>-<stage>-<clip><n>` — `raptor-3-idle1`, `raptor-3-attack0`. Everything
