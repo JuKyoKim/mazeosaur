@@ -235,3 +235,51 @@ test("preview: a tap arms the preview cell, including the tap that was refused",
 
   expect(errors.messages).toEqual([]);
 });
+
+/**
+ * The two selections are mutually exclusive, per §4 of
+ * `docs/01-art-hud-and-audio.md`: a kind armed in the tray and a placed
+ * dinosaur under inspection are never live at once. The value of it is that
+ * "what will a tap on a cell do" has one answer readable from one field.
+ *
+ * This is the one place the spec overrode the behaviour that was here
+ * before, so it is asserted rather than left to the comment: opening a
+ * sheet used to leave the tray armed, and the tap that dismissed the sheet
+ * then placed in the same gesture. With exclusion there is nothing left
+ * armed to place, and the dismissing tap has to be inert — otherwise a
+ * player who taps a dinosaur to read its range pays 10 meat to stop
+ * reading it.
+ */
+test("selection: a sheet and an armed card are never both live", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, SEED);
+
+  await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
+  await waitAFrame(page);
+
+  const wall = cellCenter(WALL[0]!.x, WALL[0]!.y);
+  await page.mouse.click(wall.x, wall.y);
+  await waitAFrame(page);
+  const placed = await simSnapshot(page);
+  expect(placed.dinos).toBe(1);
+  expect((await selectionSnapshot(page)).kindId).not.toBeNull();
+
+  // Tapping the dinosaur opens its sheet and disarms the tray.
+  await page.mouse.click(wall.x, wall.y);
+  await waitAFrame(page);
+  const inspecting = await selectionSnapshot(page);
+  expect(inspecting.dinoId).not.toBeNull();
+  expect(inspecting.kindId).toBeNull();
+
+  // Dismissing it on an empty cell closes the sheet and places nothing,
+  // and does not restore the kind the sheet replaced.
+  const empty = cellCenter(AFTER_REFUSAL.x, AFTER_REFUSAL.y);
+  await page.mouse.click(empty.x, empty.y);
+  await waitAFrame(page);
+  const after = await selectionSnapshot(page);
+  expect(after.dinoId).toBeNull();
+  expect(after.kindId).toBeNull();
+  expect(await simSnapshot(page)).toMatchObject({ dinos: 1, meat: placed.meat });
+
+  expect(errors.messages).toEqual([]);
+});
