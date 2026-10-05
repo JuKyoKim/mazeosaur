@@ -600,3 +600,14 @@ we find out.
   have: the counter plus a `60 left` readout is 245 of the 224 the band
   between the eggs and Send actually has. The fix is section 4's bar, not a
   coordinate.
+- 2026-10-05: **the docs cite symbols, never a line number.** A line number
+  reads as precise, passes review because it once was, and rots on the next
+  unrelated edit to the file — and it rots invisibly, because the reader who
+  checks it lands a line or two away inside the same object literal and
+  believes it. Three fixes in a row were that, one of them pointing into a
+  file that had been a bare re-export since the canvas and HUD geometry moved
+  into the client package. Name the exported symbol, the
+  function or the field instead; `npm run check:readmes` now rejects a
+  citation of the form path-dot-extension-colon-digits in any markdown prose,
+  with fenced blocks exempt so a quoted transcript may keep the numbers it
+  actually printed.
