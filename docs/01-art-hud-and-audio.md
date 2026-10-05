@@ -553,10 +553,6 @@ else here moves:
 - **Nothing replaces "wall fast."** The extra taps are the accepted cost, not
   an oversight; see the end of this section.
 
-The code on `main` is sticky by accident rather than by design — `selectedDef`
-is set and never cleared — so clearing it on a successful place is a real client
-change, not a no-op.
-
 **The preview on the target cell, and why touch cannot have the web one.**
 `game.placeRefusal(defId, x, y)` is a pure query, so a preview is allowed to
 be *truthful* rather than hopeful: the client knows before the commit whether
@@ -673,8 +669,7 @@ cancelling.
 **Cancel.** Two ways, both of which must exist. Under one-shot they cover the
 window between selecting a kind and spending it rather than an indefinitely
 held selection, which makes them smaller but not optional: the card is armed
-and costs meat the moment a cell is tapped, and today there is no way to
-deselect at all.
+and costs meat the moment a cell is tapped.
 
 - **Re-tap the selected card.** It returns to rest, the preview stops.
 - **Tap empty space,** which means precisely: anywhere in the board area with
