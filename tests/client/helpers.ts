@@ -24,8 +24,9 @@ export function paletteButtonCenter(index: number, kindCount = 6): { x: number; 
   return { x: 16 + index * (bw + 4) + bw / 2, y: py + 62 / 2 };
 }
 
-export const SEND_BUTTON = { x: 496 + 144 / 2, y: HUD_Y + 8 + 42 / 2 };
-export const SPEED_BUTTON = { x: 648 + 56 / 2, y: HUD_Y + 8 + 42 / 2 };
+export const SEND_BUTTON = { x: 496 + 96 / 2, y: HUD_Y + 8 + 42 / 2 };
+export const PAUSE_BUTTON = { x: 600 + 48 / 2, y: HUD_Y + 8 + 42 / 2 };
+export const SPEED_BUTTON = { x: 656 + 48 / 2, y: HUD_Y + 8 + 42 / 2 };
 
 /**
  * A point in the HUD that is not any control: the status/preview text
@@ -41,8 +42,20 @@ const PANEL_Y = HUD_Y + 196;
 export const GROW_BUTTON = { x: CANVAS_W - 336 + 190 / 2, y: PANEL_Y + 8 + 52 / 2 };
 export const SELL_BUTTON = { x: CANVAS_W - 136 + 120 / 2, y: PANEL_Y + 8 + 52 / 2 };
 
-/** The "Play again" button on the won/lost overlay (`showOverlay`). */
+/** The "Play again" button on the end-of-run overlay (`showOverlay`). */
 export const PLAY_AGAIN_BUTTON = { x: CANVAS_W / 2, y: BOARD_H / 2 + 60 + 64 / 2 };
+
+/**
+ * The pause menu's three entries (`PAUSE_MENU` in `BoardScene.ts`): 328
+ * wide, `MIN_HIT` (82) tall, centred in the board area. A point on the
+ * scrim but on none of them, for the tap-to-dismiss gesture, is the gap
+ * above the first button.
+ */
+const PAUSE_MENU = { x: CANVAS_W / 2, h: 82 };
+export const RESUME_BUTTON = { x: PAUSE_MENU.x, y: 432 + PAUSE_MENU.h / 2 };
+export const RESTART_RUN_BUTTON = { x: PAUSE_MENU.x, y: 528 + PAUSE_MENU.h / 2 };
+export const END_RUN_BUTTON = { x: PAUSE_MENU.x, y: 624 + PAUSE_MENU.h / 2 };
+export const PAUSE_SCRIM_BARE = { x: PAUSE_MENU.x, y: 420 };
 
 /**
  * What the harness reaches for inside the page, declared against the real
@@ -167,6 +180,29 @@ export function firstFlierMigration(page: Page): Promise<number> {
   return page.evaluate(() => {
     const c = window.mazeosaurBoard!().sim.content;
     return c.migrations.findIndex((m) => m.groups.some((g) => c.invaders[g.invader]?.flying));
+  });
+}
+
+/**
+ * Whether the clock is running, from `BoardScene.clock`. A pause is
+ * invisible below the client by design, so `state.tick` holding still is
+ * all a sim snapshot can see — and a frozen renderer looks identical.
+ */
+export function clockSnapshot(page: Page): Promise<{ paused: boolean; abandoned: boolean; speed: number }> {
+  return page.evaluate(() => window.mazeosaurBoard!().clock);
+}
+
+/**
+ * Everything a replay is a function of: the tick reached, the command log,
+ * and the state hash those two produce. This is the determinism assertion
+ * a pause has to survive — `packages/sim/test/save.test.ts` proves the
+ * round trip below the client, and this proves the client did not quietly
+ * add a tick or a command while the menu was up.
+ */
+export function replaySnapshot(page: Page): Promise<{ tick: number; hash: number; log: string }> {
+  return page.evaluate(() => {
+    const sim = window.mazeosaurBoard!().sim;
+    return { tick: sim.state.tick, hash: sim.hash(), log: JSON.stringify(sim.log) };
   });
 }
 

@@ -668,3 +668,23 @@ we find out.
   citation of the form path-dot-extension-colon-digits in any markdown prose,
   with fenced blocks exempt so a quoted transcript may keep the numbers it
   actually printed.
+- 2026-10-05: **pause is the client's clock stopping, and a run the player
+  walks out of is unresumable but not finished.** Pause is
+  `BoardScene.update()` declining to call `tick()`: no command enters the
+  log, `state.tick` does not move, and the hash of the resumed run is the
+  hash it had when the menu opened — so a replay, a save or a server
+  verification of a paused run is identical to one of the same run played
+  straight through. A pause the sim knew about would be a determinism change
+  and is not this. The menu's other two entries, restart the run and end the
+  run, both **abandon** the run: it is written with `run: null` exactly as a
+  won or lost run is, because there is nothing left to resume, but it earns
+  no fossils, does not count toward `runsFinished`, and cannot take
+  `profile.best`. Section 1.2 of
+  [01-v1-architecture.md](01-v1-architecture.md) accounts a run that reached
+  `won` or `lost`; crediting one the player ended early would let a player
+  farm `best` by quitting the moment a good migration cleared. The discard
+  is load-bearing rather than tidiness — `create()` resumes `doc.run`
+  whenever it is non-null, so a mid-run restart that skipped it would hand
+  back the run it was asked to throw away. Until the `title` and `results`
+  scenes exist (section 5.1 of the same doc), ending a run shows the
+  end-of-run overlay the won and lost paths already draw.

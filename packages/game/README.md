@@ -21,7 +21,13 @@ ports themselves are section 2 of
 - `src/BoardScene.ts` — the board, the HUD and all input. The only scene
   that constructs a `Game`. Resumes a saved run via `src/resume.ts`'s
   `gameForRun()`, and autosaves at phase boundaries through
-  `services(this).saves`.
+  `services(this).saves`. It also owns **the clock**: the sim has no
+  timers, so the speed toggle and the pause menu are this scene choosing
+  how often to call `tick()`, and a pause is it choosing not to. The
+  menu's "Restart run" and "End run" abandon the run — written with
+  `run: null` because nothing is left to resume, but not counted as
+  finished; section 10 of
+  [docs/00-proposal.md](../../docs/00-proposal.md) says why.
 - `src/resume.ts` — `gameForRun()`: reuses `MountOptions.resumed`
   (`LoadOutcome.resumed` from the shell's `loadSave`) instead of replaying
   the run a second time, falling back to `@mazeosaur/sim`'s `replay()` only

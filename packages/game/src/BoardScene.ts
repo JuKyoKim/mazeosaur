@@ -18,6 +18,7 @@ import {
   CELL_PX,
   HUD_H,
   HUD_Y,
+  MIN_HIT,
   SELECT_BORDER,
   SELECT_LIFT,
   colAt,
@@ -79,6 +80,30 @@ const AIR_ROUTE_BLINK_MS = 1000;
 const AIR_ROUTE_LOUD = { line: 0.3, lightMin: 0.45, lightMax: 1, width: 3, radius: 5 };
 const AIR_ROUTE_SUBDUED = { line: 0.12, lightMin: 0.15, lightMax: 0.35, width: 2, radius: 3 };
 
+/**
+ * The pause menu, centred in the board area with the board still visible
+ * behind its scrim. 328px wide to match `RESULTS.again` in `layout.ts`, and
+ * `MIN_HIT` tall — these are the first overlay buttons in the client that
+ * meet the 44pt hit floor, and a menu whose middle entry throws the run
+ * away is exactly where a mis-tap is least acceptable.
+ *
+ * Here rather than in `layout.ts` because the shipped HUD's own row 1 and
+ * the won/lost overlay are still hand-placed literals in this file too; the
+ * v1 HUD recut onto `layout.ts`'s `ROW1`/`RESULTS` is what moves all three
+ * at once, and splitting them early would leave the geometry in two files
+ * disagreeing about which one is the HUD.
+ */
+const PAUSE_MENU = {
+  title: 328,
+  sub: 388,
+  x: Math.round((CANVAS_W - 328) / 2),
+  w: 328,
+  h: MIN_HIT,
+  resume: 432,
+  restart: 528,
+  end: 624,
+} as const;
+
 interface Effect {
   kind: "attack" | "kill" | "flash" | "leak" | "tap";
   x: number;
@@ -122,6 +147,25 @@ export class BoardScene extends Phaser.Scene {
   private game_!: Game;
   private acc!: number;
   private speed!: number;
+  /**
+   * The clock is stopped. Nothing below the client knows: `packages/sim`
+   * has no timers, so "paused" is this scene declining to call `tick()` —
+   * no command enters the log, `state.tick` does not move, and a resumed
+   * run's hash is the hash it had when the menu opened. A pause the sim
+   * knew about would be a determinism change and is not this.
+   *
+   * Also true for as long as an ended run's results overlay is up, which
+   * is what keeps the board from ticking on under it: `won`/`lost` stop
+   * the clock by their phase, and an ended run has no phase of its own.
+   */
+  private paused!: boolean;
+  /**
+   * The player ended this run from the pause menu. `flush()` writes
+   * `run: null` for it exactly as it does for a won or lost one — there is
+   * nothing left to resume — but it is *not* a finished run, so it earns
+   * no fossils and does not count toward `runsFinished`; see `flush()`.
+   */
+  private abandoned!: boolean;
   private prevPos!: Map<number, { x: number; y: number }>;
   private effects!: Effect[];
 
@@ -180,6 +224,12 @@ export class BoardScene extends Phaser.Scene {
   private panelStats!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
+  /**
+   * Whichever overlay is up: the pause menu, or the end-of-run screen.
+   * One field, because only one is ever up and because `wireInput` reads
+   * it to make the board inert underneath — a tap on the valley behind a
+   * menu must not place a dinosaur.
+   */
   private overlay!: Phaser.GameObjects.Container | null;
 
   // Set once in the constructor, not per-run: whether a later create() is
@@ -262,6 +312,8 @@ export class BoardScene extends Phaser.Scene {
     this.sessionStartMs = this.time.now;
     this.acc = 0;
     this.speed = 1;
+    this.paused = false;
+    this.abandoned = false;
     this.prevPos = new Map();
     this.effects = [];
     this.towersDirty = true;
@@ -288,7 +340,11 @@ export class BoardScene extends Phaser.Scene {
 
   override update(_time: number, delta: number): void {
     const g = this.game_;
-    if (g.state.phase === "build" || g.state.phase === "migration") {
+    // `paused` gates the accumulator, so a pause is a clock that is not
+    // running rather than a state the sim is in: no tick is taken, no
+    // command is logged, and `acc` keeps the sub-tick remainder the pause
+    // interrupted so the resumed run picks up mid-tick where it left off.
+    if (!this.paused && (g.state.phase === "build" || g.state.phase === "migration")) {
       this.acc += delta * this.speed;
       let ticks = 0;
       while (this.acc >= TICK_MS && ticks < 20) {
@@ -300,8 +356,14 @@ export class BoardScene extends Phaser.Scene {
       }
     }
     const alpha = Math.min(1, this.acc / TICK_MS);
-    for (const e of this.effects) e.life -= delta;
-    this.effects = this.effects.filter((e) => e.life > 0);
+    // Effects age on the same stopped clock. They are purely cosmetic, so
+    // letting them run would not desync anything — but an attack line that
+    // fades out while the board behind it is frozen reads as the game still
+    // being alive, which is the one thing a pause has to deny.
+    if (!this.paused) {
+      for (const e of this.effects) e.life -= delta;
+      this.effects = this.effects.filter((e) => e.life > 0);
+    }
 
     if (this.towersDirty) this.drawTowers();
     this.drawDynamic(alpha);
@@ -671,13 +733,24 @@ export class BoardScene extends Phaser.Scene {
     const y0 = HUD_Y;
     this.add.rectangle(0, y0, CANVAS_W, HUD_H, COLORS.hud).setOrigin(0, 0);
 
-    // row 1: numbers, then send and speed at the right
+    // row 1: numbers, then the three clock controls at the right.
+    //
+    // Pause came out of Send's width rather than out of the row: Send is
+    // the widest control here and its longest label ("Send  +25" at 19px)
+    // needs under 96px, where the timer slot and the two toggles have no
+    // slack at all. Send keeps its left edge and the row keeps its right
+    // edge at `CONTENT_RIGHT`, so nothing that was already placed moves.
+    // The row is over-packed either way — "Migration 50/50" reaches into
+    // the timer's slot at the widest, which is the v1 HUD recut's to fix.
     this.meatText = this.add.text(16, y0 + 16, "", text(22, COLORS.meat));
     this.eggsText = this.add.text(150, y0 + 16, "", text(22, COLORS.eggs));
     this.waveText = this.add.text(272, y0 + 16, "", text(22));
     this.timerText = this.add.text(420, y0 + 16, "", text(22, COLORS.textDim));
-    this.sendButton = this.button(496, y0 + 8, 144, 42, "Send", () => this.send(), 19);
-    this.speedButton = this.button(648, y0 + 8, 56, 42, "1x", () => this.cycleSpeed(), 19);
+    this.sendButton = this.button(496, y0 + 8, 96, 42, "Send", () => this.send(), 19);
+    // Not kept as a field: its label never changes, so `refreshHud` has no
+    // reason to hold it and the restart rule has one less field to reset.
+    this.button(600, y0 + 8, 48, 42, "Pause", () => this.pause(), 15);
+    this.speedButton = this.button(656, y0 + 8, 48, 42, "1x", () => this.cycleSpeed(), 19);
 
     // row 2: one button per kind
     const py = y0 + 58;
@@ -811,15 +884,144 @@ export class BoardScene extends Phaser.Scene {
     this.statusUntil = this.time.now + 2000;
   }
 
+  /**
+   * The scrim every overlay sits on, with the board still legible behind
+   * it. Two jobs beyond the dimming:
+   *
+   * It **swallows the tap**. The rectangle is interactive and sits above
+   * the HUD in the display list, but Phaser keeps walking the candidates
+   * under a pointer unless one of them cancels the event — so without the
+   * `stopPropagation` here a tap on the scrim reached the live Send and
+   * speed buttons behind it. Harmless on a won or lost run, whose phase
+   * refuses a `send` anyway; not harmless on an ended run, which is still
+   * in `build` and would have taken the command.
+   *
+   * And `onTap` is the dismiss gesture. Only the pause menu has one: a
+   * won, lost or ended run has nothing behind the scrim to go back to.
+   */
+  private scrim(onTap?: () => void): Phaser.GameObjects.Container {
+    const c = this.add.container(0, 0);
+    const r = this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7).setOrigin(0, 0).setInteractive();
+    r.on("pointerdown", (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+      ev.stopPropagation();
+      onTap?.();
+    });
+    c.add(r);
+    return c;
+  }
+
+  /** How far this run got, as one line. The pause menu's and the results screen's. */
+  private runLine(): string {
+    const s = this.game_.state;
+    const total = content.migrations.length;
+    return `Migration ${Math.min(s.migration + 1, total)}/${total} · ${s.eggs} eggs · ${s.meat} meat`;
+  }
+
+  /** The end-of-run screen: won, lost, or ended by the player. Terminal. */
   private showOverlay(title: string, sub: string): void {
     if (this.overlay) return;
-    const c = this.add.container(0, 0);
-    c.add(this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7).setOrigin(0, 0).setInteractive());
+    const c = this.scrim();
     c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 - 60, title, text(48)).setOrigin(0.5));
     c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 + 4, sub, text(22, COLORS.textDim)).setOrigin(0.5));
     const b = this.button(CANVAS_W / 2 - 120, BOARD_H / 2 + 60, 240, 64, "Play again", () => this.scene.restart(), 22);
     c.add([b.bg, b.label]);
     this.overlay = c;
+  }
+
+  private closeOverlay(): void {
+    // Containers are exclusive by default, so this destroys the scrim, the
+    // labels and the buttons with it. `create()` nulls the field on a
+    // restart, which destroys the whole display list anyway; this is the
+    // path that has to clean up without one.
+    this.overlay?.destroy();
+    this.overlay = null;
+  }
+
+  // ----------------------------------------------------------- pause menu
+
+  /**
+   * Pause. The owner asked for "pause/menu … standard option to end game
+   * and such standard ui" (ARB-216 item 2), which is three entries: back
+   * to the run, start it over, or stop playing it.
+   *
+   * Opening the menu does not disarm the tray or close a dinosaur's sheet:
+   * resuming has to put the player back exactly where they were, and a
+   * selection is where they were.
+   */
+  private pause(): void {
+    if (this.overlay) return;
+    this.paused = true;
+    // Time in a menu is not time played: fold the session so far into the
+    // base now, and `playedMs()` adds nothing more until `resume()` starts
+    // a new session. Without this a run left paused overnight would save
+    // with a night on its clock.
+    this.playedMsBase += this.time.now - this.sessionStartMs;
+
+    const c = this.scrim(() => this.resume());
+    c.add(this.add.text(CANVAS_W / 2, PAUSE_MENU.title, "Paused", text(48)).setOrigin(0.5));
+    c.add(this.add.text(CANVAS_W / 2, PAUSE_MENU.sub, this.runLine(), text(22, COLORS.textDim)).setOrigin(0.5));
+    const entries = [
+      { y: PAUSE_MENU.resume, label: "Resume", fill: COLORS.buttonActive, onClick: () => this.resume() },
+      { y: PAUSE_MENU.restart, label: "Restart run", fill: COLORS.button, onClick: () => this.restartRun() },
+      { y: PAUSE_MENU.end, label: "End run", fill: COLORS.buttonDanger, onClick: () => this.endRun() },
+    ];
+    for (const e of entries) {
+      const b = this.button(PAUSE_MENU.x, e.y, PAUSE_MENU.w, PAUSE_MENU.h, e.label, e.onClick, 24);
+      b.bg.setFillStyle(e.fill);
+      c.add([b.bg, b.label]);
+    }
+    this.overlay = c;
+  }
+
+  private resume(): void {
+    this.closeOverlay();
+    // A new play session starts here, so the paused span is never counted.
+    this.sessionStartMs = this.time.now;
+    this.paused = false;
+  }
+
+  /**
+   * The run is over by the player's choice. Nothing is left to resume, so
+   * `flush()` writes `run: null` — see `abandoned`, and see `flush()` for
+   * why that is still not a *finished* run.
+   */
+  private abandonRun(): void {
+    this.abandoned = true;
+    this.autosave();
+  }
+
+  /**
+   * Start this seed over. The clock stays stopped until `create()` clears
+   * `paused`, so the abandoned board cannot tick in the frames between.
+   *
+   * The discard is not optional. `create()` resumes `doc.run` whenever it
+   * is non-null, and `flush()` has been keeping an in-flight run on `doc`
+   * since the first autosave — so a restart that skipped `abandonRun()`
+   * would hand back the very run it was asked to throw away. The won/lost
+   * path gets this for free, because its own `flush()` already wrote
+   * `run: null` before the overlay offered "Play again"; a mid-run restart
+   * is the first path that does not.
+   */
+  private restartRun(): void {
+    this.abandonRun();
+    this.closeOverlay();
+    this.scene.restart();
+  }
+
+  /**
+   * Stop playing. Section 5.1's `results` scene is where this goes once it
+   * exists, and `title` after that; until then the end-of-run overlay the
+   * won and lost paths already draw *is* the results screen, so ending a
+   * run shows that rather than inventing a second shape for it.
+   *
+   * `paused` stays true underneath, which is what stops the board ticking
+   * on behind the scrim — an ended run's phase is still `build` or
+   * `migration`, so unlike a win or a loss it has nothing else to stop it.
+   */
+  private endRun(): void {
+    this.abandonRun();
+    this.closeOverlay();
+    this.showOverlay("The run is over", `${this.runLine()}. Nothing to resume.`);
   }
 
   // --------------------------------------------------------------- input
@@ -1030,7 +1232,12 @@ export class BoardScene extends Phaser.Scene {
   flush(): Promise<void> {
     const phase = this.game_.state.phase;
     const finished = phase === "won" || phase === "lost";
-    const run: RunSave | null = finished
+    // An abandoned run is as unresumable as a finished one, so it is
+    // written the same way: `run: null`. It is deliberately *not* folded
+    // into `finished` — see `accountFinish` below, which still tests only
+    // the won/lost phases, because a run the player walked out of did not
+    // finish and must not earn its fossils or its `profile.best` entry.
+    const run: RunSave | null = finished || this.abandoned
       ? null
       : {
           valleyId: content.valley.id,
@@ -1046,7 +1253,7 @@ export class BoardScene extends Phaser.Scene {
           log: [...this.game_.log],
           tick: this.game_.state.tick,
           hash: this.game_.hash(),
-          playedMs: this.playedMsBase + (this.time.now - this.sessionStartMs),
+          playedMs: this.playedMs(),
         };
     // §1.7: a won or lost run writes `profile.best`, exactly once. `won`
     // and `lost` are terminal, so the phase is still `finished` for as
@@ -1070,6 +1277,17 @@ export class BoardScene extends Phaser.Scene {
     if (accountFinish) this.finishedAccounted = true;
     this.doc = { ...this.doc, run, profile, writtenBy: this.build };
     return services(this).saves.put(this.doc);
+  }
+
+  /**
+   * How long this run has been played. `pause()` folds the elapsed session
+   * into `playedMsBase` and `resume()` starts a new one, so a paused run
+   * adds nothing here — a `suspend()` flush that lands while the menu is
+   * up (every `visibilitychange` to hidden does) must not re-count the
+   * span the pause already banked.
+   */
+  private playedMs(): number {
+    return this.playedMsBase + (this.paused ? 0 : this.time.now - this.sessionStartMs);
   }
 
   /** Fire-and-forget `flush()`: a storage error must never interrupt a running game. */
@@ -1111,5 +1329,15 @@ export class BoardScene extends Phaser.Scene {
       from: this.cellCenter(lane.spawn.x, lane.spawn.y),
       to: this.cellCenter(lane.exit.x, lane.exit.y),
     };
+  }
+
+  /**
+   * The clock, for tests and debugging from the console. A pause is
+   * invisible to the sim by design, so `state.tick` holding still is the
+   * only thing a sim snapshot can see — and that is exactly what a frozen
+   * renderer looks like too. These two fields tell the cases apart.
+   */
+  get clock(): { paused: boolean; abandoned: boolean; speed: number } {
+    return { paused: this.paused, abandoned: this.abandoned, speed: this.speed };
   }
 }
