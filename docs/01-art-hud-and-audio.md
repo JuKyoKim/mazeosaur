@@ -314,13 +314,11 @@ into the button**. Stacking it is the reason row 1 is 96 tall rather than
 the 82 the hit floor asks for.
 
 This is also why there are no timer digits competing for the same band. A
-digit field between the migration counter and Send does not fit at any
-value, and the prototype is the demonstration: its counter sits at 272 and
-its Send at 496 (`BoardScene.ts`, `buildHud`), so the counter and a
-`60 left` readout are 173 + 72 at `body` against a band of 224 — which is
-why it renders `Migration 1/5` and `30s` on top of each other today. The
-layout above has less room still: 124, from the counter at 320 to Send at
-444. The bar is the design, and the arithmetic is the second reason for it.
+digit field between the migration readout and Send does not fit at any
+value: the band from the readout at 320 to Send at 444 is 124px, and the
+readout's own widest value takes 108 of it, so the 16 that are left are the
+clearance in the table above and not room for a second field. The bar is the
+design, and the arithmetic is the second reason for it.
 
 ### Row 2 — the next migration, y=1104, 40 tall
 
@@ -651,16 +649,15 @@ off-finger truth, and the refusal toast sits at `y=932` for the same reason.
 Both are above the thumb in a one-handed grip and both outlive the lift — the
 toast by 1.6 seconds.
 
-**Refusal is enough as it stands, and it is located at the cause.**
-`tryPlace()` flashes the cell and toasts `REFUSAL_TEXT[r]` — `That would seal
-the maze`, `Not enough meat`, `Solid rock`. That is the cell plus the toast
-plus the hatching, three channels, and **the selection always survives a
+**A refusal gets three channels, and that is enough. Each one is located at
+the cause.** `tryPlace()` flashes the cell and toasts `REFUSAL_TEXT[r]` —
+`That would seal the maze`, `Not enough meat`, `Solid rock`. That is the cell
+plus the toast plus the hatching, and **the selection always survives a
 refusal** — the one case where the card stays selected, because the tap bought
 nothing, and a card that cleared itself on a refusal would charge the player
-two taps for the game saying no. One addition, because one of the three is not
-the cell's fault: on `no-meat` the *card's* cost also flashes `refusal` once,
-since the card is where the problem is and where the fix is. Feedback goes
-where the cause is,
+two taps for the game saying no. On `no-meat` the *card's* cost also flashes
+`refusal` once, because that refusal is not the cell's fault: the card is where
+the problem is and where the fix is. Feedback goes where the cause is,
 not where the finger was. The card never flashes for `would-block` or `rock`.
 
 A refusal on a sealed maze is the one refusal the game *wants* the player to
