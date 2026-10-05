@@ -20,6 +20,8 @@ export const COLORS = {
   meat: "#e67e22",
   eggs: "#f5f6fa",
   refusal: 0xe74c3c,
+  /** `refusal` as a CSS string, for the text the card's cost flashes to. */
+  refusalText: "#e74c3c",
   attack: 0xfdfefe,
   button: 0x2e4a38,
   buttonActive: 0x3f7a55,
@@ -28,7 +30,28 @@ export const COLORS = {
   hpFront: 0x2ecc71,
   hpLow: 0xe74c3c,
   ghost: 0xffffff,
+  /**
+   * One selection convention, so the player learns it once: the ring on a
+   * selected dinosaur, the border on a selected tray card and the tap ring
+   * are all this colour. It is `text` as a number — the HUD's lightest
+   * token, 15.9:1 on `hud` — per §4 of docs/01-art-hud-and-audio.md.
+   */
+  selection: 0xecf0f1,
 } as const;
+
+/**
+ * The selected tray card's two geometry numbers. Both are derived in §4 of
+ * `docs/01-art-hud-and-audio.md` and both live in `tools/art/layout.ts`,
+ * which is the source of truth the frame generator and `art:verify` read.
+ * They are restated here because `packages/game` cannot depend on `tools/`;
+ * if they change there, they change here.
+ *
+ * The lift is 5 and the border 3 because the card sits 8px inside its row
+ * and 5 + 3 is 8, so the border stops exactly on the row line rather than
+ * crossing into the migration line above it.
+ */
+export const SELECT_LIFT = 5;
+export const SELECT_BORDER = 3;
 
 export const KIND_COLOR: Record<Kind, number> = {
   raptor: 0xe0a83a,
