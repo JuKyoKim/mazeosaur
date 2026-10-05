@@ -103,6 +103,17 @@ export async function waitAFrame(page: Page): Promise<void> {
  * both at once, and turns a save leaking between tests into a loud failure
  * here rather than a quiet drift in whichever spec runs second.
  */
+/**
+ * Common tail of a (re)load: wait for the canvas, wait for the board scene
+ * to be mounted inside it, then wait a frame so the first real draw has
+ * happened before anything reads state off it.
+ */
+async function waitForBoardMounted(page: Page): Promise<void> {
+  await page.waitForSelector("canvas");
+  await page.waitForFunction(() => window.mazeosaur?.phaser.scene.keys["board"] !== undefined);
+  await waitAFrame(page);
+}
+
 export async function openGame(page: Page, seed: number): Promise<void> {
   // Installed before any page script runs, so it is there for the first
   // evaluate after load. One accessor, so the path into the page is
@@ -117,13 +128,39 @@ export async function openGame(page: Page, seed: number): Promise<void> {
     };
   });
   await page.goto(`/?seed=${seed}`);
-  await page.waitForSelector("canvas");
-  await page.waitForFunction(() => window.mazeosaur?.phaser.scene.keys["board"] !== undefined);
+  await waitForBoardMounted(page);
   const actualSeed = await page.evaluate(() => window.mazeosaurBoard!().sim.seed);
   if (actualSeed !== seed) {
     throw new Error(`asked for seed ${seed} but the client is running ${actualSeed}: a stored save resumed instead of a fresh run`);
   }
-  await waitAFrame(page);
+}
+
+/**
+ * Reloads the page the way a player's browser does on a real navigation,
+ * and waits for the board scene to remount. `page.addInitScript` re-runs on
+ * every navigation of the same page, so `window.mazeosaurBoard` is back
+ * without re-installing it.
+ *
+ * Deliberately does not check the seed the way `openGame` does: the point
+ * of this helper is a *resumed* run, which keeps the seed the stored save
+ * was written with regardless of the URL.
+ */
+export async function reloadAndWaitForBoard(page: Page): Promise<void> {
+  await page.reload();
+  await waitForBoardMounted(page);
+}
+
+/**
+ * Calls the same `flush()` that `autosave()` and `GameHandle.suspend()`
+ * call, and awaits its promise. A real reload races `pagehide`'s
+ * fire-and-forget write against the navigation tearing the page down, which
+ * is the right thing for the shell to do but the wrong thing for a
+ * deterministic test to depend on: this flushes the current run
+ * synchronously first, so the reload that follows is a clean test of load
+ * and resume rather than of that race.
+ */
+export async function flushSave(page: Page): Promise<void> {
+  await page.evaluate(() => window.mazeosaurBoard!().flush());
 }
 
 /**
@@ -180,6 +217,38 @@ export async function waitForEggsBelow(page: Page, eggs: number, timeoutMs = 45_
 export async function loseOnNextLeak(page: Page): Promise<void> {
   await page.evaluate(() => {
     window.mazeosaurBoard!().sim.state.eggs = 1;
+  });
+}
+
+/**
+ * Points the sim at the last real migration, so the next "Send" follows the
+ * game's only path to `won`: `clearMigration()`, called from inside
+ * `tick()` once a migration's spawn queue and invaders are both empty
+ * (`packages/sim/src/game.ts`). That path matters because it is the one
+ * `BoardScene.update()` actually drains events on — `update()` only calls
+ * `drainEvents()` while `phase` is `"build"` or `"migration"`
+ * (`packages/game/src/BoardScene.ts`), so a `won` set any other way (e.g.
+ * `startMigration` finding no next migration, which real play can never
+ * reach because `clearMigration` already wins first) sets the sim's phase
+ * but leaves the event undrained and the overlay never shows — a trap this
+ * test fell into once. Pair with `clearActiveMigration` after sending,
+ * rather than fighting fifty migrations' worth of real invaders to prove
+ * the win screen, the same way `loseOnNextLeak` doesn't drain all twenty
+ * eggs by hand.
+ */
+export async function winOnNextSend(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const board = window.mazeosaurBoard!();
+    board.sim.state.migration = board.sim.content.migrations.length - 1;
+  });
+}
+
+/** Empties the in-flight migration's spawns, so it clears on the next tick. */
+export async function clearActiveMigration(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const s = window.mazeosaurBoard!().sim.state;
+    s.spawnQueue.length = 0;
+    s.invaders.length = 0;
   });
 }
 
