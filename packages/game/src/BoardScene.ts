@@ -36,31 +36,6 @@ interface Button {
   label: Phaser.GameObjects.Text;
 }
 
-/** Cells on the line from `a` (exclusive) to `b` (inclusive), Bresenham. */
-function cellsAlong(a: { x: number; y: number }, b: { x: number; y: number }): { x: number; y: number }[] {
-  const out: { x: number; y: number }[] = [];
-  let x = a.x;
-  let y = a.y;
-  const dx = Math.abs(b.x - a.x);
-  const dy = -Math.abs(b.y - a.y);
-  const sx = a.x < b.x ? 1 : -1;
-  const sy = a.y < b.y ? 1 : -1;
-  let err = dx + dy;
-  while (x !== b.x || y !== b.y) {
-    const e2 = 2 * err;
-    if (e2 >= dy) {
-      err += dy;
-      x += sx;
-    }
-    if (e2 <= dx) {
-      err += dx;
-      y += sy;
-    }
-    out.push({ x, y });
-  }
-  return out;
-}
-
 const REFUSAL_TEXT: Record<Refusal, string> = {
   "out-of-bounds": "Off the valley",
   occupied: "Something is already there",
@@ -113,8 +88,11 @@ export class BoardScene extends Phaser.Scene {
 
   private selectedDef!: DinoDef | null;
   private selectedDino!: number | null;
-  private painting!: boolean;
-  private lastPaint!: { x: number; y: number } | null;
+  /**
+   * The cell the placement preview is drawn on: the last cell tapped, or
+   * the one under a mouse on a desktop. A tap sets it so the preview is
+   * reachable without a hover, which a touchscreen cannot produce.
+   */
   private hoverCell!: { x: number; y: number } | null;
 
   private meatText!: Phaser.GameObjects.Text;
@@ -218,8 +196,6 @@ export class BoardScene extends Phaser.Scene {
     this.towersDirty = true;
     this.selectedDef = null;
     this.selectedDino = null;
-    this.painting = false;
-    this.lastPaint = null;
     this.hoverCell = null;
     this.paletteButtons = [];
     this.overlay = null;
@@ -381,12 +357,31 @@ export class BoardScene extends Phaser.Scene {
       } else {
         this.selectedDino = null;
       }
-    } else if (this.hoverCell && this.selectedDef && !this.painting) {
+    } else if (this.hoverCell && this.selectedDef && !g.dinoAt(this.hoverCell.x, this.hoverCell.y)) {
+      // The preview is the answer to "did my tap land?", so it must be
+      // drawn for a refusal too — nothing drawn reads as a dropped tap
+      // rather than as a cell that will not take a dinosaur. Valid and
+      // invalid differ by more than hue: a refusal gets a hard border and
+      // no range ring, because a hue difference alone is not a signal a
+      // colour-blind player can rely on.
+      //
+      // Suppressed over a cell that already holds a dinosaur: a tap there
+      // opens that dinosaur's sheet and never refuses, so previewing a
+      // refusal on your own finished wall is noise.
       const r = g.placeRefusal(this.selectedDef.id, this.hoverCell.x, this.hoverCell.y);
       const c = this.cellCenter(this.hoverCell.x, this.hoverCell.y);
-      gfx.fillStyle(r ? COLORS.refusal : KIND_COLOR[this.selectedDef.kind], 0.45);
-      gfx.fillRoundedRect(this.hoverCell.x * CELL_PX + 3, this.hoverCell.y * CELL_PX + 3, CELL_PX - 6, CELL_PX - 6, 6);
-      if (!r) {
+      const x0 = this.hoverCell.x * CELL_PX;
+      const y0 = this.hoverCell.y * CELL_PX;
+      if (r) {
+        gfx.fillStyle(COLORS.refusal, 0.35);
+        gfx.fillRoundedRect(x0 + 3, y0 + 3, CELL_PX - 6, CELL_PX - 6, 6);
+        gfx.lineStyle(3, COLORS.refusal, 0.95);
+        gfx.strokeRoundedRect(x0 + 3, y0 + 3, CELL_PX - 6, CELL_PX - 6, 6);
+      } else {
+        gfx.fillStyle(KIND_COLOR[this.selectedDef.kind], 0.45);
+        gfx.fillRoundedRect(x0 + 3, y0 + 3, CELL_PX - 6, CELL_PX - 6, 6);
+        gfx.lineStyle(3, 0xffffff, 0.8);
+        gfx.strokeRoundedRect(x0 + 3, y0 + 3, CELL_PX - 6, CELL_PX - 6, 6);
         gfx.lineStyle(1, 0xffffff, 0.35);
         gfx.strokeCircle(c.x, c.y, (this.selectedDef.range * CELL_PX) / CELL);
       }
@@ -545,9 +540,16 @@ export class BoardScene extends Phaser.Scene {
 
     if (this.time.now > this.statusUntil) this.statusText.setText("");
 
+    // The lit card is the only thing on screen that says what a tap on
+    // the board will do, so it is lit by two channels, not one: a 3px
+    // border and twice the fill. The border alone was legible on a
+    // monitor and not at arm's length on a phone.
+    //
+    // `selectDef` toggles on exactly this condition — see the note there.
     for (const { def, button } of this.paletteButtons) {
       const active = this.selectedDef?.id === def.id && this.selectedDino === null;
       button.bg.setStrokeStyle(active ? 3 : 0, 0xffffff);
+      button.bg.setFillStyle(KIND_COLOR[def.kind], active ? 0.5 : 0.25);
       button.label.setColor(s.meat >= def.cost ? COLORS.text : COLORS.textDim);
     }
 
@@ -593,47 +595,58 @@ export class BoardScene extends Phaser.Scene {
 
   // --------------------------------------------------------------- input
 
+  /**
+   * One gesture places: tap a kind in the tray, then tap a cell. There is
+   * no drag path. A fast finger mis-places on a phone — it paints the
+   * line it crossed on the way to where the player was aiming — and a
+   * single tap per dinosaur is what the arcade this is modelled on does.
+   *
+   * Selection is sticky: it survives a placement and a refusal, so a wall
+   * is N taps rather than 2N. The two ways out are re-tapping the lit card
+   * and tapping bare HUD, which is why both exist — a selection that
+   * cannot be cleared is a mode the player is trapped in.
+   */
   private wireInput(): void {
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       if (this.overlay) return;
       const cell = this.cellAt(p);
-      if (!cell) return;
+      if (!cell) {
+        // Off the board: bare HUD, or off-canvas. A tray card, Send, the
+        // speed toggle, Grow and Sell all stop propagation in `button()`,
+        // so this only ever fires for HUD chrome — which makes it the
+        // "tap away to put the dinosaur back" half of cancel. It cannot
+        // be an empty *cell* instead: with sticky selection an empty cell
+        // is always a placement target.
+        this.selectedDef = null;
+        this.hoverCell = null;
+        return;
+      }
       const dino = this.game_.dinoAt(cell.x, cell.y);
       if (dino) {
         this.selectedDino = dino.id;
         this.setPanelVisible(true);
         return;
       }
+      // Drawing the preview under the finger before placing is what makes
+      // a refusal legible: the tap that was refused leaves the invalid
+      // state on screen next to its toast.
+      this.hoverCell = cell;
       if (this.selectedDino !== null) {
+        // Deliberate fall-through: a tap on an empty cell with a sheet
+        // open both closes the sheet and places, so returning to building
+        // after inspecting a dinosaur does not cost a wasted tap.
         this.selectedDino = null;
         this.setPanelVisible(false);
         if (!this.selectedDef) return;
       }
-      if (this.selectedDef) {
-        this.painting = true;
-        this.lastPaint = cell;
-        this.tryPlace(cell.x, cell.y);
-      }
+      if (this.selectedDef) this.tryPlace(cell.x, cell.y);
     });
+    // Desktop only: a touchscreen never hovers, which is why the tap above
+    // sets `hoverCell` as well.
     this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
-      const cell = this.cellAt(p);
-      this.hoverCell = cell;
-      if (!this.painting || !p.isDown || !cell || !this.selectedDef) return;
-      if (this.lastPaint && this.lastPaint.x === cell.x && this.lastPaint.y === cell.y) return;
-      // A fast finger skips cells between two move events; paint the line
-      // between them so a wall never has accidental gaps.
-      const from = this.lastPaint ?? cell;
-      this.lastPaint = cell;
-      for (const c of cellsAlong(from, cell)) this.tryPlace(c.x, c.y, true);
+      this.hoverCell = this.cellAt(p);
     });
-    const stop = () => {
-      this.painting = false;
-      this.lastPaint = null;
-    };
-    this.input.on("pointerup", stop);
-    this.input.on("pointerupoutside", stop);
     this.input.on("gameout", () => {
-      stop();
       this.hoverCell = null;
     });
   }
@@ -643,17 +656,41 @@ export class BoardScene extends Phaser.Scene {
     return { x: Math.floor(p.x / CELL_PX), y: Math.floor(p.y / CELL_PX) };
   }
 
-  private tryPlace(x: number, y: number, quiet = false): void {
+  /**
+   * One tap, one attempt, and every refusal says why. There used to be a
+   * `quiet` flag here, because a drag crossing the trail would otherwise
+   * fire the same toast forty times in a second; with one placement per
+   * tap there is nothing left to suppress, and a silent refusal is
+   * indistinguishable from a tap the client dropped.
+   *
+   * The selection is untouched either way: the next tap places the same
+   * kind, whether this one landed or was refused.
+   */
+  private tryPlace(x: number, y: number): void {
     if (!this.selectedDef) return;
     const r = this.game_.apply({ type: "place", defId: this.selectedDef.id, x, y });
     if (r) {
       const c = this.cellCenter(x, y);
       this.effects.push({ kind: "flash", x: c.x, y: c.y, color: COLORS.refusal, ttl: 250, life: 250 });
-      if (!quiet || r === "no-meat" || r === "would-block") this.status(REFUSAL_TEXT[r]);
+      this.status(REFUSAL_TEXT[r]);
     }
   }
 
+  /**
+   * A tray card. Tapping the card that is already lit clears the
+   * selection — the other half of cancel, and the discoverable one.
+   *
+   * The toggle tests the same condition `refreshHud` lights the card by,
+   * so what the player sees and what the tap does cannot disagree: with a
+   * dinosaur's sheet open no card is lit, and tapping the selected kind
+   * there closes the sheet and re-arms it rather than clearing it.
+   */
   private selectDef(def: DinoDef): void {
+    if (this.selectedDef?.id === def.id && this.selectedDino === null) {
+      this.selectedDef = null;
+      this.hoverCell = null;
+      return;
+    }
     this.selectedDef = def;
     this.selectedDino = null;
     this.setPanelVisible(false);
@@ -749,5 +786,15 @@ export class BoardScene extends Phaser.Scene {
   /** For tests and debugging from the console. */
   get sim(): Game {
     return this.game_;
+  }
+
+  /**
+   * What is selected, for tests and debugging from the console. The input
+   * model is now two taps where it was one drag, so "which kind is armed"
+   * is a state a test has to be able to assert — a placement count alone
+   * cannot tell a cleared selection from a refused tap.
+   */
+  get selection(): { kindId: string | null; dinoId: number | null; preview: { x: number; y: number } | null } {
+    return { kindId: this.selectedDef?.id ?? null, dinoId: this.selectedDino, preview: this.hoverCell };
   }
 }

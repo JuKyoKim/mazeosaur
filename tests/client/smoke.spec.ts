@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   GROW_BUTTON,
+  HUD_BARE,
   PLAY_AGAIN_BUTTON,
   SELL_BUTTON,
   SEND_BUTTON,
@@ -9,6 +10,7 @@ import {
   loseOnNextLeak,
   openGame,
   paletteButtonCenter,
+  selectionSnapshot,
   simSnapshot,
   trackPageErrors,
   waitAFrame,
@@ -23,52 +25,90 @@ const SEED = 123;
 // (19,9)), so these dinosaurs see no invaders and every migration-1 invader
 // is free to walk to the nest and leak. That is the point: we need a leak,
 // not a kill.
-const DRAG_FROM = { x: 12, y: 2 };
-const DRAG_TO = { x: 15, y: 2 };
+const WALL = [
+  { x: 12, y: 2 },
+  { x: 13, y: 2 },
+  { x: 14, y: 2 },
+  { x: 15, y: 2 },
+];
+/** One more cell on the same row, placed without re-arming the tray. */
+const AFTER_REFUSAL = { x: 16, y: 2 };
 
-test("full run: place, drag-paint at speed, grow, sell, send, leak, lose, play again", async ({ page }) => {
+// The lane's spawn cell. `buildRefusal` rejects the spawn, both
+// checkpoints and the nest outright, so this is a refusal that does not
+// depend on what is already built or on how much meat is left — and
+// `content.valley.rock` is empty, so a lane cell is the only terrain that
+// can refuse at all.
+const LANE_CELL = { x: 0, y: 0 };
+
+const HATCHLING_COST = 10;
+
+test("full run: arm, place four taps, grow, sell, send, leak, lose, play again", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 
-  // Explicitly select the cheapest hatchling rather than relying on the
-  // palette's default selection, so the test still means something if that
+  // Explicitly arm the cheapest hatchling rather than relying on the
+  // tray's default selection, so the test still means something if that
   // default changes.
   await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
+  // Phaser queues DOM pointer events and processes them in its own step,
+  // so every assertion about input here has to be one frame behind the
+  // click that caused it — the same reason a screenshot does.
+  await waitAFrame(page);
+  const armed = (await selectionSnapshot(page)).kindId;
+  expect(armed).not.toBeNull();
 
   const before = await simSnapshot(page);
   expect(before.dinos).toBe(0);
 
-  // Place a dinosaur, then drag fast to paint a line of walls. A real finger
-  // skips cells between pointermove events; a single fast jump (no
-  // intermediate steps) is exactly that. Placement must interpolate the
-  // line between events, or this line has gaps a slow-drag test would miss.
-  const from = cellCenter(DRAG_FROM.x, DRAG_FROM.y);
-  const to = cellCenter(DRAG_TO.x, DRAG_TO.y);
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(to.x, to.y, { steps: 1 });
-  await page.mouse.up();
-  await waitAFrame(page);
+  // Four discrete taps, four dinosaurs. This replaces a drag-interpolation
+  // assertion: what it proves now is that the selection is **sticky**, so
+  // a wall costs one tap per cell and not a re-arm between each. If a
+  // placement cleared the selection, taps two through four would be
+  // swallowed and this would read 1.
+  for (const cell of WALL) {
+    const c = cellCenter(cell.x, cell.y);
+    await page.mouse.click(c.x, c.y);
+    await waitAFrame(page);
+    // The armed kind must be the same one after every placement, not just
+    // at the end — a selection cleared and re-defaulted by `buildHud`'s
+    // fallback would still end up non-null.
+    expect((await selectionSnapshot(page)).kindId).toBe(armed);
+  }
 
-  const afterDrag = await simSnapshot(page);
-  // Exclusive start, inclusive end: 12,13,14,15 at y=2 is 4 cells. Without
-  // interpolation only the pointerdown cell and the final pointermove cell
-  // would place, i.e. 2 — the exact bug this harness exists to catch.
-  expect(afterDrag.dinos).toBe(4);
-  expect(afterDrag.meat).toBe(before.meat - 4 * 10);
+  const afterWall = await simSnapshot(page);
+  expect(afterWall.dinos).toBe(WALL.length);
+  expect(afterWall.meat).toBe(before.meat - WALL.length * HATCHLING_COST);
+
+  // A refused tap must not disarm the tray. Tap the lane's spawn cell,
+  // which always refuses, then tap a valid cell with no re-arm in
+  // between: if the refusal had cleared the selection, the second tap
+  // would place nothing.
+  const lane = cellCenter(LANE_CELL.x, LANE_CELL.y);
+  await page.mouse.click(lane.x, lane.y);
+  await waitAFrame(page);
+  expect((await simSnapshot(page)).dinos).toBe(WALL.length);
+  expect((await selectionSnapshot(page)).kindId).toBe(armed);
+
+  const extra = cellCenter(AFTER_REFUSAL.x, AFTER_REFUSAL.y);
+  await page.mouse.click(extra.x, extra.y);
+  await waitAFrame(page);
+  expect((await simSnapshot(page)).dinos).toBe(WALL.length + 1);
 
   // Grow the first dinosaur placed.
-  await page.mouse.click(from.x, from.y);
+  const first = cellCenter(WALL[0]!.x, WALL[0]!.y);
+  await page.mouse.click(first.x, first.y);
   await page.mouse.click(GROW_BUTTON.x, GROW_BUTTON.y);
   await waitAFrame(page);
 
   // Sell a different one.
-  await page.mouse.click(to.x, to.y);
+  const last = cellCenter(WALL[WALL.length - 1]!.x, WALL[WALL.length - 1]!.y);
+  await page.mouse.click(last.x, last.y);
   await page.mouse.click(SELL_BUTTON.x, SELL_BUTTON.y);
   await waitAFrame(page);
 
   const afterGrowSell = await simSnapshot(page);
-  expect(afterGrowSell.dinos).toBe(3);
+  expect(afterGrowSell.dinos).toBe(WALL.length);
 
   // Send the migration early instead of waiting out the build timer.
   await page.mouse.click(SEND_BUTTON.x, SEND_BUTTON.y);
@@ -109,6 +149,89 @@ test("full run: place, drag-paint at speed, grow, sell, send, leak, lose, play a
   // counter advancing — a WebGL canvas without `preserveDrawingBuffer`
   // can't be trusted by sampling pixels.
   await waitForTickAdvance(page, afterRestart.tick);
+
+  expect(errors.messages).toEqual([]);
+});
+
+/**
+ * The two ways out of the armed state. Before tap-to-place there was no
+ * way out at all — `selectedDef` was set by the tray and never cleared —
+ * so neither of these has ever had coverage, and the failure mode is a
+ * player stuck in a mode where every tap on the valley spends meat.
+ */
+test("selection: the lit card and bare HUD both cancel, and a cancelled tray places nothing", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, SEED);
+
+  const card = paletteButtonCenter(0);
+  const empty = cellCenter(WALL[0]!.x, WALL[0]!.y);
+
+  // Cancel by re-tapping the lit card.
+  await page.mouse.click(card.x, card.y);
+  await waitAFrame(page);
+  const armed = (await selectionSnapshot(page)).kindId;
+  expect(armed).not.toBeNull();
+
+  await page.mouse.click(card.x, card.y);
+  await waitAFrame(page);
+  expect((await selectionSnapshot(page)).kindId).toBeNull();
+
+  // A cleared tray is really cleared: a tap on an empty cell is inert
+  // rather than falling back to whatever was armed last.
+  const before = await simSnapshot(page);
+  await page.mouse.click(empty.x, empty.y);
+  await waitAFrame(page);
+  expect(await simSnapshot(page)).toMatchObject({ dinos: before.dinos, meat: before.meat });
+
+  // Cancel by tapping HUD that is not a control. This is the one gesture
+  // that can collide with the tray: a tray card only avoids cancelling
+  // itself because `button()` stops propagation before the scene's own
+  // `pointerdown` runs. The re-arm below is the assertion that it does —
+  // if it did not, this click would select and immediately clear.
+  await page.mouse.click(card.x, card.y);
+  await waitAFrame(page);
+  expect((await selectionSnapshot(page)).kindId).toBe(armed);
+
+  await page.mouse.click(HUD_BARE.x, HUD_BARE.y);
+  await waitAFrame(page);
+  expect((await selectionSnapshot(page)).kindId).toBeNull();
+
+  await page.mouse.click(empty.x, empty.y);
+  await waitAFrame(page);
+  expect(await simSnapshot(page)).toMatchObject({ dinos: before.dinos, meat: before.meat });
+
+  expect(errors.messages).toEqual([]);
+});
+
+/**
+ * The preview is the only thing that tells a player a tap landed on a cell
+ * that will not take a dinosaur. "Nothing drawn" is the failure mode: it
+ * reads as a tap the client dropped. The draw itself is pixels on a WebGL
+ * canvas and not assertable here, so what this covers is the state the
+ * draw is keyed off — that a *tap* arms it at all, which a touchscreen
+ * cannot do by hovering.
+ */
+test("preview: a tap arms the preview cell, including the tap that was refused", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, SEED);
+
+  await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
+  await waitAFrame(page);
+  expect((await selectionSnapshot(page)).preview).toBeNull();
+
+  const lane = cellCenter(LANE_CELL.x, LANE_CELL.y);
+  await page.mouse.click(lane.x, lane.y);
+  await waitAFrame(page);
+  const refused = await selectionSnapshot(page);
+  expect(refused.preview).toEqual(LANE_CELL);
+  expect(refused.kindId).not.toBeNull();
+  expect((await simSnapshot(page)).dinos).toBe(0);
+
+  // Cancelling takes the preview with it, or a stale square is left
+  // sitting on the valley with nothing armed to place there.
+  await page.mouse.click(HUD_BARE.x, HUD_BARE.y);
+  await waitAFrame(page);
+  expect((await selectionSnapshot(page)).preview).toBeNull();
 
   expect(errors.messages).toEqual([]);
 });
