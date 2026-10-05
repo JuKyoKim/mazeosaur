@@ -38,7 +38,7 @@ import { blitScaled, drawText, effectsPlate, renderBoardFrame, strikesPlate } fr
 import { CANVAS_H, CANVAS_W, CELL_PX, DRAW_CELLS, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
 import { encodeApng, encodePng, pngHasPixels } from "./png.js";
 import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
-import { dinoSprite, invaderSprite, pack, strikeEntries } from "./sprites.js";
+import { dinoSprite, inkBox, invaderSprite, pack, strikeEntries } from "./sprites.js";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -461,8 +461,22 @@ function animationSheet(d: Direction): Raster {
   // authored pixel is `drawn / spritePx` logical pixels — 3 for a 15px
   // sprite in a 45px box — and the device scale turns that into points.
   const travel = (drawn / d.spritePx) * SCALE;
+
+  // Which adults have no column to lunge into, measured on this direction
+  // rather than asserted. The sentence below is the one the merge gate on
+  // #35 caught the last version of: a plate that states a fact about the
+  // pixels has to state it about *these* pixels, and the full-square case is
+  // Tactics Pixel's at 15px, not Toy Box's at 64.
+  const tight = KINDS.filter((kind) => {
+    const ink = inkBox(dinoSprite(kind, 3, d));
+    return ink.x === 0 && ink.x + ink.w === d.spritePx;
+  });
+  const names = tight.length < 2 ? tight.join("") : `${tight.slice(0, -1).join(", ")} and ${tight[tight.length - 1]}`;
+  const SLIDE = !tight.length
+    ? ""
+    : ` Where the ink fills the square - ${names} ${tight.length === 1 ? "has" : "have"} no free column on either side - the lunge keeps its shape and slides back into itself, so the trailing edge gives up a pixel rather than the snout, and the feet are what travel.`;
   const NOTE =
-    `One pixel of movement, twice: the idle lifts everything above the feet by a pixel and holds it for 380ms, and the attack leans back a pixel, lunges two with a three-pixel strike flash, then recovers. Frame 0 of each clip is the sprite at rest, so reduced motion (section 7) is a renderer that draws frame 0 and stops. One authored pixel is ${(drawn / d.spritePx).toFixed(2)} logical pixels and about ${travel.toFixed(1)}pt on the reference phone, so the breath moves ${travel.toFixed(1)}pt and the head leads the lunge by ${(2 * travel).toFixed(1)}pt - small, and the reason the attack also carries a flash. Where the ink fills the square - raptor, tyrant and flier have no free column on either side - the lunge keeps its shape and slides back into itself, so the trailing edge gives up a pixel rather than the snout, and the feet are what travel. Section 5.6.`;
+    `One pixel of movement, twice: the idle lifts everything above the feet by a pixel and holds it for 380ms, and the attack leans back a pixel, lunges two with a three-pixel strike flash, then recovers. Frame 0 of each clip is the sprite at rest, so reduced motion (section 7) is a renderer that draws frame 0 and stops. One authored pixel is ${(drawn / d.spritePx).toFixed(2)} logical pixels and about ${travel.toFixed(1)}pt on the reference phone, so the breath moves ${travel.toFixed(1)}pt and the head leads the lunge by ${(2 * travel).toFixed(1)}pt - small, and the reason the attack also carries a flash.${SLIDE} Section 5.6.`;
   const proseCols = Math.floor((width - labelX * 2) / (6 * fontScale(TYPE.label)));
   const noteLines = wrap(NOTE, proseCols, 99);
 
