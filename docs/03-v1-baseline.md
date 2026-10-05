@@ -67,7 +67,7 @@ out:
   dinosaurs ignore fliers". All four are in `packages/sim/test/game.test.ts`;
   `mechanics.test.ts` only has the multi-target hit test. Fixed above.
 
-## The open question: idle and attack animations
+## Idle and attack animations, answered
 
 The owner's list (routed through [ARB-199](/ARB/issues/ARB-199) and
 [ARB-201](/ARB/issues/ARB-201)) names this line as **"dinos attack, with
@@ -78,25 +78,26 @@ the Toy Box idle and attack animations."** Splitting it in two:
   This is real, tested (line 4 above), and the client already renders an
   effect when it happens (`BoardScene.ts`'s `case "attack"`, a colored line
   flash — see `handleEvents`).
-- **Idle and attack animations** — frame-based sprite animation, distinct
-  from the existing flash effect — **does not exist in the client and is
-  not specified for v1.** `docs/01-art-hud-and-audio.md` section 10 item 3
-  says so directly: *"v1 is static sprites plus the five effects. Idle
-  breath and a two-frame walk are the obvious next thing and are not
-  specified here."* The shipped Toy Box atlas
-  (`packages/game/assets/toy-box/*.json`) carries one static frame per
-  dinosaur with no idle/attack keys, and nothing in `packages/game/src`
-  calls Phaser's `anims` API. The one place idle/attack clips are being
-  prototyped is PR #35 (ARB-64), which is **open** and is a *fifth,
-  unchosen* art direction — not an addition to Toy Box, the direction
-  that shipped.
+- **Idle and attack animations.** The owner answered this on
+  [ARB-216](/ARB/issues/ARB-216) and it splits in two. **The attack effect
+  is in v1 and is specified**: `docs/01-art-hud-and-audio.md` §5.4.1, six
+  per-kind strikes of three steps each in the shipped Toy Box direction,
+  shipped as `packages/game/assets/toy-box/strikes.{png,json}` — a third
+  atlas beside `dinos.json`, which still carries one static frame per
+  dinosaur with no idle/attack keys of its own ([ARB-222](/ARB/issues/ARB-222),
+  [#56](https://github.com/JuKyoKim/mazeosaur/pull/56)). §10 item 3 of that
+  document was amended to match. **Idle breath and walk cycles are still
+  not in v1** and are still unspecified — what defers them is that nobody
+  has said what a Toy Box dinosaur does standing still, not size: the
+  strikes measured 18 frames for 12.4 kB against a 40 MB binary.
 
-So this half of the line cannot have a passing test today without either
-building a feature the art spec explicitly defers, or redefining what v1
-means for it. Not a QA call: flagged to `maze-architect` as a scope
-question on [ARB-201](/ARB/issues/ARB-201) rather than resolved here. Until
-it is answered, `npm run test:baseline` covers only the mechanical half,
-which is what keeps it green.
+So line 4's second half now has a specification to test against, but not
+yet an implementation: the client wiring is
+[ARB-223](/ARB/issues/ARB-223), blocked on
+[ARB-222](/ARB/issues/ARB-222). `npm run test:baseline` still covers only
+the mechanical half until that lands, which is what keeps it green — and
+that is now a *sequencing* statement rather than an unanswered scope
+question.
 
 ## `npm run test:baseline`
 
