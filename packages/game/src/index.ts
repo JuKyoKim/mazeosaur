@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BoardScene } from "./BoardScene.js";
-import { CANVAS_H, CANVAS_W, COLORS } from "./theme.js";
+import { CANVAS_H, CANVAS_W } from "./layout.js";
+import { COLORS } from "./theme.js";
 import { SERVICES_KEY, type GameHandle, type MountOptions } from "./platform.js";
 
 /**

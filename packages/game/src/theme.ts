@@ -1,10 +1,9 @@
-import type { Kind } from "@mazeosaur/sim";
+// Colour and type styles. The geometry is not here: the canvas, the cell, the
+// HUD boxes and the hit floor are `./layout.ts`, which is the one place they
+// are declared and the file `tools/art` re-exports. A constant that lives in
+// two files agrees only until somebody edits one of them.
 
-/** Logical canvas. Portrait; scaled to fit whatever screen mounts it. */
-export const CANVAS_W = 720;
-export const CANVAS_H = 1280;
-/** Pixels per grid cell on the logical canvas: 20 cells * 36 = 720. */
-export const CELL_PX = 36;
+import type { Kind } from "@mazeosaur/sim";
 
 export const COLORS = {
   bg: 0x16211a,
@@ -49,20 +48,6 @@ export const COLORS = {
    */
   ink: 0x111111,
 } as const;
-
-/**
- * The selected tray card's two geometry numbers. Both are derived in §4 of
- * `docs/01-art-hud-and-audio.md` and both live in `tools/art/layout.ts`,
- * which is the source of truth the frame generator and `art:verify` read.
- * They are restated here because `packages/game` cannot depend on `tools/`;
- * if they change there, they change here.
- *
- * The lift is 5 and the border 3 because the card sits 8px inside its row
- * and 5 + 3 is 8, so the border stops exactly on the row line rather than
- * crossing into the migration line above it.
- */
-export const SELECT_LIFT = 5;
-export const SELECT_BORDER = 3;
 
 export const KIND_COLOR: Record<Kind, number> = {
   raptor: 0xe0a83a,
