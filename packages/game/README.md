@@ -32,8 +32,14 @@ ports themselves are section 2 of
   accounting `flush()` calls on a fresh run and on a won/lost one. Pure and
   Phaser-free on purpose, so it is unit tested directly; the fossil award
   itself reads `content.rules.fossilWeights` rather than a number here.
-- `src/theme.ts` — canvas size, colours, text styles. Shared constants
-  live here rather than on a scene.
+- `src/layout.ts` — the logical canvas, the cell, the HUD boxes, the type
+  scale and the 82px hit floor, plus `gridTop()`/`rowAt()`/`colAt()`. The
+  one place those numbers are declared: `tools/art/layout.ts` re-exports
+  this file through the package's `./layout` subpath, so the mock that
+  generates [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md)
+  cannot disagree with what the client draws. Imports nothing, so it reads
+  from Node with no Phaser.
+- `src/theme.ts` — colours and text styles, and nothing geometric.
 
 `mountGame` starts `BoardScene` with the save the shell already loaded
 and migrated, and a shell with nowhere to write injects `NULL_SAVE_STORE`.
