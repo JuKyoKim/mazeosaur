@@ -652,3 +652,15 @@ we find out.
   by one cell when they do. Sealing stays impossible by the same exact test
   rather than a new rule: no targets left means no reachable cells, which is
   what `laneIsOpen` already reads as closed.
+- 2026-10-05: **nothing blocks a merge on `main` until the v1 production
+  release; the baseline that does matter is named and tested.** The eight
+  MVP features and playability lines, the test proving each one, and
+  `npm run test:baseline` are in
+  [03-v1-baseline.md](03-v1-baseline.md). One line — idle and attack
+  animations — is still open: it is named in the baseline but not
+  specified for v1 anywhere else (section 10 item 3 of
+  `docs/01-art-hud-and-audio.md` defers animation explicitly), so it has
+  no test yet and is flagged there rather than resolved by inventing one.
+  `check` and `client-smoke` stay as `docs/02-ci.md` has them until then;
+  only at the v1 release does the owner get asked to make
+  `test:baseline` itself a required check, per the open ARB-171 question.
