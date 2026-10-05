@@ -32,14 +32,18 @@ describe(`${assetDir(CHOSEN.id)}`, () => {
 
   it("is checked at all, which is the part that was missing", () => {
     // A guard whose subject list came out empty would pass on everything.
-    // Four files: a PNG and a JSON for the dinosaurs and for the invaders.
+    // Six files: a PNG and a JSON for the dinosaurs, the invaders and the
+    // attack strikes.
     const files = atlasFiles(CHOSEN);
     expect(files.map((f) => f.rel).sort()).toEqual([
       `${assetDir(CHOSEN.id)}/dinos.json`,
       `${assetDir(CHOSEN.id)}/dinos.png`,
       `${assetDir(CHOSEN.id)}/invaders.json`,
       `${assetDir(CHOSEN.id)}/invaders.png`,
+      `${assetDir(CHOSEN.id)}/strikes.json`,
+      `${assetDir(CHOSEN.id)}/strikes.png`,
     ]);
-    expect(files.filter((f) => f.kind === "image").reduce((n, f) => n + (f.kind === "image" ? f.frames : 0), 0)).toBe(72);
+    // 18 dinosaurs, 54 invaders, 18 strikes.
+    expect(files.filter((f) => f.kind === "image").reduce((n, f) => n + (f.kind === "image" ? f.frames : 0), 0)).toBe(90);
   });
 });

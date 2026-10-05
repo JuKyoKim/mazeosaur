@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Game, kindMultiplier, type GameEvent, type InvaderDef } from "../src/index.js";
+import { DIFFICULTIES, Game, isDifficulty, kindMultiplier, type GameEvent, type InvaderDef } from "../src/index.js";
 import { fixture } from "./fixture.js";
 
 function run(game: Game, ticks: number): GameEvent[] {
@@ -29,6 +29,24 @@ describe("kind chart", () => {
     expect(kindMultiplier("tyrant", "armored")).toBe(50);
     expect(kindMultiplier("tyrant", "horned")).toBe(100);
     expect(kindMultiplier("raptor", "raptor")).toBe(100);
+  });
+});
+
+/**
+ * `isDifficulty` is the sim's half of difficulty: the save narrower and
+ * any shell reading a difficulty off a URL or an old document go through
+ * it, so it has to reject everything that is not one of the three rather
+ * than merely accept the three. It has no caller inside the sim yet —
+ * `RunSave.difficulty` is ARB-220 — which is exactly why it is worth a
+ * test now instead of being discovered broken by its first one.
+ */
+describe("difficulty", () => {
+  it("accepts the three and nothing else", () => {
+    for (const d of DIFFICULTIES) expect(isDifficulty(d)).toBe(true);
+    expect(DIFFICULTIES).toHaveLength(3);
+    for (const x of ["Easy", "EASY", "hardcore", "", " easy", "normal", 0, 1, null, undefined, {}, ["easy"], true]) {
+      expect(isDifficulty(x), JSON.stringify(x) ?? String(x)).toBe(false);
+    }
   });
 });
 
