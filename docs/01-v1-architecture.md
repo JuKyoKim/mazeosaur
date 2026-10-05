@@ -852,6 +852,12 @@ were actually checked:
 - A document describes what the branch contains, not what it will contain
   once another branch merges. `npm run check:readmes` answers this for the
   file lists; the review answers it for the prose.
+- A document does not assert the present state of a file it does not
+  describe. Nothing can gate that sentence: no test reads prose, and the
+  reviewer approves it against a commit that the next merge moves, so it
+  goes false with nothing editing it. State the rule the code has to
+  satisfy, or a number the named file derives, and name the symbol rather
+  than the line so a grep can still find it later.
 - The verification in the PR body is of the kind described in 6.2.3.
 
 Request changes with the specific line and the specific rule. "Looks fine"
