@@ -569,3 +569,22 @@ we find out.
   only what replaces it does. Section 4 of `docs/01-art-hud-and-audio.md`
   carries the interaction spec, the model, the one-shot delta and the
   reference comparison that produced them.
+- 2026-10-05: the refused preview's hatching is **3px stripes of `ink` at
+  alpha 1, stepped 8px, over `refusal` at 0.45**. `ink` because hatching in
+  `refusal` is one hue at two alphas, which the bright spawn, checkpoint and
+  nest markers erase outright — the four cells that always refuse and that a
+  new player tries first. 3px because at the reference device a 2px stripe is
+  1.08pt and at DPR 1 never covers a whole device pixel. The spacing and the
+  fill stay where they were. Section 4 of
+  [01-art-hud-and-audio.md](01-art-hud-and-audio.md) carries the measurements
+  and the reason the percentile contrast ratio cannot see two of the three
+  numbers: once a tenth of the cell is solid ink and a tenth is solid fill it
+  is a property of the two colours, identical across stripe widths that
+  differ by a third in actual texture.
+- 2026-10-05: row 1 of the HUD is laid out against each field's **widest**
+  value, and section 4 records the arithmetic. The prototype's row 1 renders
+  `Migration 1/5` and `30s` on top of each other because it has no such
+  derivation and because it carries timer digits that section 4 does not
+  have: the counter plus a `60 left` readout is 245 of the 224 the band
+  between the eggs and Send actually has. The fix is section 4's bar, not a
+  coordinate.
