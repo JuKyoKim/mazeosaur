@@ -32,8 +32,8 @@ Every test below is tagged `[@baseline]` in its title and runs under
 
 | # | line | test | level | state |
 | - | --- | --- | --- | --- |
-| 1 | start a run | `tests/client/smoke.spec.ts` "full run: arm, place four taps, grow, sell, send, leak, lose, play again" | client | existing |
-| 2 | tap-to-select then tap-to-place | the same smoke test — arms a card, places four separate taps, and asserts the selection stays armed across each one | client | existing |
+| 1 | start a run | `tests/client/smoke.spec.ts` "full run: four select+tap pairs, grow, sell, send, leak, lose, play again" | client | existing |
+| 2 | tap-to-select then tap-to-place | the same smoke test — four select-then-tap pairs, each asserting the card is spent by its placement, per the one-shot model ([ARB-166](/ARB/issues/ARB-166) #43/#44) | client | existing |
 | 3 | migrations spawn and path | `packages/sim/test/flowfield.test.ts` "routes around a wall and marks sealed cells unreachable", "nextStep walks a creep to the target along non-increasing distances" | sim | existing |
 | 4 | dinos attack | `packages/sim/test/mechanics.test.ts` "hits the N furthest-along invaders per cooldown"; `packages/sim/test/game.test.ts` "ground-only dinosaurs ignore fliers" | sim | existing |
 | 5 | meat and eggs economy | `packages/sim/test/game.test.ts` "charges meat, blocks the cell, and refuses when broke", "leaks eat eggs and an empty nest loses the game", "kills pay bounty, clearing pays the bonus, and clearing the last migration wins" | sim | existing |
@@ -54,7 +54,12 @@ out:
   drag-paint version the issue quoted is gone. The two constraints the
   issue named (wait for the merge, or land a spec that is red until it) do
   not apply; there was nothing left to do here but tag what already exists
-  and passes.
+  and passes. One real gap did exist alongside this: `#36` shipped
+  **sticky** selection (a placement does not clear the armed card), which
+  the owner's own line 2 wording — "one-shot, PvZ-style" — never actually
+  matched. `#43`/`#44` landed one-shot mid-review on this issue and
+  rewrote the smoke test accordingly; the mapping above is the post-`#44`
+  state.
 - **The economy and attack tests live in `game.test.ts`, not
   `mechanics.test.ts`.** The issue's evidence table cited
   `mechanics.test.ts` for "charges meat, blocks the cell, and refuses when
@@ -125,7 +130,7 @@ Running 4 tests using 4 workers
   ✓  restart-regression.spec.ts … scene.restart() leaves the canvas rendering with no renderer errors [@baseline]
   ✓  win-screen.spec.ts … win screen: clearing the last migration shows it, and Play again starts a fresh run [@baseline]
   ✓  resume.spec.ts … save and resume: a reload picks the stored run back up, not a fresh one [@baseline]
-  ✓  smoke.spec.ts … full run: arm, place four taps, grow, sell, send, leak, lose, play again [@baseline]
+  ✓  smoke.spec.ts … full run: four select+tap pairs, grow, sell, send, leak, lose, play again [@baseline]
 
   4 passed
 ```
