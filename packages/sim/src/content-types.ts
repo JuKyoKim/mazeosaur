@@ -13,6 +13,29 @@ import type { Lane } from "./lane.js";
 export const TICKS_PER_SECOND = 20;
 export const CELL = 1000;
 
+/**
+ * The three difficulties. The *names* are here; the *numbers* are not.
+ * No rule in this package branches on a difficulty, and nothing in here
+ * knows that hard has tankier invaders: a difficulty selects which
+ * `Content` the shell hands in (`contentFor` in @mazeosaur/content), so a
+ * run is still exactly (seed, content, command log) and there is no
+ * difficulty switch anywhere in the simulation — rule 4 holds.
+ *
+ * The type lives here anyway because the save format does: a resumed run
+ * has to say which difficulty it was played at, and `narrowRunSave` can
+ * only check that exhaustively against a closed union. `SettingsSave.speed`
+ * is here for the same reason.
+ */
+export type Difficulty = "easy" | "medium" | "hard";
+
+/** Ascending by how hard it is: menu order, and the order a test iterates. */
+export const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
+
+/** For the save narrower and for a shell reading a difficulty off a URL. */
+export function isDifficulty(x: unknown): x is Difficulty {
+  return x === "easy" || x === "medium" || x === "hard";
+}
+
 export type Kind = "tyrant" | "longneck" | "horned" | "raptor" | "flier" | "armored";
 
 /** The kind chart is one cycle: each kind beats the next and is weak to the previous. */
@@ -124,6 +147,12 @@ export interface Rules {
 
 export interface Content {
   readonly version: string;
+  /**
+   * Which difficulty's numbers these are. A label, never an input: the sim
+   * reads this field nowhere, and a HUD that wants to print "Hard" reads it
+   * here rather than parsing it back out of `version`.
+   */
+  readonly difficulty: Difficulty;
   readonly rules: Rules;
   readonly dinos: Readonly<Record<string, DinoDef>>;
   readonly invaders: Readonly<Record<string, InvaderDef>>;
