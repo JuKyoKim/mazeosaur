@@ -377,6 +377,16 @@ export const ARCHETYPE_TELL: Record<Archetype, string> = {
   boss: "two cells wide, a crown of spines, and its own shadow",
 };
 
+/**
+ * Every archetype, in one list, derived from the tells rather than written
+ * out again. `ARCHETYPE_TELL` is a `Record<Archetype, string>`, so its keys
+ * are exhaustive by construction: an archetype added to the type is a compile
+ * error until it has a tell, and then it is in the atlas, on the legibility
+ * sheet and under the frame-border check without anyone remembering a second
+ * list. Three places kept their own copy before this existed.
+ */
+export const ARCHETYPES: readonly Archetype[] = Object.keys(ARCHETYPE_TELL) as Archetype[];
+
 function invaderBody(p: Proportions, hs: number): Part[] {
   return [
     { shape: taper(0.27, 0.56, 0.05, 0.42, limb(0.07, p), 0.015), tone: "base" },
