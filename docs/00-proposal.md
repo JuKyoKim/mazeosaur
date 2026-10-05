@@ -574,8 +574,9 @@ we find out.
   `refusal` is one hue at two alphas, which the bright spawn, checkpoint and
   nest markers erase outright — the four cells that always refuse and that a
   new player tries first. 3px because at the reference device a 2px stripe is
-  1.08pt and at DPR 1 never covers a whole device pixel. The spacing and the
-  fill stay where they were. Section 4 of
+  1.08pt, barely over one device pixel at DPR 1, where it measures 57% texture
+  against a 3px stripe's 76%. The spacing and the fill stay where they
+  were. Section 4 of
   [01-art-hud-and-audio.md](01-art-hud-and-audio.md) carries the measurements
   and the reason the percentile contrast ratio cannot see two of the three
   numbers: once a tenth of the cell is solid ink and a tenth is solid fill it

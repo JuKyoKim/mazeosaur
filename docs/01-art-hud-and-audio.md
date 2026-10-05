@@ -305,15 +305,19 @@ font at the sizes above:
 
 The migration readout is `label` over `body` — two lines at one x — and not
 one line, and that is what buys the 16px it clears Send by: on one line
-`MIGRATION 49 / 50` is 185 before the space between the two parts, and runs
-at least 25px into the button. Stacking it is
-the reason row 1 is 96 tall rather than the 82 the hit floor asks for.
+`MIGRATION 49 / 50` is 108 + 77 = 185 before the space between the two
+parts, so from x=320 it ends at 505 against Send's origin at 444 — **61px
+into the button**. Stacking it is the reason row 1 is 96 tall rather than
+the 82 the hit floor asks for.
 
 This is also why there are no timer digits competing for the same band. A
 digit field between the migration counter and Send does not fit at any
-value: the counter and a `60 left` readout are 173 + 72 at `body`, and the
-band from 272 to Send is 224. The bar is the design, and the arithmetic is
-the second reason for it.
+value, and the prototype is the demonstration: its counter sits at 272 and
+its Send at 496 (`BoardScene.ts`, `buildHud`), so the counter and a
+`60 left` readout are 173 + 72 at `body` against a band of 224 — which is
+why it renders `Migration 1/5` and `30s` on top of each other today. The
+layout above has less room still: 124, from the counter at 320 to Send at
+444. The bar is the design, and the arithmetic is the second reason for it.
 
 ### Row 2 — the next migration, y=1104, 40 tall
 
@@ -565,8 +569,13 @@ thing this hatching exists to prevent. The stripes are therefore `ink` at
 alpha 1: a fixed dark that the cell underneath cannot climb to.
 
 The other two numbers are a stripe width and a spacing, and they do not move
-a contrast ratio at all. Measured over the hatched interior at 720x1280,
-10th/90th percentile, driven against the real client:
+a contrast ratio at all. The window below is **the 30x30 hatched square, the
+cell inset by its own 3px** — the rect `hatchCell` is handed, nothing else —
+at 720x1280, 10th/90th percentile, driven against the real client. State the
+window whenever one of these numbers is quoted: a figure of 1.56:1 for the
+same 2px configuration came off a different one, and the two have never been
+reconciled. Neither is above 3:1 and neither changes the ranking, because the
+ranking does not come from this column at all.
 
 | stripe / step / fill | contrast, plain cell | texture, plain cell |
 | --- | --- | --- |
@@ -585,10 +594,12 @@ it is what governs the hatching here.
 So:
 
 - **3px, not 2.** At the reference device a canvas pixel is 0.5417pt, so a 2px
-  stripe is 1.08pt and at DPR 1 never covers a whole device pixel: every
-  stripe pixel is a blend and the ink never lands at full strength. 3px is
-  1.63pt and keeps a covered core. This is the strongest of the three levers
-  and the only one that is free — it changes no colour and no alpha.
+  stripe is 1.08pt — barely over one device pixel at DPR 1, so most of its
+  width is spent on the two antialiased edges and little of the ink lands at
+  full strength. 3px is 1.63pt and keeps a covered core. The measurement is
+  the claim, not the pixel arithmetic: 57% against 76% at the reference
+  device. This is the strongest of the three levers and the only one that is
+  free — it changes no colour and no alpha.
 - **8px spacing stays.** The gap of fill must stay strictly wider than the
   stripe, or the cell reads as a darker flat tone rather than as stripes; at
   3/8 the gap is 5px to the stripe's 3. Tightening to 6 instead buys less
