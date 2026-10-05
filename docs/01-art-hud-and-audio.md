@@ -62,16 +62,22 @@ wants to be smaller than `label` should instead not be on the screen.
 
 ---
 
-## 2. The art direction, as four candidates
+## 2. The art direction: Toy Box
 
-The proposal leaves two axes open: pixel versus hand-drawn vector, and
+**Mazeosaur is drawn in blocks. The direction is `toy-box`, it is the only
+one with a shipped atlas, and the other three below are the record of how it
+was chosen rather than live options.** Section 9 item 4 of the proposal is
+closed; the dated entry is in section 10 there.
+
+The proposal left two axes open: pixel versus hand-drawn vector, and
 cute-round versus fierce-realistic. Three points on that grid were rendered
-as the actual board at the actual size, so the choice can be made by
-looking rather than by imagining.
-
-The board rejected all three and asked for a fourth off that grid: blocks,
-in the Crossy Road register, "steer away from 2d". **Toy Box** is that
-brief, built the same way and rendered into the same frames.
+as the actual board at the actual size, so the choice could be made by
+looking rather than by imagining. The board rejected all three and asked for
+a fourth off that grid: blocks, in the Crossy Road register, "steer away from
+2d". **Toy Box** is that brief, built the same way and rendered into the same
+frames, and it is what the board then chose — with the instruction to keep
+working the models, which is why `blocks.ts` has had a second pass and why
+the anchor in 5.0 exists at all.
 
 | direction | axes | authored | ink | atlas | the pitch |
 | --- | --- | --- | --- | --- | --- |
@@ -152,9 +158,11 @@ hard edges, limited palette, banded shading — resampled once by the
 display. It reads well. It will not satisfy someone who wants to count
 uniform square pixels.
 
-Nothing downstream of this document depends on which one wins. The HUD,
-the manifest shape, the audio and the onboarding are all written against
-the silhouettes, not the treatment.
+Nothing downstream of this document depended on which one won. The HUD, the
+manifest shape, the audio and the onboarding are all written against the
+silhouettes, not the treatment, and none of them changed when Toy Box was
+picked. The one thing that did change is 5.0, and it changed because blocks
+are the direction that has something to lose by being cropped to its tile.
 
 ---
 
@@ -374,38 +382,94 @@ than that cell.
 | | value | why |
 | --- | --- | --- |
 | footprint | 36 x 36 (1 cell) | the sim's, unchanged |
-| draw box | **36 x 54** (1 x 1.5 cells) | tall enough for a solid to stand proud of its tile |
-| anchor | bottom of the draw box on the **bottom edge of the cell**, horizontally centred | feet on the floor of the cell the sim thinks it is in |
-| draw order | **by row, increasing y** — a lower row is drawn after, and over, the row above | what makes the overlap read as depth rather than as a z-fight |
+| draw scale | the **authored square** scaled to **1.25 cells** — a 45px box for Toy Box's 64px square, `DRAW_CELLS` in `tools/art/layout.ts`. Uniform: one scale for every frame in the atlas | room for a solid to stand proud of its tile, capped where twenty adjacent cells stop reading. Uniform because growth stage has to read as *size* — see below |
+| anchor | the **ink's** bottom edge on the **bottom edge of the cell**, the ink centred horizontally on the cell | feet on the floor of the cell the sim thinks it is in |
+| draw order | **by row, increasing y**, then **increasing x** within a row | the overlap reads as depth rather than as a z-fight, and the same wall rebuilt draws the same picture |
+| tiles | every block painted before any animal | a sprite overhangs the cell behind it, so a tile painted later erases the feet of the one in front |
 
-Within a row there is no horizontal overlap, so order inside a row is free.
+**The anchor is on the ink, not on the authored square**, and that is not a
+detail. The camera centres its subject in the square, so the gap below the
+feet is a function of growth stage: measured on Toy Box, 18px under a
+hatchling raptor against 2px under an adult longneck, out of 64. Anchoring
+the square would float the hatchling half a cell above the floor of the cell
+it is standing in. The shipped atlas is trimmed to the ink for exactly this
+reason — see 5.5, where it turns into one line of client code.
 
-**Why.** This is the mechanism by which the reference game reads as blocks:
-its subjects are taller than the tile they stand on. Without it a block
-dinosaur is a 19.5pt square on a phone, and solidity is the first thing that
-cell takes away — the finding in section 2. Enlarging the *cell* instead
-would buy the same look for a re-tune of all 50 migrations against a quarter
-of the board; this costs nothing the sim can see.
+**Why 1.25 and not 1.5.** 1.5 was the first answer and it was argued rather
+than rendered. The argument was about vertical occlusion only: every kind's
+tell is in its upper half, so losing the feet to the animal in front is
+survivable. That is true, and it is silent about the sideways case. At 1.5
+the widest adults — `flier-3` is 60px of ink in a 64px square — also reach
+about 7px into each horizontal neighbour, and a 5x4 block of occupied cells
+at the phone's true 19.5pt cell reads as one pile instead of as twenty
+dinosaurs. Rendered at 1.0, 1.15, 1.25, 1.35 and 1.5 and chosen by looking:
+**1.25 is the largest value where that block stays separable.** At 1.25 the
+widest adult draws 42.2px into a 36px cell, so the horizontal reach is 3.1px
+a side; at 1.35 it is 4.8px and at 1.5 it is 7.3px.
 
-**The real cost is occlusion, and it is bounded.** A 1.5-cell sprite reaches
-18px — half a cell — into the row behind it, and what it covers there is the
-*lower* half of that cell, where the dinosaur behind is standing. In a solid
-wall every dinosaur has its feet covered by the one in front, and only the
-upper half of each silhouette survives.
+**The binding constraint is sideways, not upwards**, and the measurements
+below are why. 1.25 buys very little height — two frames of eighteen clear
+their own cell — while costing 3.1px a side on the widest. 1.0 would be a
+different game only in that nothing stands proud at all, and 1.5 is a pile.
+A later proposal to raise it has to answer the horizontal column, because
+that is the one that moves.
+
+**Why at all.** Standing taller than the tile is part of how the reference
+game reads as blocks, and without it a block dinosaur is cropped to a 19.5pt
+square on a phone — solidity is the first thing that cell takes away, which
+is the finding in section 2. Be honest about how much of the work it does
+here, though: at 1.25 it is the *tall* genera that gain, and the rest of the
+read comes from the fixed isometric camera and the three flat face tones.
+Enlarging the *cell* instead would buy more of it, for a re-tune of all 50
+migrations against a quarter of the board; this costs nothing the sim can see.
+
+**`DRAW_CELLS` is a scale denominator, not a drawn height.** 1.25 cells is
+the size of the *box* the authored square is scaled into. The ink does not
+fill that square — it is 44 to 60 pixels of 64, because the camera leaves room
+for the tallest model — so the drawn animal is always shorter than 45px, and
+by how much is a property of the genus. Measured through the shipping draw
+path at Toy Box, adults in a 36px cell:
+
+| adult | drawn | past the cell top |
+| --- | --- | --- |
+| longneck-3 | 30.9 x 42.2 | **+6.2** |
+| flier-3 | 42.2 x 38.0 | **+2.0** |
+| tyrant-3 | 35.2 x 35.2 | −0.8 |
+| armored-3 | 38.0 x 35.2 | −0.8 |
+| horned-3 | 33.8 x 32.3 | −3.7 |
+| raptor-3 | 36.6 x 29.5 | −6.5 |
+
+Hatchlings draw 19.7 to 28.1px tall in the same 36px cell. **That spread is
+the point and it is why the scale is uniform**: a hatchling has to read as a
+smaller animal than an adult, and normalising each frame to its own ink would
+delete the one channel that carries growth. The cost is that the two numbers
+it is tempting to quote are both wrong — *every* dinosaur is not drawn 1.25
+cells tall, and four of the six adults are not drawn proud of their tile at
+all.
+
+**So the occlusion is much smaller than the box suggests.** Only
+`longneck-3` and `flier-3` cross their own cell's top edge, by 6.2px and
+2.0px — not the 9px of the box — and nothing else in the eighteen frames
+crosses it. Where it happens, what is covered is the *lower* part of the cell
+behind, where the dinosaur behind is standing.
 
 That is survivable, and not by luck: every one of the six silhouettes is
 identified by its *top* — the tyrant's oversized head, the longneck's
 vertical neck, the horned frill, the armoured hump, the flier's span, the
 raptor's forward-carried head. Section 5.1's tells were written against the
-upper half of the animal before this question was asked. **1.5 cells is the
-cap for that reason**, and a direction wanting more height has to justify it
-against the row behind.
+upper half of the animal before this question was asked. A direction wanting
+more height has to justify it against the row behind **and** against its
+horizontal neighbours, which is the half that 1.5 failed.
 
-**Still to be tested by driving the client, not by argument:** a dense wall —
-twenty adjacent occupied cells — at phone scale, checking that kind stays
-separable and that a placement preview stays legible under a neighbour's
-overhang. That is acceptance for the integration, not a precondition for the
-convention.
+**Tested at the true cell size, not argued:** a 5x4 block of occupied cells —
+twenty adjacent dinosaurs, every kind and every stage — rendered through the
+shipping draw path at 1x and downsampled to the reference phone. Kind stays
+separable at 1.25 and does not at 1.5. That is what set the cap.
+
+**Still acceptance for the integration, and only testable by driving the
+client:** that a *placement preview* stays legible under a neighbour's
+overhang, and that the drag-to-place line reads while the finger is over the
+board. Neither is a property of the atlas, so neither can be settled here.
 
 ### 5.1 Dinosaurs — six silhouettes, learned in one run
 
@@ -494,30 +558,119 @@ placement did not happen — animating it would say that it nearly did.
 
 ### 5.5 The atlas
 
-Two atlases per direction, Phaser JSON Hash format, shelf-packed by
-descending height into a power-of-two width (256 for Fossil Pixel, 512 for
-the vector directions) with 1px padding:
+Two atlases, Phaser JSON Hash format, shelf-packed by descending height into
+a 512px width with 1px padding. **Only the chosen direction is shipped**;
+`npm run art:atlas` writes it, and `tools/art/build.ts atlas <direction>`
+will write any of the four for a comparison. Which one is chosen is `CHOSEN`
+in `tools/art/directions.ts` and nowhere else, so the atlas command and the
+border check below cannot disagree about it.
 
 ```
-packages/game/assets/<direction>/dinos.png    + dinos.json
-packages/game/assets/<direction>/invaders.png + invaders.json
+packages/game/assets/toy-box/dinos.png    + dinos.json
+packages/game/assets/toy-box/invaders.png + invaders.json
 ```
 
 Frame names are `<kind>-<stage>` and `<archetype>-<kind>`, both lowercase,
 so the client can build a frame name from sim state without a lookup table.
+
+**Frames are trimmed to the ink**, and are declared as untrimmed frames whose
+`sourceSize` is the trimmed size. That is deliberate, and it is the whole
+reason 5.0's anchor costs the client one line: Phaser resolves `setOrigin`
+against `sourceSize`, so a frame that claims to have been authored at its own
+ink size puts `setOrigin(0.5, 1)` exactly on the animal's feet. Declaring
+`trimmed: true` and carrying the offset would be the same pixels and would
+move the origin back off them.
+
+The scale's denominator therefore cannot come from the frame, so it is in
+`meta`, per atlas rather than per frame:
+
+| `meta` key | Toy Box | what it is |
+| --- | --- | --- |
+| `authored` | 64 | the direction's `spritePx` — the square the sprites were drawn at, before trimming |
+| `cell` | 36 | the logical cell, `CELL_PX` |
+| `drawCells` | 1.25 | 5.0's draw *box*, in cells. Not how tall a dinosaur comes out |
+
+`authored` is the direction's own number, passed in. It must never be derived
+from the packed frames: the invaders atlas genuinely mixes two authored
+squares, because the boss is rendered at `spritePx * 2`, so a `max` over its
+frames reports 128 for an atlas whose other 46 frames were drawn at 64 — and
+a client reading that draws every non-boss invader at half size. Before
+trimming, a frame's own `w` *was* its authored square, so this could not be
+got wrong; trimming removed the only per-frame record of it.
+
+**Placing a dinosaur, in full**, with no other input than the atlas and the
+cell the sim gives you:
+
+```ts
+const { authored, cell, drawCells } = atlas.meta;
+sprite.setOrigin(0.5, 1);                       // feet, horizontally centred
+sprite.setScale((cell * drawCells) / authored); // 45/64 for Toy Box
+sprite.setPosition(cellX * cell + cell / 2, cellY * cell + cell);
+sprite.setDepth(cellY * GRID_W + cellX);        // row, then x within the row
+```
+
+**Invaders are not anchored** — they are not in a cell and they move
+continuously — so they are drawn centred on their interpolated position, and
+the only question is the size:
+
+```ts
+const { authored, cell } = atlas.meta;
+const cells = archetype === "swarm" ? 0.8 : 1;   // the boss is NOT 2 here
+sprite.setOrigin(0.5, 0.5);
+sprite.setScale((cell * cells) / authored);
+```
+
+**The boss takes no multiplier against this atlas, and that is the one trap
+in the file.** Its sprite is authored in a square twice the size and holds an
+animal twice the size, so the uniform scale already draws it at two cells —
+36/64 and 72/128 are both 0.5625. `swarm` is the real multiplier: authored at
+one square like everything else and genuinely drawn smaller. The board frames
+in `docs/art/` apply 2x to the boss because they blit the *untrimmed* square,
+where the two cancel; copying that rule onto the trimmed atlas draws a boss at
+four cells. `INVADER_BOX_CELLS` and `INVADER_FRAMES` in `tools/art/sprites.ts`
+carry both halves, and `tools/art/test/atlas.test.ts` asserts that the scale
+above reproduces the board frames for all 54 invader frames.
+
+**Nothing may touch the edge of its authored square.** `art:check` measures
+every one of the 72 frames in a direction against its own border and fails
+the build for the shipped direction. Trimming is not a safety net: `pack`
+trims to the ink that survived, so the authored square is a working area and
+a pixel on its edge is a pixel that was thrown away — usually the outline,
+which is why it is nearly invisible and worth asserting rather than looking
+for. Toy Box is clear on all 72.
+
+The three archived directions are **formally exempt and reported instead**.
+They are the record of how the choice was made; their frames in `docs/art/`
+are what the board looked at, and redrawing a silhouette to pull it in a
+pixel would edit that evidence while fixing nothing that ships. Measured,
+their contact is not the appendage overhang `bestiary.ts` licenses either —
+it sits on the left edge in the same amount for every kind of a given
+archetype, so it comes from the shared silhouette reaching x = 0:
+
+| direction | frames touching | border pixels | worst frame |
+| --- | --- | --- | --- |
+| **Toy Box** (shipped, gated) | 0 of 72 | 0 | — |
+| Fossil Pixel | 48 of 72 | 133 | `flier-3`, 16 |
+| Clay Pack | 57 of 72 | 606 | `longneck-3`, 40 |
+| Valley Naturalist | 42 of 72 | 150 | `flier-3`, 21 |
+
+Clay Pack is the only one that loses *feet* as well as outline — cute
+proportions inflate mass into the bottom edge — which is the one place the
+measurement says something about the art rather than about the geometry.
 
 **The budget.** The offline binary targets under 40 MB with every asset
 inside it. Measured by `art:check`:
 
 | direction | authored | frames | atlas bytes |
 | --- | --- | --- | --- |
-| Fossil Pixel | 36px | 72 | **23.4 kB** |
-| Clay Pack | 48px | 72 | 126.1 kB |
-| Valley Naturalist | 48px | 72 | 120.5 kB |
+| **Toy Box** (shipped) | 64px | 72 | **57.7 kB** |
+| Fossil Pixel | 36px | 72 | 23.0 kB |
+| Clay Pack | 48px | 72 | 124.9 kB |
+| Valley Naturalist | 48px | 72 | 119.7 kB |
 
-All three are irrelevant against 40 MB, which is the useful finding: **the
-atlas is not what will blow the budget, and the direction should therefore
-not be chosen on size.** Audio and the Phaser runtime are the real
+All four are irrelevant against 40 MB, which is the useful finding: **the
+atlas is not what will blow the budget, and the direction was therefore
+rightly not chosen on size.** Audio and the Phaser runtime are the real
 consumers. The budget line to hold is section 6's: v1 audio stays under
 1.5 MB.
 
@@ -677,14 +830,19 @@ button was, so the thumb does not move.
 
 ## 10. What this leaves open
 
-1. **The direction.** Section 2. The board's call; nothing else waits on
-   anything but this.
+1. **The models, not the direction.** The direction is settled — blocks,
+   section 2 — and the board's instruction with it was to keep working the
+   models. `tools/art/blocks.ts` is where that happens and it does not
+   change anything in this document.
 2. **The kind-hue change** in section 3 is a proposed replacement for
-   `KIND_COLOR` and can land before the direction does — it is measured,
-   and it is an improvement on M2 under every eye.
+   `KIND_COLOR` and can land independently of the art — it is measured, and
+   it is an improvement on M2 under every eye.
 3. **Animation.** v1 is static sprites plus the five effects. Idle breath
    and a two-frame walk are the obvious next thing and are not specified
-   here, because whether they are affordable depends on the direction.
+   here. In blocks they are cheap in a way they would not have been in the
+   flat directions — a frame is a camera pass over a model, so a bob is a
+   translation of a few boxes rather than a redrawn sprite — but they are
+   still frames in the atlas, and 57.7 kB is the number they multiply.
 4. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
    it stands. The proposal says "a final one to be designed", so this is a
    placeholder the content can change without touching this document.

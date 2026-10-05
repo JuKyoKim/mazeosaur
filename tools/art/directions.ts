@@ -282,6 +282,15 @@ export function direction(id: string): Direction {
   return d;
 }
 
+/**
+ * The direction that ships. Everything downstream — which atlas
+ * `npm run art:atlas` writes, which direction the frame-border check gates
+ * rather than reports — reads it from here instead of restating the id, so
+ * the other three stay buildable as the record of how the choice was made
+ * without being mistaken for candidates. Changing direction is this line.
+ */
+export const CHOSEN: Direction = direction("toy-box");
+
 // ------------------------------------------------- the colour-blindness check
 
 /**

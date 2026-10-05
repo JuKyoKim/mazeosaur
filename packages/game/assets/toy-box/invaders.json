@@ -1,0 +1,1097 @@
+{
+  "frames": {
+    "boss-armored": {
+      "frame": {
+        "x": 1,
+        "y": 1,
+        "w": 54,
+        "h": 68
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 54,
+        "h": 68
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 54,
+        "h": 68
+      }
+    },
+    "boss-flier": {
+      "frame": {
+        "x": 56,
+        "y": 1,
+        "w": 54,
+        "h": 68
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 54,
+        "h": 68
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 54,
+        "h": 68
+      }
+    },
+    "boss-horned": {
+      "frame": {
+        "x": 111,
+        "y": 1,
+        "w": 54,
+        "h": 68
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 54,
+        "h": 68
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 54,
+        "h": 68
+      }
+    },
+    "boss-longneck": {
+      "frame": {
+        "x": 166,
+        "y": 1,
+        "w": 54,
+        "h": 68
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 54,
+        "h": 68
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 54,
+        "h": 68
+      }
+    },
+    "boss-raptor": {
+      "frame": {
+        "x": 221,
+        "y": 1,
+        "w": 54,
+        "h": 68
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 54,
+        "h": 68
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 54,
+        "h": 68
+      }
+    },
+    "boss-tyrant": {
+      "frame": {
+        "x": 276,
+        "y": 1,
+        "w": 54,
+        "h": 68
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 54,
+        "h": 68
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 54,
+        "h": 68
+      }
+    },
+    "fast-armored": {
+      "frame": {
+        "x": 1,
+        "y": 128,
+        "w": 46,
+        "h": 44
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 46,
+        "h": 44
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 46,
+        "h": 44
+      }
+    },
+    "fast-flier": {
+      "frame": {
+        "x": 48,
+        "y": 128,
+        "w": 46,
+        "h": 44
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 46,
+        "h": 44
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 46,
+        "h": 44
+      }
+    },
+    "fast-horned": {
+      "frame": {
+        "x": 95,
+        "y": 128,
+        "w": 46,
+        "h": 44
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 46,
+        "h": 44
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 46,
+        "h": 44
+      }
+    },
+    "fast-longneck": {
+      "frame": {
+        "x": 142,
+        "y": 128,
+        "w": 46,
+        "h": 44
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 46,
+        "h": 44
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 46,
+        "h": 44
+      }
+    },
+    "fast-raptor": {
+      "frame": {
+        "x": 189,
+        "y": 128,
+        "w": 46,
+        "h": 44
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 46,
+        "h": 44
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 46,
+        "h": 44
+      }
+    },
+    "fast-tyrant": {
+      "frame": {
+        "x": 236,
+        "y": 128,
+        "w": 46,
+        "h": 44
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 46,
+        "h": 44
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 46,
+        "h": 44
+      }
+    },
+    "flying-armored": {
+      "frame": {
+        "x": 331,
+        "y": 1,
+        "w": 52,
+        "h": 57
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 57
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 57
+      }
+    },
+    "flying-flier": {
+      "frame": {
+        "x": 384,
+        "y": 1,
+        "w": 52,
+        "h": 57
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 57
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 57
+      }
+    },
+    "flying-horned": {
+      "frame": {
+        "x": 437,
+        "y": 1,
+        "w": 52,
+        "h": 57
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 57
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 57
+      }
+    },
+    "flying-longneck": {
+      "frame": {
+        "x": 1,
+        "y": 70,
+        "w": 52,
+        "h": 57
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 57
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 57
+      }
+    },
+    "flying-raptor": {
+      "frame": {
+        "x": 54,
+        "y": 70,
+        "w": 52,
+        "h": 57
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 57
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 57
+      }
+    },
+    "flying-tyrant": {
+      "frame": {
+        "x": 107,
+        "y": 70,
+        "w": 52,
+        "h": 57
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 57
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 57
+      }
+    },
+    "normal-armored": {
+      "frame": {
+        "x": 107,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "normal-flier": {
+      "frame": {
+        "x": 152,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "normal-horned": {
+      "frame": {
+        "x": 197,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "normal-longneck": {
+      "frame": {
+        "x": 242,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "normal-raptor": {
+      "frame": {
+        "x": 287,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "normal-tyrant": {
+      "frame": {
+        "x": 332,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "regenerator-armored": {
+      "frame": {
+        "x": 377,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "regenerator-flier": {
+      "frame": {
+        "x": 422,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "regenerator-horned": {
+      "frame": {
+        "x": 467,
+        "y": 173,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "regenerator-longneck": {
+      "frame": {
+        "x": 1,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "regenerator-raptor": {
+      "frame": {
+        "x": 46,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "regenerator-tyrant": {
+      "frame": {
+        "x": 91,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "shielded-armored": {
+      "frame": {
+        "x": 283,
+        "y": 128,
+        "w": 52,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 42
+      }
+    },
+    "shielded-flier": {
+      "frame": {
+        "x": 336,
+        "y": 128,
+        "w": 52,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 42
+      }
+    },
+    "shielded-horned": {
+      "frame": {
+        "x": 389,
+        "y": 128,
+        "w": 52,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 42
+      }
+    },
+    "shielded-longneck": {
+      "frame": {
+        "x": 442,
+        "y": 128,
+        "w": 52,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 42
+      }
+    },
+    "shielded-raptor": {
+      "frame": {
+        "x": 1,
+        "y": 173,
+        "w": 52,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 42
+      }
+    },
+    "shielded-tyrant": {
+      "frame": {
+        "x": 54,
+        "y": 173,
+        "w": 52,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 42
+      }
+    },
+    "splitter-armored": {
+      "frame": {
+        "x": 136,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "splitter-flier": {
+      "frame": {
+        "x": 181,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "splitter-horned": {
+      "frame": {
+        "x": 226,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "splitter-longneck": {
+      "frame": {
+        "x": 271,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "splitter-raptor": {
+      "frame": {
+        "x": 316,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "splitter-tyrant": {
+      "frame": {
+        "x": 361,
+        "y": 216,
+        "w": 44,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 40
+      }
+    },
+    "swarm-armored": {
+      "frame": {
+        "x": 406,
+        "y": 216,
+        "w": 28,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 28,
+        "h": 26
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 28,
+        "h": 26
+      }
+    },
+    "swarm-flier": {
+      "frame": {
+        "x": 435,
+        "y": 216,
+        "w": 28,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 28,
+        "h": 26
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 28,
+        "h": 26
+      }
+    },
+    "swarm-horned": {
+      "frame": {
+        "x": 464,
+        "y": 216,
+        "w": 28,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 28,
+        "h": 26
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 28,
+        "h": 26
+      }
+    },
+    "swarm-longneck": {
+      "frame": {
+        "x": 1,
+        "y": 257,
+        "w": 28,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 28,
+        "h": 26
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 28,
+        "h": 26
+      }
+    },
+    "swarm-raptor": {
+      "frame": {
+        "x": 30,
+        "y": 257,
+        "w": 28,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 28,
+        "h": 26
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 28,
+        "h": 26
+      }
+    },
+    "swarm-tyrant": {
+      "frame": {
+        "x": 59,
+        "y": 257,
+        "w": 28,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 28,
+        "h": 26
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 28,
+        "h": 26
+      }
+    },
+    "tank-armored": {
+      "frame": {
+        "x": 160,
+        "y": 70,
+        "w": 56,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 56,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 56,
+        "h": 50
+      }
+    },
+    "tank-flier": {
+      "frame": {
+        "x": 217,
+        "y": 70,
+        "w": 56,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 56,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 56,
+        "h": 50
+      }
+    },
+    "tank-horned": {
+      "frame": {
+        "x": 274,
+        "y": 70,
+        "w": 56,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 56,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 56,
+        "h": 50
+      }
+    },
+    "tank-longneck": {
+      "frame": {
+        "x": 331,
+        "y": 70,
+        "w": 56,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 56,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 56,
+        "h": 50
+      }
+    },
+    "tank-raptor": {
+      "frame": {
+        "x": 388,
+        "y": 70,
+        "w": 56,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 56,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 56,
+        "h": 50
+      }
+    },
+    "tank-tyrant": {
+      "frame": {
+        "x": 445,
+        "y": 70,
+        "w": 56,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 56,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 56,
+        "h": 50
+      }
+    }
+  },
+  "meta": {
+    "app": "tools/art",
+    "image": "invaders.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 512,
+      "h": 284
+    },
+    "scale": "1",
+    "authored": 64,
+    "cell": 36,
+    "drawCells": 1.25
+  }
+}

@@ -22,6 +22,25 @@ export const CELL_PX = 36;
  */
 export const GRID_W = 20;
 /**
+ * How many cells tall a dinosaur is *drawn*, against the one cell it
+ * *occupies*. Section 5.0 of `docs/01-art-hud-and-audio.md`: the footprint is
+ * the sim's and is unchanged at one cell; the draw box is taller, which is
+ * the mechanism by which a block direction reads as a solid standing on a
+ * tile rather than as a 19.5pt square.
+ *
+ * The cap is set by the dense wall, not by the single-thickness one. Section
+ * 5.0 originally specified 1.5 on the argument that every kind's tell lives
+ * in its upper half, so losing the feet to the animal in front is survivable.
+ * That argument holds for one row overlapping the next and does not survive
+ * twenty adjacent cells: at 1.5 the widest adults also reach about 7px into
+ * each *horizontal* neighbour, and a 5x4 block at the phone's true cell size
+ * reads as one pile rather than as twenty dinosaurs. Rendered at 1.0, 1.15,
+ * 1.25, 1.35 and 1.5 and chosen by looking: 1.25 is the largest value where
+ * that block stays separable, and it still stands an adult a quarter of a
+ * cell proud of its tile.
+ */
+export const DRAW_CELLS = 1.25;
+/**
  * The HUD is the primitive, not the leftover. Its three rows cost
  * 96 + 40 + 136, and they cost that because of the 82px hit floor — so it
  * does not get to shrink because a map is short.

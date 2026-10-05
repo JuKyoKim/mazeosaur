@@ -1,0 +1,377 @@
+{
+  "frames": {
+    "armored-1": {
+      "frame": {
+        "x": 196,
+        "y": 62,
+        "w": 38,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 38,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 38,
+        "h": 32
+      }
+    },
+    "armored-2": {
+      "frame": {
+        "x": 350,
+        "y": 1,
+        "w": 44,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 42
+      }
+    },
+    "armored-3": {
+      "frame": {
+        "x": 107,
+        "y": 1,
+        "w": 54,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 54,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 54,
+        "h": 50
+      }
+    },
+    "flier-1": {
+      "frame": {
+        "x": 73,
+        "y": 62,
+        "w": 42,
+        "h": 36
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 42,
+        "h": 36
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 42,
+        "h": 36
+      }
+    },
+    "flier-2": {
+      "frame": {
+        "x": 299,
+        "y": 1,
+        "w": 50,
+        "h": 44
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 50,
+        "h": 44
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 50,
+        "h": 44
+      }
+    },
+    "flier-3": {
+      "frame": {
+        "x": 46,
+        "y": 1,
+        "w": 60,
+        "h": 54
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 60,
+        "h": 54
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 60,
+        "h": 54
+      }
+    },
+    "horned-1": {
+      "frame": {
+        "x": 235,
+        "y": 62,
+        "w": 34,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 34,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 34,
+        "h": 32
+      }
+    },
+    "horned-2": {
+      "frame": {
+        "x": 32,
+        "y": 62,
+        "w": 40,
+        "h": 38
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 40,
+        "h": 38
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 40,
+        "h": 38
+      }
+    },
+    "horned-3": {
+      "frame": {
+        "x": 250,
+        "y": 1,
+        "w": 48,
+        "h": 46
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 48,
+        "h": 46
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 46
+      }
+    },
+    "longneck-1": {
+      "frame": {
+        "x": 1,
+        "y": 62,
+        "w": 30,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 30,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 30,
+        "h": 40
+      }
+    },
+    "longneck-2": {
+      "frame": {
+        "x": 162,
+        "y": 1,
+        "w": 36,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 36,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 36,
+        "h": 50
+      }
+    },
+    "longneck-3": {
+      "frame": {
+        "x": 1,
+        "y": 1,
+        "w": 44,
+        "h": 60
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 60
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 60
+      }
+    },
+    "raptor-1": {
+      "frame": {
+        "x": 270,
+        "y": 62,
+        "w": 36,
+        "h": 28
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 36,
+        "h": 28
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 36,
+        "h": 28
+      }
+    },
+    "raptor-2": {
+      "frame": {
+        "x": 116,
+        "y": 62,
+        "w": 44,
+        "h": 34
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 44,
+        "h": 34
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 44,
+        "h": 34
+      }
+    },
+    "raptor-3": {
+      "frame": {
+        "x": 395,
+        "y": 1,
+        "w": 52,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 52,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 52,
+        "h": 42
+      }
+    },
+    "tyrant-1": {
+      "frame": {
+        "x": 161,
+        "y": 62,
+        "w": 34,
+        "h": 34
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 34,
+        "h": 34
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 34,
+        "h": 34
+      }
+    },
+    "tyrant-2": {
+      "frame": {
+        "x": 448,
+        "y": 1,
+        "w": 42,
+        "h": 42
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 42,
+        "h": 42
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 42,
+        "h": 42
+      }
+    },
+    "tyrant-3": {
+      "frame": {
+        "x": 199,
+        "y": 1,
+        "w": 50,
+        "h": 50
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 50,
+        "h": 50
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 50,
+        "h": 50
+      }
+    }
+  },
+  "meta": {
+    "app": "tools/art",
+    "image": "dinos.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 512,
+      "h": 103
+    },
+    "scale": "1",
+    "authored": 64,
+    "cell": 36,
+    "drawCells": 1.25
+  }
+}

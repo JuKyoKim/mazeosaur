@@ -21,6 +21,7 @@ import {
   CANVAS_H,
   CANVAS_W,
   CELL_PX,
+  DRAW_CELLS,
   GUTTER,
   HUD_Y,
   ROW1,
@@ -33,7 +34,7 @@ import {
   kindButtonX,
 } from "./layout.js";
 import { Raster, ellipse, rect, subtract, taper, union, darken, lighten, mix, rgb, type Rgb, type Shape } from "./raster.js";
-import { dinoSprite, invaderSprite, renderParts } from "./sprites.js";
+import { INVADER_BOX_CELLS, dinoSprite, inkBox, invaderSprite, renderParts } from "./sprites.js";
 
 // ------------------------------------------------------------------ helpers
 
@@ -188,6 +189,33 @@ function blitScaled(dst: Raster, src: Raster, cx: number, cy: number, box: numbe
   }
 }
 
+
+/**
+ * Draw a dinosaur into the cell it occupies, under section 5.0's anchor.
+ *
+ * The authored square is scaled so it spans `DRAW_CELLS` cells, the ink's
+ * bottom edge is put on the cell's bottom edge, and the ink is centred
+ * horizontally on the cell. The footprint the sim sees is untouched; only
+ * the draw box is taller, and that is what makes a solid stand proud of its
+ * tile instead of being cropped to it.
+ *
+ * The anchor is on the ink rather than on the square because the camera
+ * centres its subject — see `inkBox`. The horizontal consequence is real and
+ * measured: at 1.5 cells the widest adult (`flier-3`, 60px of ink in a 64px
+ * square) draws 50px wide into a 36px cell, so it reaches about 7px into each
+ * neighbour. That is the same overlap as the vertical one and reads the same
+ * way; it is why the caller sorts within a row as well as between rows.
+ */
+function blitAnchored(dst: Raster, src: Raster, cellX0: number, cellY0: number, alpha = 1): void {
+  const box = CELL_PX * DRAW_CELLS;
+  const s = box / src.w;
+  const ink = inkBox(src);
+  // blitScaled takes the centre of the scaled square, so convert from the
+  // edges we actually care about.
+  const left = cellX0 + CELL_PX / 2 - (ink.x + ink.w / 2) * s;
+  const top = cellY0 + CELL_PX - (ink.y + ink.h) * s;
+  blitScaled(dst, src, left + box / 2, top + box / 2, box, alpha);
+}
 
 /**
  * A pale halo in the shape of a sprite, drawn under it. This is the
@@ -350,13 +378,19 @@ function drawBoard(r: Raster, scene: Scene): void {
   v.lane.checkpoints.forEach((c, i) => mark(c, BOARD.checkpoint, String(i + 1)));
   mark(v.lane.exit, BOARD.nest, "N");
 
-  // dinosaurs, drawn back to front so a tall longneck overlaps the row behind
-  const dinos = [...g.state.dinos].sort((a, b) => a.y - b.y);
+  // Dinosaurs, drawn back to front so a tall longneck overlaps the row
+  // behind. Increasing x inside a row for the same reason: at 1.5 cells the
+  // widest adults overlap their neighbours sideways too, and an overlap
+  // drawn in placement order would change the picture when the player
+  // rebuilt the same wall.
+  const dinos = [...g.state.dinos].sort((a, b) => a.y - b.y || a.x - b.x);
+  // Every block first, then every animal. A sprite now overhangs the cell
+  // behind it, so a block painted later would erase the feet of the one in
+  // front — the tiles are the floor and have to be finished before anything
+  // stands on them.
   for (const dn of dinos) {
     const def = g.dinoDef(dn);
     const { x: x0, y: y0 } = cellTopLeft(dn.x, dn.y);
-    const cx = x0 + CELL_PX / 2;
-    const cy = y0 + CELL_PX / 2;
     const hue = rgb(KIND_HUE[def.kind as Kind]);
     // The block. Towers are the walls, so a dinosaur's cell is drawn as a
     // filled block in a dark tint of its kind, with a lit top edge and a
@@ -368,12 +402,18 @@ function drawBoard(r: Raster, scene: Scene): void {
     r.fill(rect(x0 + 1, y0 + 1, CELL_PX - 1, CELL_PX - 1), darken(hue, 0.72), 1, 1);
     r.fill(rect(x0 + 1, y0 + 1, CELL_PX - 1, 2), darken(hue, 0.5), 1, 1);
     r.fill(rect(x0 + 1, y0 + CELL_PX - 3, CELL_PX - 1, 2), darken(hue, 0.84), 1, 1);
-    blitScaled(r, sheet.dino(def.kind as Kind, def.stage as 1 | 2 | 3), cx, cy - 1, CELL_PX + 4, 0.93);
     // Growth stage as pips along the bottom of the block: a count of
     // shapes, so the stage is readable without colour and without digits.
+    // On the block rather than on the animal, because the animal is the
+    // thing that moves off its tile.
     for (let i = 0; i < def.stage; i++) {
       r.fill(ellipse(x0 + 7 + i * 7, y0 + CELL_PX - 5, 2.1, 2.1), rgb(0xf6f3ea), 0.95);
     }
+  }
+  for (const dn of dinos) {
+    const def = g.dinoDef(dn);
+    const { x: x0, y: y0 } = cellTopLeft(dn.x, dn.y);
+    blitAnchored(r, sheet.dino(def.kind as Kind, def.stage as 1 | 2 | 3), x0, y0, 0.93);
   }
 
   // invaders
@@ -381,7 +421,7 @@ function drawBoard(r: Raster, scene: Scene): void {
     const def = g.invaderDef(inv);
     const cx = (inv.px * CELL_PX) / CELL;
     const cy = GRID_TOP + (inv.py * CELL_PX) / CELL;
-    const box = def.archetype === "boss" ? CELL_PX * 2 : def.archetype === "swarm" ? CELL_PX * 0.8 : CELL_PX;
+    const box = CELL_PX * INVADER_BOX_CELLS(def.archetype as Archetype);
     if (inv.flying) {
       // a ground shadow, so height reads without a legend
       r.fill(ellipse(cx, cy + 13, box * 0.3, box * 0.11), rgb(0x0b120d), 0.45);
