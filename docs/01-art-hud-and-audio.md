@@ -508,9 +508,14 @@ text-on-panel pair in section 3's contrast table stays exactly as measured.
 Under `prefers-reduced-motion` the lift is a static offset and not an
 animation: it is state, not feedback (section 7).
 
-**The selection survives the placement.** Place a raptor and the raptor card
-stays selected; the next cell is one tap. The alternative — one-shot, which is
-what every reference above does — was modelled against the 30-second build timer
+**The selection does not survive the placement.** Settled by the owner on
+2026-10-05: **one-shot, the PvZ-exact behaviour.** A successful place returns
+the card to rest, so every dinosaur is two taps — tap the card, tap the cell —
+and a stray tap on the board after a place costs nothing, which is the reason
+the owner gave. It is also what every reference in the table above does.
+
+The cost was modelled before the answer, and the model is kept here because it
+is the record of what one-shot is priced at. Against the 30-second build timer,
 with Fitts's law in the Shannon form, `MT = a + b·log₂(D/W + 1)` (`a = 0.2s`,
 `b = 0.15 s/bit`), over 381pt between the tray and mid-board. The form is worth
 naming because it changes the answer: the older `log₂(2D/W)` gives 25.9s for
@@ -518,14 +523,15 @@ one-shot rather than 22.1s. The targets are measured along the direction of
 travel, which is vertical: a card is 65pt tall and a cell 19.5pt.
 
 The two rows below are that formula applied twice, so a reader can recompute
-them: sticky is one trip to the card plus fifteen cell-to-cell hops,
+them: sticky — the rejected alternative, where the card stays selected — is
+one trip to the card plus fifteen cell-to-cell hops,
 `MT(381,65) + 15·MT(19.5,19.5)`; one-shot is fifteen round trips,
 `15·(MT(381,65) + MT(381,19.5))`.
 
 | a 15-cell wall | taps | thumb travel | time | of the build timer |
 | --- | --- | --- | --- | --- |
-| sticky | 16 | one trip down | **5.9s** | 20% |
-| one-shot | 30 | 15 round trips, ~2.1 m | **22.1s** | 74% |
+| sticky, rejected | 16 | one trip down | **5.9s** | 20% |
+| **one-shot, shipping** | 30 | 15 round trips, ~2.1 m | **22.1s** | 74% |
 
 One-shot does not merely double the taps. It adds fifteen round trips across
 the longest distance on the screen, each one re-aiming at a 65pt card and then
@@ -534,14 +540,22 @@ PvZ can afford it because a level is six plants; a maul wall is fifteen.
 Modelled, not measured — the measurement is a drive of the real client at
 720 x 1280.
 
-**If the owner answers one-shot**, exactly three things change and nothing
-else in this subsection does: the card returns to rest on a successful place;
-cancel stops being load-bearing (there is nothing to cancel after a place);
-and "wall fast" needs a mechanism that is not selection persistence, which on
-these numbers means a repeat affordance of some kind rather than a tuning
-change. The question is on [ARB-166](/ARB/issues/ARB-166) with the owner; this
-spec assumes sticky, which is also what the current code does by accident —
-`selectedDef` is set and never cleared anywhere.
+**What one-shot costs the rest of this subsection.** Three things, and nothing
+else here moves:
+
+- **The card returns to rest on a successful place** — the lift, the outline
+  and the 1.08 silhouette all drop back to the rest column of the table above,
+  and the preview stops with them.
+- **Cancel is no longer the only way out of a held selection.** It covers the
+  window between selecting a kind and spending it, which is a real window — a
+  player who taps a card and then changes their mind still needs a way out, and
+  the board must not be it. After a place there is nothing to cancel.
+- **Nothing replaces "wall fast."** The extra taps are the accepted cost, not
+  an oversight; see the end of this section.
+
+The code on `main` is sticky by accident rather than by design — `selectedDef`
+is set and never cleared — so clearing it on a successful place is a real client
+change, not a no-op.
 
 **The preview on the target cell, and why touch cannot have the web one.**
 `game.placeRefusal(defId, x, y)` is a pure query, so a preview is allowed to
@@ -642,9 +656,12 @@ toast by 1.6 seconds.
 `tryPlace()` flashes the cell and toasts `REFUSAL_TEXT[r]` — `That would seal
 the maze`, `Not enough meat`, `Solid rock`. That is the cell plus the toast
 plus the hatching, three channels, and **the selection always survives a
-refusal**. One addition, because one of the three is not the cell's fault: on
-`no-meat` the *card's* cost also flashes `refusal` once, since the card is
-where the problem is and where the fix is. Feedback goes where the cause is,
+refusal** — the one case where the card stays selected, because the tap bought
+nothing, and a card that cleared itself on a refusal would charge the player
+two taps for the game saying no. One addition, because one of the three is not
+the cell's fault: on `no-meat` the *card's* cost also flashes `refusal` once,
+since the card is where the problem is and where the fix is. Feedback goes
+where the cause is,
 not where the finger was. The card never flashes for `would-block` or `rock`.
 
 A refusal on a sealed maze is the one refusal the game *wants* the player to
@@ -653,8 +670,11 @@ greying cells out. Terrain is the exception, because rock and water already
 look unbuildable: a tap on one refuses with `Solid rock` rather than
 cancelling.
 
-**Cancel.** Two ways, both of which must exist, because today there is no way
-to deselect at all:
+**Cancel.** Two ways, both of which must exist. Under one-shot they cover the
+window between selecting a kind and spending it rather than an indefinitely
+held selection, which makes them smaller but not optional: the card is armed
+and costs meat the moment a cell is tapped, and today there is no way to
+deselect at all.
 
 - **Re-tap the selected card.** It returns to rest, the preview stops.
 - **Tap empty space,** which means precisely: anywhere in the board area with
@@ -683,12 +703,25 @@ long-press to sell. It is dropped, and not because drag is gone:
 Nothing replaces it. The board keeps exactly two gestures: tap, and pinch to
 zoom.
 
-**What replaces the "wall fast" feel.** Sticky selection, and the arithmetic
-above is the whole answer: a 15-cell wall is 16 taps and 5.9 seconds of a
-30-second build phase. No second mechanism is proposed, because the cost of
-drag was never the taps — it was that a maul build phase is a slow,
-deliberate, re-planned thing, and the only reason drag felt fast was that it
-let one gesture commit fifteen decisions. Fifteen decisions is the game.
+**Nothing replaces the "wall fast" feel, and that is a priced decision rather
+than an oversight.** The owner was shown the arithmetic above and chose
+one-shot anyway, accepting **30 taps, ~2.1 m of thumb travel and 22.1
+seconds — 74% of the 30-second build timer — for a 15-cell wall**, in exchange
+for a board on which a stray tap after a placement costs nothing. That
+exchange is the record: a reader who finds the cost surprising is looking at a
+number that was on the table when the call was made.
+
+No repeat affordance is proposed to claw it back. Every version of one buys
+taps back by letting a single gesture commit several placements, which is the
+property the owner rejected, and the cost of drag was never the taps in the
+first place: a maul build phase is a slow, deliberate, re-planned thing, and
+the only reason drag felt fast was that it let one gesture commit fifteen
+decisions. Fifteen decisions is the game.
+
+The 22.1s is modelled. If a drive of the real client at 720 x 1280 shows that
+a wall of that length cannot in fact be finished inside the build timer, that
+is a measured finding against a priced decision and it earns its own issue —
+it is not a licence to re-open this one on the model alone.
 
 ---
 

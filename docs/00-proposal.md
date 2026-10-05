@@ -186,9 +186,9 @@ the natural maze is a long S. One valley for v1; the map format supports
 terrain cells (rock, water) that can never be built on.
 
 **Dinosaurs (towers).** 1x1 cells (touch-friendly; a 2x2 WC3 footprint on
-a phone makes gaps too fiddly to place, and one cell is one tap — the
-smallest piece of maze a thumb can commit, which is what makes a wall feel
-fast when each cell is placed by hand). Six **kinds**, each a line of three
+a phone makes gaps too fiddly to place, and one cell is the smallest piece
+of maze a thumb can commit when every cell is placed by hand). Six
+**kinds**, each a line of three
 growth stages grown in place. Each stage is a real genus, so growing is also
 a small collection:
 
@@ -239,7 +239,8 @@ field makes it work exactly as in WC3. Easy to restrict later by locking
 cells within N of an invader during a wave.
 
 **Controls.** Tap a kind in the tray to select it, then tap a cell to
-place it; the selection persists, so the second cell of a wall is one tap.
+place it; the card returns to rest after a successful place, so every
+dinosaur is two taps.
 Tap a placed dinosaur for its sheet (grow, sell, range, stats). Pinch to
 zoom; free undo of the last placement during a build phase. Dragging does
 nothing and there is no long-press: both were dropped on 2026-10-05, see
@@ -560,15 +561,25 @@ we find out.
   deliberate thumb tap on a 19.5pt cell, so the gesture mis-fires on the
   careful player, and it is a destructive unconfirmed action competing with
   a Sell button that is one tap away on the sheet and shows the refund.
-  What carries "wall fast" now is that the tray selection **persists across a
-  placement**, which is the one part of this still with the owner: a
-  fifteen-cell wall is sixteen taps and, modelled with Fitts's law against the
-  30-second build timer, 5.9 seconds, where re-selecting per cell would be 30
-  taps, 2.1 metres of thumb travel and 22.1 seconds — three quarters of the
-  build phase spent travelling. Dropping drag does not depend on that answer;
-  only what replaces it does. Section 4 of `docs/01-art-hud-and-audio.md`
-  carries the interaction spec, the model, the one-shot delta and the
-  reference comparison that produced them.
+  Dropping drag never depended on what replaced it; section 4 of
+  `docs/01-art-hud-and-audio.md` carries the interaction spec and the
+  reference comparison that produced it.
+- 2026-10-05: **a tray card deselects on a successful placement — one-shot,
+  the PvZ-exact behaviour** — so every dinosaur is two taps, tap the card then
+  tap the cell. The owner's call, and the last open part of the entry above:
+  the alternative was a selection that persists across a placement, which
+  would have made a fifteen-cell wall sixteen taps and, modelled with Fitts's
+  law against the 30-second build timer, 5.9 seconds. One-shot was chosen
+  knowing it costs **30 taps, 2.1 metres of thumb travel and 22.1 seconds, 74%
+  of the build phase**, because a card that stays armed turns every stray tap
+  on the board into a dinosaur the player did not buy, and the owner accepts
+  the extra taps on a long wall. Nothing replaces the "wall fast" feel: a
+  repeat affordance buys taps back by letting one gesture commit several
+  placements, which is the property being rejected. The 22.1s is modelled, not
+  measured; a drive of the real client at 720 x 1280 that shows a wall cannot
+  be finished inside the timer is a measured finding and earns a new issue.
+  Section 4 of `docs/01-art-hud-and-audio.md` carries the model, the table it
+  was accepted on and the three client deltas.
 - 2026-10-05: the refused preview's hatching is **3px stripes of `ink` at
   alpha 1, stepped 8px, over `refusal` at 0.45**. `ink` because hatching in
   `refusal` is one hue at two alphas, which the bright spawn, checkpoint and
