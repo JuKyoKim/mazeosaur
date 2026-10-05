@@ -350,6 +350,234 @@ event. 1.6 seconds, then a 200ms fade.
 Messages are short and say what, not why-not: `That would seal the maze`,
 `Not enough meat`, `Rock`, `+96 meat`.
 
+### Why the tray is a bottom row, and what the references actually do
+
+The layout above was derived from `MIN_HIT = 82`, not from a reference. That
+is worth checking rather than asserting, so here are the four games the genre
+points at:
+
+| game | orientation | the buy control | after a place | preview before the tap | an illegal target |
+| --- | --- | --- | --- | --- | --- |
+| PvZ 1 | landscape | seed bank along the top, fixed, never scrolls | one-shot: the packet greys and recharges | none on touch | the packet refuses; the plant never leaves it |
+| PvZ 2 | landscape | seed bank top, boosts along the bottom | one-shot | none on touch | the packet refuses; no mark on the lawn |
+| Kingdom Rush | landscape | no tray — a build site is a plus on the map, tapped open into a four-tower radial | the site is consumed | the radial carries cost and range, at the site | the tower greys inside the radial, so the refusal is on the control |
+| Bloons TD 6 | landscape | side rail, scrolls and pages by category | one-shot | the tower follows the finger with a range circle, red where illegal | red ghost, drop refused |
+
+**The finding is the orientation column.** Not one of the four is a portrait
+phone game. The maul is a PC and landscape genre and its mobile descendants
+kept the landscape with it, so there is no portrait precedent to copy — which
+is why this layout is derived from the hit floor instead, and why none of the
+four has anything to say about one-handed reach. Treat the four right-hand
+columns as play notes rather than a teardown; the numbers that bind us are the
+ones `tools/art/build.ts check` prints.
+
+Where ours differs, and why:
+
+- **Bottom row, not a top bank.** A top bank is nearly free in landscape,
+  where the short axis is short. In portrait the top of 1280 is the least
+  reachable part of the screen and the bottom third is the thumb's arc. The
+  bank moves to the bottom or the player re-grips on every purchase.
+- **It fits; it never scrolls or pages.** BTD6 pages because it has over
+  twenty towers. We have exactly six kinds and six 109px cards fit 720 with
+  5 gaps of 6 and 37px spare. Fitting is worth more than being able to grow:
+  a scrolling bottom row competes with the system's own edge gestures, and a
+  paged tray hides part of the kind chart, which is six facts the player is
+  in the middle of learning.
+- **The gesture bar is cleared by the letterbox, and that is load-bearing.**
+  At 390 x 693pt inside a 390 x 844pt screen there is 151pt of letterbox, and
+  `Phaser.Scale.CENTER_BOTH` (`packages/game/src/index.ts:21`) splits it 75.5
+  above and 75.5 below. 75.5pt clears the 34pt home indicator, so the tray's
+  bottom edge is not under the system swipe. A bottom-aligned canvas would put
+  the lower 34pt of the tray — a quarter of a 136px row — inside the gesture
+  area. The centring is a requirement, not a default we happen to have.
+- **One tray at a time, where Kingdom Rush uses a radial.** A radial at the
+  tapped cell is the one idea here that beats a tray on reach, because the
+  control arrives where the finger already is. It loses on our cell size: at
+  19.5pt a radial anchored to a cell covers the four cells the decision is
+  about, and within two cells of any board edge it has nowhere to open. KR
+  affords it because a build site is a fixed landmark with space around it,
+  and because it shows four towers rather than six kinds with a cost and a
+  silhouette each.
+- **The sheet swaps into row 3; it is not a bottom sheet.** A sheet over the
+  tray is the Material default and it costs exactly what row 3 was bought
+  for: 44pt of controls plus a sheet puts the HUD over 400px and the board
+  loses three rows of cells. Swapping is also the onboarding (section 8,
+  step 7).
+
+The two tray states, in the same idiom as the sketch above:
+
+```
+         nothing selected
+y=1144  ┌─────┬─────┬─────┬─────┬─────┬─────┐   six cards, 109 x 120,
+        │ rap │ tyr │ arm │ hor │ lon │ fli │   6px gaps
+        │  10 │  25 │  20 │  20 │  30 │  15 │   hatchling cost in meat
+y=1280  └─────┴─────┴─────┴─────┴─────┴─────┘
+
+         raptor selected
+        ┏━━━━━┓                                 the card lifts 6px, takes a
+y=1138  ┃ rap ┃─────┬─────┬─────┬─────┬─────┐   3px #ecf0f1 border, and its
+        ┃  10 ┃ tyr │ arm │ hor │ lon │ fli │   silhouette scales 1.08
+        ┗━━━━━┛─────┴─────┴─────┴─────┴─────┘   nothing else moves
+```
+
+### The interaction model: tap to select, tap to place
+
+Settled by the owner on 2026-10-05: **a tap selects a kind, a tap on a cell
+places it, and dragging does nothing.** Drag-to-paint is gone because it
+mis-places on a phone — a fast finger skips cells and the interpolation that
+covers for it places dinosaurs the player did not aim at. Section 10 of
+`docs/00-proposal.md` carries the reversal and the three lines it corrected.
+
+Nothing in either doc stated the interaction model before this subsection, so
+all of it is new, and all of it is a number or a state.
+
+**The two selections are different things and are mutually exclusive.**
+`selectedDef` is *a kind to place*; `selectedDino` is *a placed dinosaur being
+inspected*. Tapping a card sets the first and clears the second; tapping a
+placed dinosaur sets the second and clears the first. Row 3 shows the shop
+while `selectedDino` is null and the sheet while it is not — so selecting a
+card does **not** swap the tray, and dismissing the sheet does **not** restore
+a kind selection the sheet replaced.
+
+**A run starts with nothing selected.** `BoardScene.buildHud()` currently ends
+with `selectDef(hatchlings[0])` (`packages/game/src/BoardScene.ts:502`), which
+pre-selects the raptor. That contradicts onboarding step 2, where the player
+taps the lit raptor *because it is the only thing that looks tappable*, and it
+means a first stray tap on the board spends 10 meat the player did not mean to
+spend. Both selections start null and both are reset in `create()`, because
+`scene.restart()` re-runs it.
+
+**The selected card.** Three channels, none of them hue:
+
+| channel | rest | selected |
+| --- | --- | --- |
+| position | `y = 1144` | `y = 1138` — a 6px lift |
+| outline | none | 3px `#ecf0f1`, the whole card |
+| silhouette | 1.0 | 1.08 |
+
+`#ecf0f1` on `hud` `#0f1712` is **15.9:1**, and it is the same weight and
+colour as the ring a selected *dinosaur* already takes on the board
+(`BoardScene.ts:379`), so the two selections read as one idea rather than two
+conventions. The card's interior does not change, deliberately: every
+text-on-panel pair in section 3's contrast table stays exactly as measured.
+Under `prefers-reduced-motion` the lift is a static offset, not an animation —
+it is state, not feedback (section 7).
+
+**The selection survives the placement.** Place a raptor and the raptor card
+stays selected; the next cell is one tap. The alternative — one-shot, which is
+what all four references do — was modelled against the 30-second build timer
+with Fitts's law (`a = 0.2s`, `b = 0.15 s/bit`), a 65pt card, a 19.5pt cell
+and 381pt between the tray and mid-board:
+
+| a 15-cell wall | taps | thumb travel | time | of the build timer |
+| --- | --- | --- | --- | --- |
+| sticky | 16 | one trip down | **5.9s** | 20% |
+| one-shot | 30 | 15 round trips, ~2.1 m | **22.1s** | 74% |
+
+One-shot does not merely double the taps. It adds fifteen round trips across
+the longest distance on the screen, each one re-aiming at a 65pt card and then
+at a 19.5pt cell, and it spends three quarters of the build phase on travel.
+PvZ can afford it because a level is six plants; a maul wall is fifteen.
+Modelled, not measured — the measurement is a drive of the real client at
+720 x 1280.
+
+**If the owner answers one-shot**, exactly three things change and nothing
+else in this subsection does: the card returns to rest on a successful place;
+cancel stops being load-bearing (there is nothing to cancel after a place);
+and "wall fast" needs a mechanism that is not selection persistence, which on
+these numbers means a repeat affordance of some kind rather than a tuning
+change. The question is on [ARB-166](/ARB/issues/ARB-166) with the owner; this
+spec assumes sticky, which is also what the current code does by accident —
+`selectedDef` is set and never cleared anywhere.
+
+**The preview on the target cell, and why touch cannot have the web one.**
+`game.placeRefusal(defId, x, y)` is a pure query, so a preview is allowed to
+be *truthful* rather than hopeful: the client knows before the commit whether
+the cell would refuse and why.
+
+| state | what is drawn |
+| --- | --- |
+| valid cell | the kind's hue at 0.45 in a rounded rect inset 3px, radius 6, plus a 1px `#ffffff` range ring at 0.35 |
+| invalid cell | `refusal` at 0.45 in the same rect, **plus 2px diagonal hatching**, and no range ring |
+| any tap, the instant it lands | a 2px `#ecf0f1` ring at 0.6 from the cell centre out to a **54px radius**, 120ms, then gone — drawn on `pointerdown` before the sim is called |
+
+The hatching is not decoration: it is the second channel for a *state*, which
+section 3's rule covers as much as it covers kinds, and section 8 step 5
+already promises it by name ("the blocked hatching").
+
+**The hover preview is mouse-only, and that is not a gap.** A finger has no
+hover — its first contact with a cell is the tap. Gating the placement on
+`pointerup` so a preview could be shown in between would re-create the thing
+the owner removed: a commit that depends on where the finger *ends*. So on
+touch the placement commits on `pointerdown`, inside the 400ms Doherty
+threshold, and the committed sprite is the preview. What the ring in the third
+row buys is the one thing the committed sprite cannot say: that the tap was
+*registered*. Without it, a refused tap and a dropped tap look identical, and
+"nothing happened" is the worst feedback the game can give.
+
+**The finger covers the answer, so the answer cannot be in the cell.** A cell
+is 19.5pt, which is **3.6mm**; a thumb contact patch is 8 to 10mm. The finger
+covers the tapped cell and most of its neighbours, and it stays there for as
+long as the player is placing. That is why the tap ring is 54px — 1.5 cells —
+rather than drawn inside the cell: a mark the size of the thing being tapped is
+invisible by construction, and the ring has to be wider than the hand to be
+seen at all. It is also why the confirmation of a *successful* place is not on
+the board: the **meat count stepping down in row 1, with its pip**, is the
+off-finger truth, and the refusal toast sits at `y=932` for the same reason.
+Both are above the thumb in a one-handed grip and both outlive the lift — the
+toast by 1.6 seconds.
+
+**Refusal is enough as it stands, and it is located at the cause.**
+`tryPlace()` flashes the cell and toasts `REFUSAL_TEXT[r]` — `That would seal
+the maze`, `Not enough meat`, `Rock`. That is the cell plus the toast plus the
+hatching, three channels, and **the selection always survives a refusal**. One
+addition, because one of the three is not the cell's fault: on `no-meat` the
+*card's* cost also flashes `refusal` once, since the card is where the problem
+is and where the fix is. Feedback goes where the cause is, not where the
+finger was. The card never flashes for `would-block` or `Rock`.
+
+A refusal on a sealed maze is the one refusal the game *wants* the player to
+reach — onboarding step 5 is built on it — so it is never pre-empted by
+greying cells out. Terrain is the exception, because rock and water already
+look unbuildable: a tap on one refuses with `Rock` rather than cancelling.
+
+**Cancel.** Two ways, both of which must exist, because today there is no way
+to deselect at all:
+
+- **Re-tap the selected card.** It returns to rest, the preview stops.
+- **Tap empty space,** which means precisely: anywhere in the board area with
+  no grid cell under it, or any HUD background that is not a control. The grid
+  is centred in the board area, so with a valley shorter than 28 the dead
+  bands are `y < gridTop` and `y >= gridTop + height·36` — 72px each for a
+  24-tall valley, 0 for a 28-tall one. At `GRID_W = 20` the grid is the full
+  720 wide, so there is never a side band. Controls stop propagation and so
+  never cancel; the toast strip is not interactive and does.
+
+A cell inside the grid never cancels: it places, or it refuses. Starting a
+migration does not cancel — mazing continues during one, and a selection
+silently lost at the phase change would be read as a dropped tap.
+
+**Sell, and the end of long-press.** `docs/00-proposal.md:240` promised
+long-press to sell. It is dropped, and not because drag is gone:
+
+- a long press is 500ms, and a deliberate thumb tap on a 19.5pt cell can
+  cross that, so the gesture mis-fires on exactly the careful player;
+- it is destructive, unconfirmed and undiscoverable, which is three strikes
+  for one hidden gesture;
+- Sell already exists as an `88.8 x 44.4pt` button on the sheet, one tap from
+  tapping the dinosaur, and it shows the refund — which is the number that
+  teaches that juggling costs something.
+
+Nothing replaces it. The board keeps exactly two gestures: tap, and pinch to
+zoom.
+
+**What replaces the "wall fast" feel.** Sticky selection, and the arithmetic
+above is the whole answer: a 15-cell wall is 16 taps and 5.9 seconds of a
+30-second build phase. No second mechanism is proposed, because the cost of
+drag was never the taps — it was that a maul build phase is a slow,
+deliberate, re-planned thing, and the only reason drag felt fast was that it
+let one gesture commit fifteen decisions. Fifteen decisions is the game.
+
 ---
 
 ## 5. The sprite manifest
@@ -425,9 +653,12 @@ migrations against a quarter of the board; this costs nothing the sim can see.
 
 **`DRAW_CELLS` is a scale denominator, not a drawn height.** 1.25 cells is
 the size of the *box* the authored square is scaled into. The ink does not
-fill that square — it is 44 to 60 pixels of 64, because the camera leaves room
-for the tallest model — so the drawn animal is always shorter than 45px, and
-by how much is a property of the genus. Measured through the shipping draw
+fill that square — **in height** it is 42 to 60 pixels of 64 across the six
+adults and 28 to 40 across the hatchlings, because the camera leaves room for
+the tallest model — so the drawn animal is always shorter than 45px, and by
+how much is a property of the genus and the stage. The width range is a
+different pair of numbers — 44 to 60 of 64 for the adults — and it is the one
+that binds, as the paragraph above says. Measured through the shipping draw
 path at Toy Box, adults in a 36px cell:
 
 | adult | drawn | past the cell top |
@@ -468,8 +699,10 @@ separable at 1.25 and does not at 1.5. That is what set the cap.
 
 **Still acceptance for the integration, and only testable by driving the
 client:** that a *placement preview* stays legible under a neighbour's
-overhang, and that the drag-to-place line reads while the finger is over the
-board. Neither is a property of the atlas, so neither can be settled here.
+overhang, and that the committed sprite reads on the cell the player tapped
+while the thumb is still over it — the tap commits under the finger, so the
+one cell the player cannot see is the one they just bought. Neither is a
+property of the atlas, so neither can be settled here.
 
 ### 5.1 Dinosaurs — six silhouettes, learned in one run
 
