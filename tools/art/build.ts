@@ -502,11 +502,11 @@ function doAtlas(id: string): void {
 
   const da = pack(dinos, width);
   png(`packages/game/assets/${d.id}/dinos.png`, da.raster);
-  write(`packages/game/assets/${d.id}/dinos.json`, atlasJson(da, "dinos.png", CELL_PX, DRAW_CELLS));
+  write(`packages/game/assets/${d.id}/dinos.json`, atlasJson(da, "dinos.png", d.spritePx, CELL_PX, DRAW_CELLS));
 
   const ia = pack(invaders, width);
   png(`packages/game/assets/${d.id}/invaders.png`, ia.raster);
-  write(`packages/game/assets/${d.id}/invaders.json`, atlasJson(ia, "invaders.png", CELL_PX, DRAW_CELLS));
+  write(`packages/game/assets/${d.id}/invaders.json`, atlasJson(ia, "invaders.png", d.spritePx, CELL_PX, DRAW_CELLS));
 
   console.log(`  ${da.frames.length} dinosaur frames, ${ia.frames.length} invader frames`);
 }

@@ -382,7 +382,7 @@ than that cell.
 | | value | why |
 | --- | --- | --- |
 | footprint | 36 x 36 (1 cell) | the sim's, unchanged |
-| draw scale | the authored square scaled to **1.25 cells** (45 of 64 for Toy Box, `DRAW_CELLS` in `tools/art/layout.ts`) | tall enough for a solid to stand proud of its tile, capped where twenty adjacent cells stop reading |
+| draw scale | the **authored square** scaled to **1.25 cells** — a 45px box for Toy Box's 64px square, `DRAW_CELLS` in `tools/art/layout.ts`. Uniform: one scale for every frame in the atlas | room for a solid to stand proud of its tile, capped where twenty adjacent cells stop reading. Uniform because growth stage has to read as *size* — see below |
 | anchor | the **ink's** bottom edge on the **bottom edge of the cell**, the ink centred horizontally on the cell | feet on the floor of the cell the sim thinks it is in |
 | draw order | **by row, increasing y**, then **increasing x** within a row | the overlap reads as depth rather than as a z-fight, and the same wall rebuilt draws the same picture |
 | tiles | every block painted before any animal | a sprite overhangs the cell behind it, so a tile painted later erases the feet of the one in front |
@@ -403,22 +403,55 @@ the widest adults — `flier-3` is 60px of ink in a 64px square — also reach
 about 7px into each horizontal neighbour, and a 5x4 block of occupied cells
 at the phone's true 19.5pt cell reads as one pile instead of as twenty
 dinosaurs. Rendered at 1.0, 1.15, 1.25, 1.35 and 1.5 and chosen by looking:
-**1.25 is the largest value where that block stays separable**, and an adult
-still stands a quarter of a cell proud of its tile. At 1.25 the widest adult
-draws 42px wide into a 36px cell, so the horizontal reach is about 3px a
-side.
+**1.25 is the largest value where that block stays separable.** At 1.25 the
+widest adult draws 42.2px into a 36px cell, so the horizontal reach is 3.1px
+a side; at 1.35 it is 4.8px and at 1.5 it is 7.3px.
 
-**Why.** This is the mechanism by which the reference game reads as blocks:
-its subjects are taller than the tile they stand on. Without it a block
-dinosaur is a 19.5pt square on a phone, and solidity is the first thing that
-cell takes away — the finding in section 2. Enlarging the *cell* instead
-would buy the same look for a re-tune of all 50 migrations against a quarter
-of the board; this costs nothing the sim can see.
+**The binding constraint is sideways, not upwards**, and the measurements
+below are why. 1.25 buys very little height — two frames of eighteen clear
+their own cell — while costing 3.1px a side on the widest. 1.0 would be a
+different game only in that nothing stands proud at all, and 1.5 is a pile.
+A later proposal to raise it has to answer the horizontal column, because
+that is the one that moves.
 
-**The real cost is occlusion, and it is bounded.** A 1.25-cell sprite reaches
-9px — a quarter of a cell — into the row behind it, and what it covers there
-is the *lower* quarter of that cell, where the dinosaur behind is standing.
-In a solid wall each dinosaur's feet are partly covered by the one in front.
+**Why at all.** Standing taller than the tile is part of how the reference
+game reads as blocks, and without it a block dinosaur is cropped to a 19.5pt
+square on a phone — solidity is the first thing that cell takes away, which
+is the finding in section 2. Be honest about how much of the work it does
+here, though: at 1.25 it is the *tall* genera that gain, and the rest of the
+read comes from the fixed isometric camera and the three flat face tones.
+Enlarging the *cell* instead would buy more of it, for a re-tune of all 50
+migrations against a quarter of the board; this costs nothing the sim can see.
+
+**`DRAW_CELLS` is a scale denominator, not a drawn height.** 1.25 cells is
+the size of the *box* the authored square is scaled into. The ink does not
+fill that square — it is 44 to 60 pixels of 64, because the camera leaves room
+for the tallest model — so the drawn animal is always shorter than 45px, and
+by how much is a property of the genus. Measured through the shipping draw
+path at Toy Box, adults in a 36px cell:
+
+| adult | drawn | past the cell top |
+| --- | --- | --- |
+| longneck-3 | 30.9 x 42.2 | **+6.2** |
+| flier-3 | 42.2 x 38.0 | **+2.0** |
+| tyrant-3 | 35.2 x 35.2 | −0.8 |
+| armored-3 | 38.0 x 35.2 | −0.8 |
+| horned-3 | 33.8 x 32.3 | −3.7 |
+| raptor-3 | 36.6 x 29.5 | −6.5 |
+
+Hatchlings draw 19.7 to 28.1px tall in the same 36px cell. **That spread is
+the point and it is why the scale is uniform**: a hatchling has to read as a
+smaller animal than an adult, and normalising each frame to its own ink would
+delete the one channel that carries growth. The cost is that the two numbers
+it is tempting to quote are both wrong — *every* dinosaur is not drawn 1.25
+cells tall, and four of the six adults are not drawn proud of their tile at
+all.
+
+**So the occlusion is much smaller than the box suggests.** Only
+`longneck-3` and `flier-3` cross their own cell's top edge, by 6.2px and
+2.0px — not the 9px of the box — and nothing else in the eighteen frames
+crosses it. Where it happens, what is covered is the *lower* part of the cell
+behind, where the dinosaur behind is standing.
 
 That is survivable, and not by luck: every one of the six silhouettes is
 identified by its *top* — the tyrant's oversized head, the longneck's
@@ -553,9 +586,17 @@ The scale's denominator therefore cannot come from the frame, so it is in
 
 | `meta` key | Toy Box | what it is |
 | --- | --- | --- |
-| `authored` | 64 | the square the sprites were drawn at, before trimming |
+| `authored` | 64 | the direction's `spritePx` — the square the sprites were drawn at, before trimming |
 | `cell` | 36 | the logical cell, `CELL_PX` |
-| `drawCells` | 1.25 | 5.0's draw height, in cells |
+| `drawCells` | 1.25 | 5.0's draw *box*, in cells. Not how tall a dinosaur comes out |
+
+`authored` is the direction's own number, passed in. It must never be derived
+from the packed frames: the invaders atlas genuinely mixes two authored
+squares, because the boss is rendered at `spritePx * 2`, so a `max` over its
+frames reports 128 for an atlas whose other 46 frames were drawn at 64 — and
+a client reading that draws every non-boss invader at half size. Before
+trimming, a frame's own `w` *was* its authored square, so this could not be
+got wrong; trimming removed the only per-frame record of it.
 
 **Placing a dinosaur, in full**, with no other input than the atlas and the
 cell the sim gives you:
@@ -568,9 +609,27 @@ sprite.setPosition(cellX * cell + cell / 2, cellY * cell + cell);
 sprite.setDepth(cellY * GRID_W + cellX);        // row, then x within the row
 ```
 
-Invaders are not anchored: they are not in a cell, they move continuously,
-and they are drawn centred on their interpolated position at one cell (the
-`boss` archetype at two, `swarm` at 0.8), as the board frames do.
+**Invaders are not anchored** — they are not in a cell and they move
+continuously — so they are drawn centred on their interpolated position, and
+the only question is the size:
+
+```ts
+const { authored, cell } = atlas.meta;
+const cells = archetype === "swarm" ? 0.8 : 1;   // the boss is NOT 2 here
+sprite.setOrigin(0.5, 0.5);
+sprite.setScale((cell * cells) / authored);
+```
+
+**The boss takes no multiplier against this atlas, and that is the one trap
+in the file.** Its sprite is authored in a square twice the size and holds an
+animal twice the size, so the uniform scale already draws it at two cells —
+36/64 and 72/128 are both 0.5625. `swarm` is the real multiplier: authored at
+one square like everything else and genuinely drawn smaller. The board frames
+in `docs/art/` apply 2x to the boss because they blit the *untrimmed* square,
+where the two cancel; copying that rule onto the trimmed atlas draws a boss at
+four cells. `INVADER_BOX_CELLS` and `INVADER_FRAMES` in `tools/art/sprites.ts`
+carry both halves, and `tools/art/test/atlas.test.ts` asserts that the scale
+above reproduces the board frames for all 54 invader frames.
 
 **Nothing may touch the edge of its authored square.** `art:check` measures
 every one of the 72 frames in a direction against its own border and fails

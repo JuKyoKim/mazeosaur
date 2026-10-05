@@ -34,7 +34,7 @@ import {
   kindButtonX,
 } from "./layout.js";
 import { Raster, ellipse, rect, subtract, taper, union, darken, lighten, mix, rgb, type Rgb, type Shape } from "./raster.js";
-import { dinoSprite, inkBox, invaderSprite, renderParts } from "./sprites.js";
+import { INVADER_BOX_CELLS, dinoSprite, inkBox, invaderSprite, renderParts } from "./sprites.js";
 
 // ------------------------------------------------------------------ helpers
 
@@ -421,7 +421,7 @@ function drawBoard(r: Raster, scene: Scene): void {
     const def = g.invaderDef(inv);
     const cx = (inv.px * CELL_PX) / CELL;
     const cy = GRID_TOP + (inv.py * CELL_PX) / CELL;
-    const box = def.archetype === "boss" ? CELL_PX * 2 : def.archetype === "swarm" ? CELL_PX * 0.8 : CELL_PX;
+    const box = CELL_PX * INVADER_BOX_CELLS(def.archetype as Archetype);
     if (inv.flying) {
       // a ground shadow, so height reads without a legend
       r.fill(ellipse(cx, cy + 13, box * 0.3, box * 0.11), rgb(0x0b120d), 0.45);

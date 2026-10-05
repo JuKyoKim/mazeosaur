@@ -108,12 +108,37 @@ export function dinoSprite(kind: Kind, stage: 1 | 2 | 3, d: Direction): Raster {
  */
 export function invaderSprite(archetype: Archetype, kind: Kind, d: Direction): Raster {
   const p = d.palette(KIND_HUE[kind]);
-  const frames = archetype === "boss" ? 2 : 1;
+  const frames = INVADER_FRAMES(archetype);
   const n = d.spritePx * frames;
   if (d.model === "blocks") return renderBlocks(ARCHETYPE_BLOCKS[archetype](), d, p, n, frames);
   const parts = ARCHETYPE_SILHOUETTE[archetype](d.proportions);
   return renderParts(parts, d, p, n);
 }
+
+/**
+ * How many authored squares wide an archetype is drawn at. Only the boss is
+ * bigger than one, and it is bigger *in the ink* — a 2x square holding a 2x
+ * animal — which is why it needs no box multiplier anywhere downstream.
+ */
+export const INVADER_FRAMES = (archetype: Archetype): number => (archetype === "boss" ? 2 : 1);
+
+/**
+ * The on-board box an archetype is drawn into, in cells.
+ *
+ * Two different things look like a size multiplier here and only one of them
+ * is. The boss is drawn at two cells because its *sprite* is two authored
+ * squares, so against an atlas it needs no multiplier at all — the 2x is
+ * already in the pixels, and the scale that is right for every other frame is
+ * right for it too. `swarm` is the real multiplier: authored at one square
+ * like everything else and genuinely drawn smaller.
+ *
+ * So this is the board frame's rule, in terms of the authored square, and the
+ * client's rule against the atlas is the same function divided by
+ * `INVADER_FRAMES` — which is 1 everywhere except the boss. Section 5.5 of
+ * `docs/01-art-hud-and-audio.md` states it as the client sees it.
+ */
+export const INVADER_BOX_CELLS = (archetype: Archetype): number =>
+  archetype === "boss" ? 2 : archetype === "swarm" ? 0.8 : 1;
 
 // ------------------------------------------------------------------- atlas
 
@@ -128,8 +153,6 @@ export interface AtlasFrame {
 export interface Atlas {
   raster: Raster;
   frames: AtlasFrame[];
-  /** The square every sprite in this atlas was authored at, before trimming. */
-  authored: number;
 }
 
 /**
@@ -178,9 +201,8 @@ export function pack(entries: { name: string; raster: Raster }[], width: number,
     const box = inkBox(e.raster);
     const raster = new Raster(box.w, box.h);
     raster.blit(e.raster, -box.x, -box.y);
-    return { name: e.name, raster, authored: e.raster.w };
+    return { name: e.name, raster };
   });
-  const authored = trimmed.length ? Math.max(...trimmed.map((e) => e.authored)) : 0;
   const sorted = [...trimmed].sort((a, b) => b.raster.h - a.raster.h || a.name.localeCompare(b.name));
   const frames: AtlasFrame[] = [];
   let x = pad;
@@ -203,7 +225,7 @@ export function pack(entries: { name: string; raster: Raster }[], width: number,
     if (e) raster.blit(e.raster, f.x, f.y);
   }
   frames.sort((a, b) => a.name.localeCompare(b.name));
-  return { raster, frames, authored };
+  return { raster, frames };
 }
 
 /**
@@ -217,13 +239,27 @@ export function pack(entries: { name: string; raster: Raster }[], width: number,
  * animal's feet. Declaring `trimmed: true` and carrying the offset would be
  * the same pixels and would move the origin back off the feet.
  *
- * `meta.authored` is the square the sprites were drawn at before trimming,
- * and it is the denominator of the draw scale, which the frame sizes can no
- * longer supply. With `meta.drawCells` and `meta.cell` it is everything the
- * client needs to place a dinosaur, and it is per-atlas rather than
- * per-frame, so section 5.5's "no lookup table" still holds.
+ * `authored` is the square the sprites were drawn at before trimming, and it
+ * is the denominator of the draw scale, which the frame sizes can no longer
+ * supply. With `meta.drawCells` and `meta.cell` it is everything the client
+ * needs to place a dinosaur, and it is per-atlas rather than per-frame, so
+ * section 5.5's "no lookup table" still holds.
+ *
+ * **It is the direction's `spritePx`, passed in, and must not be reduced out
+ * of the frames.** The invaders atlas genuinely mixes two authored squares:
+ * `invaderSprite` renders the `boss` archetype at `spritePx * 2`, so a
+ * `Math.max` over the trimmed frames reports 128 for an atlas whose other 46
+ * frames were drawn at 64, and a client reading it draws every non-boss
+ * invader at half size. Before trimming, a frame's own `w` *was* its authored
+ * square and the boss's 2x came for free; trimming destroyed the only
+ * per-frame record of it, so the number has to come from the direction.
+ *
+ * One number is still right for the whole atlas, because the boss's 2x box
+ * and its 2x authored square cancel: 36/64 and 72/128 are both 0.5625. That
+ * is also why the client must give the boss *no* box multiplier against this
+ * atlas, while `swarm` keeps its 0.8 — see section 5.5.
  */
-export function atlasJson(atlas: Atlas, image: string, cell: number, drawCells: number): string {
+export function atlasJson(atlas: Atlas, image: string, authored: number, cell: number, drawCells: number): string {
   const frames: Record<string, unknown> = {};
   for (const f of atlas.frames) {
     frames[f.name] = {
@@ -243,7 +279,7 @@ export function atlasJson(atlas: Atlas, image: string, cell: number, drawCells: 
         format: "RGBA8888",
         size: { w: atlas.raster.w, h: atlas.raster.h },
         scale: "1",
-        authored: atlas.authored,
+        authored,
         cell,
         drawCells,
       },
