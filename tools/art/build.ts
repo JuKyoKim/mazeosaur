@@ -16,7 +16,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { content, hatchlings } from "@mazeosaur/content";
-import { ARCHETYPE_TELL, KIND_SILHOUETTE_NOTE, type Archetype } from "./bestiary.js";
+import { assetDir, atlasDrift, atlasFiles, describeProblem } from "./atlas.js";
+import { ARCHETYPES, ARCHETYPE_TELL, KIND_SILHOUETTE_NOTE } from "./bestiary.js";
 import {
   BOARD,
   CHOSEN,
@@ -35,10 +36,9 @@ import { drawText, effectsPlate, renderBoardFrame } from "./frame.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, DRAW_CELLS, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
 import { encodePng, pngHasPixels } from "./png.js";
 import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
-import { atlasJson, dinoSprite, invaderSprite, pack } from "./sprites.js";
+import { dinoSprite, invaderSprite, pack } from "./sprites.js";
 
 const ROOT = join(import.meta.dirname, "..", "..");
-const ARCHETYPES: readonly Archetype[] = ["normal", "fast", "tank", "flying", "swarm", "splitter", "regenerator", "shielded", "boss"];
 
 function write(rel: string, data: Buffer | string): void {
   const p = join(ROOT, rel);
@@ -484,9 +484,15 @@ function doVerify(): void {
 
   if (bad) {
     console.error(`\n${bad} frame(s) do not match the generator. Run \`npm run art:frames\` and commit the result.`);
-    process.exit(1);
+  } else {
+    console.log(`\nall ${produced.length} frames match the generator, pixel for pixel`);
   }
-  console.log(`\nall ${produced.length} frames match the generator, pixel for pixel`);
+
+  // The frames above are the record of how the direction was chosen; the
+  // atlas is what the game loads. Checking only the first passed a stale
+  // `packages/game/assets` for as long as this command existed.
+  bad += verifyAtlas();
+  if (bad) process.exit(1);
 }
 
 // ---------------------------------------------------------------- the atlases
@@ -494,21 +500,36 @@ function doVerify(): void {
 function doAtlas(id: string): void {
   const d = direction(id);
   console.log(`atlas for ${d.name} (${d.id}), authored at ${d.spritePx}px`);
-  const dinos = KINDS.flatMap((kind) =>
-    ([1, 2, 3] as const).map((stage) => ({ name: `${kind}-${stage}`, raster: dinoSprite(kind, stage, d) })),
-  );
-  const invaders = ARCHETYPES.flatMap((a) => KINDS.map((kind) => ({ name: `${a}-${kind}`, raster: invaderSprite(a, kind, d) })));
-  const width = d.spritePx <= 24 ? 256 : 512;
+  let frames = 0;
+  for (const file of atlasFiles(d)) {
+    if (file.kind === "image") {
+      png(file.rel, file.raster);
+      frames += file.frames;
+    } else {
+      write(file.rel, file.text);
+    }
+  }
+  console.log(`  ${frames} frames`);
+}
 
-  const da = pack(dinos, width);
-  png(`packages/game/assets/${d.id}/dinos.png`, da.raster);
-  write(`packages/game/assets/${d.id}/dinos.json`, atlasJson(da, "dinos.png", d.spritePx, CELL_PX, DRAW_CELLS));
-
-  const ia = pack(invaders, width);
-  png(`packages/game/assets/${d.id}/invaders.png`, ia.raster);
-  write(`packages/game/assets/${d.id}/invaders.json`, atlasJson(ia, "invaders.png", d.spritePx, CELL_PX, DRAW_CELLS));
-
-  console.log(`  ${da.frames.length} dinosaur frames, ${ia.frames.length} invader frames`);
+/**
+ * The committed atlas is still the one this code produces.
+ *
+ * `art:verify` reports it, and `tools/art/test/assets.test.ts` fails the gate
+ * on it, because `npm run check` does not run this command. Both read
+ * `atlasDrift`, so there is one answer to the question in two places rather
+ * than two implementations that can drift apart themselves.
+ */
+function verifyAtlas(): number {
+  const problems = atlasDrift(ROOT);
+  console.log(`\nthe shipped atlas, ${assetDir(CHOSEN.id)}`);
+  if (!problems.length) {
+    for (const file of atlasFiles(CHOSEN)) console.log(`  ok         ${file.rel}`);
+    return 0;
+  }
+  for (const p of problems) console.error(`  ${describeProblem(p)}`);
+  console.error(`\n${problems.length} atlas file(s) do not match the generator. Run \`npm run art:atlas\` and commit the result.`);
+  return problems.length;
 }
 
 // ------------------------------------------------------------------ the check

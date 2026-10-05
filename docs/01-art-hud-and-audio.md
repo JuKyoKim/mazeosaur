@@ -573,6 +573,15 @@ packages/game/assets/toy-box/invaders.png + invaders.json
 Frame names are `<kind>-<stage>` and `<archetype>-<kind>`, both lowercase,
 so the client can build a frame name from sim state without a lookup table.
 
+What keeps those four files current is `tools/art/test/assets.test.ts`, which
+`npm run check` runs: the committed PNG's pixels and the committed JSON's text
+must be what the generator produces today, and a file under a direction's
+asset folder that the generator does not produce fails too. So a change to
+`sprites.ts`, to a palette or to `CHOSEN` is red until `npm run art:atlas`
+has been run and the result committed. Nothing else would catch it — the
+board frames in `docs/art/` blit the in-memory sprite, so they agree with the
+code whether or not the atlas does.
+
 **Frames are trimmed to the ink**, and are declared as untrimmed frames whose
 `sourceSize` is the trimmed size. That is deliberate, and it is the whole
 reason 5.0's anchor costs the client one line: Phaser resolves `setOrigin`
