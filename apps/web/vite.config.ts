@@ -1,6 +1,13 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  // A local build has no BUILD_COMMIT and stamps "dev", which is honest —
+  // that build is not reproducible from a registry tag. CI sets it to
+  // github.sha so the string inside the bundle matches the GHCR tag that
+  // shipped it. See docs/01-v1-architecture.md §2.2.
+  define: {
+    __BUILD_COMMIT__: JSON.stringify(process.env.BUILD_COMMIT ?? "dev"),
+  },
   server: {
     port: 5173,
     strictPort: true,

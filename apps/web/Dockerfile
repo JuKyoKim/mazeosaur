@@ -4,6 +4,11 @@
 FROM node:22-slim AS build
 WORKDIR /repo
 
+# The commit this image is built from, stamped into the bundle below so a
+# save says which image wrote it. Defaults to "dev" for a manual build with
+# no --build-arg, same honesty as the unset-env-var case in vite.config.ts.
+ARG BUILD_COMMIT=dev
+
 # Root manifests + every workspace's package.json first, so `npm ci` is
 # cached across source-only changes.
 COPY package.json package-lock.json ./
@@ -18,7 +23,7 @@ COPY scripts ./scripts
 COPY packages ./packages
 COPY apps/web ./apps/web
 
-RUN npm run build --workspace apps/web \
+RUN BUILD_COMMIT=$BUILD_COMMIT npm run build --workspace apps/web \
  && node scripts/check-bundle-size.mjs \
  && find apps/web/dist -name '*.map' -delete
 
