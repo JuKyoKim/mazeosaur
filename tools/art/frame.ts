@@ -27,6 +27,8 @@ import {
   ROW1,
   ROW2,
   ROW3,
+  SELECT_BORDER,
+  SELECT_LIFT,
   TOAST,
   TYPE,
   fontScale,
@@ -391,7 +393,7 @@ function drawBoard(r: Raster, scene: Scene): void {
   for (const dn of dinos) {
     const def = g.dinoDef(dn);
     const { x: x0, y: y0 } = cellTopLeft(dn.x, dn.y);
-    const hue = rgb(KIND_HUE[def.kind as Kind]);
+    const hue = rgb(KIND_HUE[def.kind]);
     // The block. Towers are the walls, so a dinosaur's cell is drawn as a
     // filled block in a dark tint of its kind, with a lit top edge and a
     // shadowed bottom. This is the single most important thing on the
@@ -413,7 +415,7 @@ function drawBoard(r: Raster, scene: Scene): void {
   for (const dn of dinos) {
     const def = g.dinoDef(dn);
     const { x: x0, y: y0 } = cellTopLeft(dn.x, dn.y);
-    blitAnchored(r, sheet.dino(def.kind as Kind, def.stage as 1 | 2 | 3), x0, y0, 0.93);
+    blitAnchored(r, sheet.dino(def.kind, def.stage), x0, y0, 0.93);
   }
 
   // invaders
@@ -421,14 +423,14 @@ function drawBoard(r: Raster, scene: Scene): void {
     const def = g.invaderDef(inv);
     const cx = (inv.px * CELL_PX) / CELL;
     const cy = GRID_TOP + (inv.py * CELL_PX) / CELL;
-    const box = CELL_PX * INVADER_BOX_CELLS(def.archetype as Archetype);
+    const box = CELL_PX * INVADER_BOX_CELLS(def.archetype);
     if (inv.flying) {
       // a ground shadow, so height reads without a legend
       r.fill(ellipse(cx, cy + 13, box * 0.3, box * 0.11), rgb(0x0b120d), 0.45);
     } else {
       r.fill(ellipse(cx, cy + box * 0.34, box * 0.3, box * 0.09), rgb(0x0b120d), 0.3);
     }
-    const sprite = sheet.invader(def.archetype as Archetype, def.kind as Kind);
+    const sprite = sheet.invader(def.archetype, def.kind);
     const sy = cy - (inv.flying ? 5 : 0);
     haloBlit(r, sprite, cx, sy, box, rgb(0xf4f1e6), def.archetype === "boss" ? 3 : 2);
     blitScaled(r, sprite, cx, sy, box);
@@ -493,7 +495,7 @@ function drawLiveEffects(r: Raster, scene: Scene): void {
       const dy = inv.py - (dn.y * CELL + CELL / 2);
       if (Math.hypot(dx, dy) > def.range) continue;
       const to = { x: (inv.px * CELL_PX) / CELL, y: GRID_TOP + (inv.py * CELL_PX) / CELL };
-      r.fill(taper(a.x, a.y, to.x, to.y, 1.8, 0.6), lighten(rgb(KIND_HUE[def.kind as Kind]), 0.55), 0.75);
+      r.fill(taper(a.x, a.y, to.x, to.y, 1.8, 0.6), lighten(rgb(KIND_HUE[def.kind]), 0.55), 0.75);
       tracers++;
       break;
     }
@@ -646,7 +648,7 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
   const grp = m?.groups[0];
   const inv = grp ? content.invaders[grp.invader] : undefined;
   if (m && grp && inv) {
-    kindChip(r, ROW2.chip.x, ROW2.chip.y, ROW2.chip.w, ROW2.chip.h, inv.kind as Kind, inv.archetype as Archetype, d);
+    kindChip(r, ROW2.chip.x, ROW2.chip.y, ROW2.chip.w, ROW2.chip.h, inv.kind, inv.archetype, d);
     const lead = s.phase === "migration" ? "NOW" : "NEXT";
     const w = drawText(r, ROW2.text.x, ROW2.text.y + 4, lead, TYPE.label, BOARD.textDim);
     drawText(r, ROW2.text.x + w + 14, ROW2.text.y, `${grp.count}× ${inv.name}`, TYPE.body, BOARD.text);
@@ -658,12 +660,23 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
     KINDS.forEach((kind, i) => {
       const def = content.dinos[`${kind}-1`];
       if (!def) return;
-      const b = { x: kindButtonX(i), y: ROW3.kindButton.y, w: ROW3.kindButton.w, h: ROW3.kindButton.h };
+      // Selected, per section 4: a lift, a border and a larger silhouette —
+      // three channels and none of them hue, so the state survives a thumb
+      // over the card and an eye that cannot separate the kind colours. The
+      // interior is untouched on purpose, so every contrast pair section 3
+      // measured still holds. The lift is 5 because that is what keeps the
+      // 3px border inside row 3: 1152 - 5 - 3 is ROW3.y exactly.
+      const sel = i === 0;
+      const b = {
+        x: kindButtonX(i),
+        y: ROW3.kindButton.y - (sel ? SELECT_LIFT : 0),
+        w: ROW3.kindButton.w,
+        h: ROW3.kindButton.h,
+      };
       const affordable = s.meat >= def.cost;
+      if (sel) r.fill(roundRect(b.x, b.y, b.w, b.h, 10).expand(SELECT_BORDER), rgb(0xf6f3ea), 0.95);
       r.fill(roundRect(b.x, b.y, b.w, b.h, 10), mix(rgb(KIND_HUE[kind]), BOARD.hud, 0.68));
-      if (i === 0) r.fill(roundRect(b.x, b.y, b.w, b.h, 10).expand(2), rgb(0xf6f3ea), 0.95);
-      r.fill(roundRect(b.x + 2, b.y + 2, b.w - 4, b.h - 4, 8), mix(rgb(KIND_HUE[kind]), BOARD.hud, 0.68));
-      blitScaled(r, sheet.dino(kind, 1), b.x + b.w / 2, b.y + 34, 56, affordable ? 1 : 0.45);
+      blitScaled(r, sheet.dino(kind, 1), b.x + b.w / 2, b.y + 34, sel ? 60 : 56, affordable ? 1 : 0.45);
       // The button is labelled with the *kind*, not the genus. The kind
       // chart is the six facts the player has to learn; the genus is on the
       // sheet, where there is room to read it. "Velociraptor" does not fit
@@ -679,7 +692,7 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
     r.fill(roundRect(GUTTER - 8, ROW3.y + 4, CONTENT_WIDE, ROW3.h - 12, 10), BOARD.hudPanel);
     // A thumbnail of the thing being talked about, so the sheet is anchored
     // to the dinosaur the player just tapped rather than to a name.
-    blitScaled(r, sheet.dino(def.kind as Kind, def.stage as 1 | 2 | 3), CANVAS_W - 44, ROW3.y + 34, 46);
+    blitScaled(r, sheet.dino(def.kind, def.stage), CANVAS_W - 44, ROW3.y + 34, 46);
     drawText(r, ROW3.sheetName.x, ROW3.sheetName.y, def.name, TYPE.body, BOARD.text);
     drawText(r, ROW3.sheetKind.x, ROW3.sheetKind.y, `${def.kind} ${stage}`, TYPE.label, BOARD.textDim);
     const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(0);

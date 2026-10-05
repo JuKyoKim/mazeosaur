@@ -174,6 +174,21 @@ export function kindButtonX(i: number): number {
 }
 
 /**
+ * The selected kind card, which is how the player knows what the next tap on
+ * the board will place. Three channels and none of them hue: the card lifts,
+ * takes a border, and draws its silhouette larger. Hue is already spent on
+ * *which* kind the card is, so it cannot also carry *selected*.
+ *
+ * Both numbers are derived, not picked. The border is 3 to match the ring a
+ * selected dinosaur takes on the board, so the two selections read as one
+ * idea. The lift is 5 because the card sits 8px inside its row
+ * (`ROW3.kindButton.y` is `ROW3.y + 8`) and 5 + 3 is 8 — any more and the
+ * border crosses into row 2, which is the migration line.
+ */
+export const SELECT_LIFT = 5;
+export const SELECT_BORDER = 3;
+
+/**
  * The toast. Refusals and events appear over the board just above the HUD,
  * near where the thumb just was, instead of taking a HUD row. It costs no
  * layout height and puts the message where the eye already is. It hugs the

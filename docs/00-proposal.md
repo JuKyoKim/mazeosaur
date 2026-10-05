@@ -186,8 +186,9 @@ the natural maze is a long S. One valley for v1; the map format supports
 terrain cells (rock, water) that can never be built on.
 
 **Dinosaurs (towers).** 1x1 cells (touch-friendly; a 2x2 WC3 footprint on
-a phone makes gaps too fiddly to place, and drag-to-paint gives the same
-"wall fast" feel). Six **kinds**, each a line of three growth stages
+a phone makes gaps too fiddly to place, and one cell is one tap — the
+smallest piece of maze a thumb can commit, which is what makes a wall feel
+fast when each cell is placed by hand). Six **kinds**, each a line of three growth stages
 grown in place. Each stage is a real genus, so growing is also a small
 collection:
 
@@ -237,11 +238,15 @@ refund makes it cost something. It is a classic maul skill and the flow
 field makes it work exactly as in WC3. Easy to restrict later by locking
 cells within N of an invader during a wave.
 
-**Controls.** Tap a cell with a dinosaur selected to place it; drag to
-paint the cheapest hatchling along a line; tap a dinosaur for its sheet
-(grow, sell, range, stats); long-press to sell; pinch to zoom; free undo
-of the last placement during a build phase. Web adds hotkeys and mouse
-hover ranges.
+**Controls.** Tap a kind in the tray to select it, then tap a cell to
+place it; the selection persists, so the second cell of a wall is one tap.
+Tap a placed dinosaur for its sheet (grow, sell, range, stats). Pinch to
+zoom; free undo of the last placement during a build phase. Dragging does
+nothing and there is no long-press: both were dropped on 2026-10-05, see
+section 10. Selling is the Sell button on the sheet. Web adds hotkeys and
+mouse hover ranges. The full interaction spec — selected-card treatment,
+the placement preview, refusals and cancel — is section 4 of
+`docs/01-art-hud-and-audio.md`.
 
 **Meta.** Fossils per run (eggs kept, migrations cleared, meat unspent)
 unlock kinds and, later, packs (curated rosters like Pokemon Maul's
@@ -309,8 +314,10 @@ npm workspaces, TypeScript strict, vitest. `npm run check` is the gate.
 | **M4 Web server** | server stack deployed, cloud save, daily seed leaderboard, replay verification | web plays off our servers |
 | **M5 Meta** | fossils, unlocks, packs, endless | there is a reason to come back |
 
-M1 is deliberately small: the whole bet is that drag-to-build mazing
-feels good on a touchscreen. If it does not, M1 is where we find out.
+M1 is deliberately small: the whole bet is that tap-to-place mazing feels
+good on a touchscreen — that drawing a fifteen-cell wall one deliberate tap
+at a time is satisfying rather than laborious. If it does not, M1 is where
+we find out.
 
 ## 9. Open questions (your call)
 
@@ -538,3 +545,27 @@ feels good on a touchscreen. If it does not, M1 is where we find out.
   `toy-box` on none. The chosen direction is `CHOSEN` in
   `tools/art/directions.ts`, read by both the gate and `npm run art:atlas`,
   so changing direction is one line rather than three agreeing by luck.
+- 2026-10-05: **placement is tap-to-select then tap-to-place, and
+  drag-to-paint is dropped** — the owner's call, because a drag mis-places on
+  a phone. A fast finger skips cells between pointer events, so placement
+  interpolates the line between them; that interpolation is what puts
+  dinosaurs on cells the player did not aim at, and it cannot be tuned out
+  without reintroducing the skipped cells. This reverses three lines that are
+  now corrected rather than left standing: the `drag to paint` clause in
+  **Controls** above, the "drag-to-paint gives the same 'wall fast' feel"
+  justification for the 1x1 footprint, and M1's bet in section 8, which was
+  written as drag-to-build. The 1x1 footprint itself does not change and
+  section 9 item 2 stays open; only its reason is restated. **Long-press to
+  sell goes with it**, for its own reasons: 500ms is inside the range of a
+  deliberate thumb tap on a 19.5pt cell, so the gesture mis-fires on the
+  careful player, and it is a destructive unconfirmed action competing with
+  a Sell button that is one tap away on the sheet and shows the refund.
+  What carries "wall fast" now is that the tray selection **persists across a
+  placement**, which is the one part of this still with the owner: a
+  fifteen-cell wall is sixteen taps and, modelled with Fitts's law against the
+  30-second build timer, 5.9 seconds, where re-selecting per cell would be 30
+  taps, 2.1 metres of thumb travel and 22.1 seconds — three quarters of the
+  build phase spent travelling. Dropping drag does not depend on that answer;
+  only what replaces it does. Section 4 of `docs/01-art-hud-and-audio.md`
+  carries the interaction spec, the model, the one-shot delta and the
+  reference comparison that produced them.
