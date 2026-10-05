@@ -477,9 +477,8 @@ while `selectedDino` is null and the sheet while it is not — so selecting a
 card does **not** swap the tray, and dismissing the sheet does **not** restore
 a kind selection the sheet replaced.
 
-**A run starts with nothing selected.** `BoardScene.buildHud()` currently ends
-with `selectDef(hatchlings[0])` (`packages/game/src/BoardScene.ts:502`), which
-pre-selects the raptor. That contradicts onboarding step 2, where the player
+**A run starts with nothing selected.** Pre-selecting a kind — `buildHud`
+ending in a `selectDef` call — contradicts onboarding step 2, where the player
 taps the lit raptor *because it is the only thing that looks tappable*, and it
 means a first stray tap on the board spends 10 meat the player did not mean to
 spend. Both selections start null and both are reset in `create()`, because
@@ -501,10 +500,11 @@ stops exactly on `ROW3.y` instead of crossing into the migration line.
 
 The border is the HUD's lightest token on `hud` `#0f1712`, which is
 **15.9:1** — `#ecf0f1` in `theme.ts` and its Toy Box equivalent `0xf6f3ea` in
-the frame generator. Matching the board's selection ring (`BoardScene.ts:379`)
-is deliberate: a player should learn one selection convention, not two. The
-card's interior does not change at all, which is also deliberate — every
-text-on-panel pair in section 3's contrast table stays exactly as measured.
+the frame generator. Matching the board's selection ring — the outline
+`drawDynamic` strokes around the selected dinosaur's cell — is deliberate: a
+player should learn one selection convention, not two. The card's interior
+does not change at all, which is also deliberate — every text-on-panel pair in
+section 3's contrast table stays exactly as measured.
 Under `prefers-reduced-motion` the lift is a static offset and not an
 animation: it is state, not feedback (section 7).
 
