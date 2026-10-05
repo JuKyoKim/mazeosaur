@@ -408,17 +408,22 @@ The two tray states, in the same idiom as the sketch above:
 
 ```
          nothing selected
-y=1144  ┌─────┬─────┬─────┬─────┬─────┬─────┐   six cards, 109 x 120,
-        │ rap │ tyr │ arm │ hor │ lon │ fli │   6px gaps
+y=1144  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─    row 3 starts
+y=1152  ┌─────┬─────┬─────┬─────┬─────┬─────┐   six cards, 109 x 120,
+        │ rap │ tyr │ arm │ hor │ lon │ fli │   6px gaps, inset 8 in the row
         │  10 │  25 │  20 │  20 │  30 │  15 │   hatchling cost in meat
-y=1280  └─────┴─────┴─────┴─────┴─────┴─────┘
+y=1272  └─────┴─────┴─────┴─────┴─────┴─────┘
 
          raptor selected
-        ┏━━━━━┓                                 the card lifts 6px, takes a
-y=1138  ┃ rap ┃─────┬─────┬─────┬─────┬─────┐   3px #ecf0f1 border, and its
-        ┃  10 ┃ tyr │ arm │ hor │ lon │ fli │   silhouette scales 1.08
-        ┗━━━━━┛─────┴─────┴─────┴─────┴─────┘   nothing else moves
+y=1144  ┏━━━━━┓─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─    the border stops exactly on
+y=1147  ┃ rap ┃─────┬─────┬─────┬─────┬─────┐   the row line: the card lifts
+        ┃  10 ┃ tyr │ arm │ hor │ lon │ fli │   5, the border is 3, and the
+        ┗━━━━━┛─────┴─────┴─────┴─────┴─────┘   card was 8 inside the row
 ```
+
+That is drawn, not described: `docs/art/toy-box-board-phone.png` is the frame
+at 390 x 693pt with the raptor selected, and `art:verify` holds it to the
+generator.
 
 ### The interaction model: tap to select, tap to place
 
@@ -428,8 +433,8 @@ mis-places on a phone — a fast finger skips cells and the interpolation that
 covers for it places dinosaurs the player did not aim at. Section 10 of
 `docs/00-proposal.md` carries the reversal and the three lines it corrected.
 
-Nothing in either doc stated the interaction model before this subsection, so
-all of it is new, and all of it is a number or a state.
+Everything below is a number or a state, so that it can be built from without
+a follow-up question.
 
 **The two selections are different things and are mutually exclusive.**
 `selectedDef` is *a kind to place*; `selectedDino` is *a placed dinosaur being
@@ -451,23 +456,31 @@ spend. Both selections start null and both are reset in `create()`, because
 
 | channel | rest | selected |
 | --- | --- | --- |
-| position | `y = 1144` | `y = 1138` — a 6px lift |
+| position | `y = 1152` (`ROW3.kindButton.y`) | `y = 1147` — a 5px lift |
 | outline | none | 3px `#ecf0f1`, the whole card |
-| silhouette | 1.0 | 1.08 |
+| silhouette | 56px | 60px — 1.08 |
 
-`#ecf0f1` on `hud` `#0f1712` is **15.9:1**, and it is the same weight and
-colour as the ring a selected *dinosaur* already takes on the board
-(`BoardScene.ts:379`), so the two selections read as one idea rather than two
-conventions. The card's interior does not change, deliberately: every
+Both numbers are derived rather than picked, and they are `SELECT_LIFT` and
+`SELECT_BORDER` in `tools/art/layout.ts`. The border is 3 because that is the
+weight of the ring a selected *dinosaur* already takes on the board. The lift
+is 5 because the card sits 8px inside its row and 5 + 3 is 8, so the border
+stops exactly on `ROW3.y` instead of crossing into the migration line.
+
+The border is the HUD's lightest token on `hud` `#0f1712`, which is
+**15.9:1** — `#ecf0f1` in `theme.ts` and its Toy Box equivalent `0xf6f3ea` in
+the frame generator. Matching the board's selection ring (`BoardScene.ts:379`)
+is deliberate: a player should learn one selection convention, not two. The
+card's interior does not change at all, which is also deliberate — every
 text-on-panel pair in section 3's contrast table stays exactly as measured.
-Under `prefers-reduced-motion` the lift is a static offset, not an animation —
-it is state, not feedback (section 7).
+Under `prefers-reduced-motion` the lift is a static offset and not an
+animation: it is state, not feedback (section 7).
 
 **The selection survives the placement.** Place a raptor and the raptor card
 stays selected; the next cell is one tap. The alternative — one-shot, which is
-what all four references do — was modelled against the 30-second build timer
-with Fitts's law (`a = 0.2s`, `b = 0.15 s/bit`), a 65pt card, a 19.5pt cell
-and 381pt between the tray and mid-board:
+what every reference above does — was modelled against the 30-second build timer
+with Fitts's law (`a = 0.2s`, `b = 0.15 s/bit`) over 381pt between the tray and
+mid-board. The targets are measured along the direction of travel, which is
+vertical: a card is 65pt tall and a cell 19.5pt.
 
 | a 15-cell wall | taps | thumb travel | time | of the build timer |
 | --- | --- | --- | --- | --- |
