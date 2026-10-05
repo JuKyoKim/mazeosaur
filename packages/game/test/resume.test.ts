@@ -29,7 +29,7 @@ function freshRun(): { g: Game; run: RunSave } {
 }
 
 describe("gameForRun", () => {
-  it("reuses the resumed Game and never calls replay -- the whole point of LoadOutcome.resumed", () => {
+  it("reuses the resumed Game and never calls replay -- the whole point of LoadOutcome.resumed [@baseline]", () => {
     vi.mocked(replay).mockClear();
     const { g, run } = freshRun();
     const out = gameForRun(content, run, g);
