@@ -1,12 +1,21 @@
 import { defineConfig } from "vite";
 
+// Empty or whitespace is a broken caller, not a commit: an explicitly empty
+// `--build-arg BUILD_COMMIT=` overrides the Dockerfile's `ARG BUILD_COMMIT=dev`
+// default, so `?? "dev"` alone would stamp "" and the bundle would claim a
+// commit it lacks.
+export function resolveBuildCommit(raw: string | undefined): string {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : "dev";
+}
+
 export default defineConfig({
   // A local build has no BUILD_COMMIT and stamps "dev", which is honest —
   // that build is not reproducible from a registry tag. CI sets it to
   // github.sha so the string inside the bundle matches the GHCR tag that
   // shipped it. See docs/01-v1-architecture.md §2.2.
   define: {
-    __BUILD_COMMIT__: JSON.stringify(process.env.BUILD_COMMIT ?? "dev"),
+    __BUILD_COMMIT__: JSON.stringify(resolveBuildCommit(process.env.BUILD_COMMIT)),
   },
   server: {
     port: 5173,
