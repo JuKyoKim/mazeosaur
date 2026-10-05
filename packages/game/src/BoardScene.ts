@@ -729,10 +729,11 @@ export class BoardScene extends Phaser.Scene {
    * line it crossed on the way to where the player was aiming — and a
    * single tap per dinosaur is what the arcade this is modelled on does.
    *
-   * Selection is sticky: it survives a placement and a refusal, so a wall
-   * is N taps rather than 2N. The two ways out are re-tapping the lit card
-   * and tapping bare HUD, which is why both exist — a selection that
-   * cannot be cleared is a mode the player is trapped in.
+   * Selection is **one-shot**: a placement spends it, so every dinosaur is
+   * two taps and a wall of N cells is 2N. A refusal does not spend it —
+   * see `tryPlace`. Cancel survives that change and is still two gestures,
+   * re-tapping the lit card and tapping bare HUD: one-shot makes a stranded
+   * selection rarer, not impossible, and both are in the owner's ask.
    */
   private wireInput(): void {
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
@@ -743,8 +744,8 @@ export class BoardScene extends Phaser.Scene {
         // speed toggle, Grow and Sell all stop propagation in `button()`,
         // so this only ever fires for HUD chrome — which makes it the
         // "tap away to put the dinosaur back" half of cancel. It cannot
-        // be an empty *cell* instead: with sticky selection an empty cell
-        // is always a placement target.
+        // be an empty *cell* instead: an empty cell is always a placement
+        // target, which is what the armed card is for.
         this.selectedDef = null;
         this.hoverCell = null;
         return;
@@ -823,8 +824,20 @@ export class BoardScene extends Phaser.Scene {
    * tap there is nothing left to suppress, and a silent refusal is
    * indistinguishable from a tap the client dropped.
    *
-   * The selection is untouched either way: the next tap places the same
-   * kind, whether this one landed or was refused.
+   * **A placement spends the selection; a refusal does not.** That is the
+   * owner's call of 2026-10-05 and it is the whole of one-shot: every
+   * dinosaur is tap the card, then tap the cell. It is the safer half of
+   * the trade — a stray tap on the valley costs nothing once the card has
+   * been spent, where a selection that persisted would buy a dinosaur on
+   * whatever the thumb brushed. The cost is a tap per cell on a long wall,
+   * which the owner accepted; do not add a repeat affordance to claw it
+   * back.
+   *
+   * The asymmetry is the point and not an oversight: a refused tap placed
+   * nothing, so there is nothing to spend, and re-arming after it would
+   * punish the player for a tap the game rejected. Refusal keeping the
+   * card lit is also now the *only* path that does, which makes it the
+   * sharper of the two tests.
    *
    * Feedback goes where the cause is (§4), which is why `no-meat` is the
    * one refusal that also marks the *card*: the cell did nothing wrong and
@@ -839,7 +852,13 @@ export class BoardScene extends Phaser.Scene {
       this.effects.push({ kind: "flash", x: c.x, y: c.y, color: COLORS.refusal, ttl: 250, life: 250 });
       this.status(REFUSAL_TEXT[r]);
       if (r === "no-meat") this.flashCardCost(this.selectedDef.id);
+      return;
     }
+    // Placed. Spend the selection — the same two fields `selectDef` clears
+    // when it toggles a lit card off, so the tray lands in one "nothing
+    // armed" state however it got there.
+    this.selectedDef = null;
+    this.hoverCell = null;
   }
 
   /**

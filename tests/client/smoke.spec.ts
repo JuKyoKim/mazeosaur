@@ -43,7 +43,7 @@ const LANE_CELL = { x: 0, y: 0 };
 
 const HATCHLING_COST = 10;
 
-test("full run: arm, place four taps, grow, sell, send, leak, lose, play again", async ({ page }) => {
+test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 
@@ -61,29 +61,47 @@ test("full run: arm, place four taps, grow, sell, send, leak, lose, play again",
   const before = await simSnapshot(page);
   expect(before.dinos).toBe(0);
 
-  // Four discrete taps, four dinosaurs. This replaces a drag-interpolation
-  // assertion: what it proves now is that the selection is **sticky**, so
-  // a wall costs one tap per cell and not a re-arm between each. If a
-  // placement cleared the selection, taps two through four would be
-  // swallowed and this would read 1.
-  for (const cell of WALL) {
+  // Four select+tap pairs, four dinosaurs. Selection is **one-shot**: a
+  // placement spends the card, so every dinosaur costs two taps and a
+  // wall of four cells costs eight. The re-arm inside the loop is the
+  // assertion — drop it and only the first cell would be built, because
+  // the three bare taps would land on an empty tray.
+  for (const [i, cell] of WALL.entries()) {
+    // The first kind is already armed above, so the loop re-arms before
+    // every cell *except* the first. Re-arming the same card there would
+    // toggle it off, which is cancel, not selection.
+    if (i > 0) {
+      await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
+      await waitAFrame(page);
+      expect((await selectionSnapshot(page)).kindId).toBe(armed);
+    }
     const c = cellCenter(cell.x, cell.y);
     await page.mouse.click(c.x, c.y);
     await waitAFrame(page);
-    // The armed kind must be the same one after every placement, not just
-    // at the end — a selection cleared and re-defaulted by `buildHud`'s
-    // fallback would still end up non-null.
-    expect((await selectionSnapshot(page)).kindId).toBe(armed);
+    // Spent by the placement. This is the half of one-shot that a dinosaur
+    // count cannot see: four dinosaurs would also appear under sticky.
+    expect((await selectionSnapshot(page)).kindId).toBeNull();
   }
 
   const afterWall = await simSnapshot(page);
   expect(afterWall.dinos).toBe(WALL.length);
   expect(afterWall.meat).toBe(before.meat - WALL.length * HATCHLING_COST);
 
-  // A refused tap must not disarm the tray. Tap the lane's spawn cell,
-  // which always refuses, then tap a valid cell with no re-arm in
-  // between: if the refusal had cleared the selection, the second tap
-  // would place nothing.
+  // And a bare tap with nothing armed places nothing, which is the whole
+  // safety argument for one-shot: after a placement the valley is inert
+  // until the player arms a card again.
+  await page.mouse.click(cellCenter(AFTER_REFUSAL.x, AFTER_REFUSAL.y).x, cellCenter(AFTER_REFUSAL.x, AFTER_REFUSAL.y).y);
+  await waitAFrame(page);
+  expect(await simSnapshot(page)).toMatchObject({ dinos: afterWall.dinos, meat: afterWall.meat });
+
+  // A refused tap must not spend the selection, and under one-shot this
+  // is the *only* path that leaves a card lit — which makes it the
+  // sharpest assertion in the file. Arm, tap the lane's spawn cell (which
+  // always refuses), then tap a valid cell with no re-arm in between: if
+  // the refusal had spent the card like a placement does, that second tap
+  // would land on an empty tray and place nothing.
+  await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
+  await waitAFrame(page);
   const lane = cellCenter(LANE_CELL.x, LANE_CELL.y);
   await page.mouse.click(lane.x, lane.y);
   await waitAFrame(page);
@@ -262,6 +280,12 @@ test("selection: a sheet and an armed card are never both live", async ({ page }
   await waitAFrame(page);
   const placed = await simSnapshot(page);
   expect(placed.dinos).toBe(1);
+  // Spent by the placement, under one-shot. Re-arm, so that what the next
+  // step disarms is a card this test actually armed — otherwise "the
+  // sheet cleared the tray" would pass against a tray that was already
+  // empty and prove nothing.
+  await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
+  await waitAFrame(page);
   expect((await selectionSnapshot(page)).kindId).not.toBeNull();
 
   // Tapping the dinosaur opens its sheet and disarms the tray.
