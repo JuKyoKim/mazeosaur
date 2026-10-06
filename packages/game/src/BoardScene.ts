@@ -986,7 +986,13 @@ export class BoardScene extends Phaser.Scene {
         // and not a tray card: the card's own feedback is the lift and the
         // border, and arming a kind is not yet a thing that happened on the
         // valley.
-        this.sfx.play("select", KIND_COLOR[this.game_.dinoDef(dino).kind]);
+        //
+        // No hue: §6 gives `select` "a short soft tick", and names the kind
+        // only for `place`, `grow` and `hit`. The sink pitches whatever hue
+        // it is handed, so passing one here would pitch a sound the spec
+        // does not pitch. If §6 is amended to want a pitched tick, pass
+        // `KIND_COLOR[this.game_.dinoDef(dino).kind]` and it comes back.
+        this.sfx.play("select");
         return;
       }
       // Drawing the preview under the finger before placing is what makes
