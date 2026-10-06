@@ -119,6 +119,30 @@ export const CONTENT_W = CANVAS_W - GUTTER * 2; // 688
 export const CONTENT_RIGHT = GUTTER + CONTENT_W; // 704
 
 /**
+ * The dinosaur sheet's text column, and the wrap width every one of its
+ * four lines is given. One number for all four slots on purpose: a sheet
+ * line allowed to be wider than the column is a line that runs under the
+ * Grow button, which is the defect this constant exists to prevent.
+ *
+ * It was 272, which was 15 characters of `TYPE.body` by hand — the longest
+ * genus in the content, Argentinosaurus and Rhamphorhynchus, both 15 —
+ * because the genus is the collectible and must not truncate. That premise
+ * was right and the number was not, for two reasons. The genus is drawn at
+ * `TYPE.title`, not `TYPE.body`; and the genus is not the widest line in
+ * the column. Measured in the real client at the real type sizes, over all
+ * 18 defs: name 242, kind 179, stats 264, extras 296. The widest is the
+ * modifier line of a longneck adult, `hits ground · splash · slow 45%`.
+ *
+ * 304 is that 296 plus a little, and it is a measurement rather than an
+ * estimate: `tests/client/dino-sheet.spec.ts` re-takes it on every run and
+ * fails if a content edit pushes a line past it. The measuring font is the
+ * sandbox's DejaVu Sans, which is wider than the Roboto or SF a phone
+ * resolves `system-ui` to, so the bound is conservative in the right
+ * direction.
+ */
+export const SHEET_COL_W = 304;
+
+/**
  * The type scale. Nothing below `label`, because 19 logical px is already
  * only 10.3pt. The scale is short on purpose: four sizes, and the HUD says
  * less rather than smaller.
@@ -180,17 +204,23 @@ export const ROW3 = {
   /** Six kind buttons: (688 - 5*6) / 6 = 109.6, floored. */
   kindButton: { y: HUD_Y + 144, w: 109, h: 120, gap: 6 },
   /**
-   * The sheet's left column is 272px wide, which is 15 characters of body
-   * type. That is not a coincidence: the longest dinosaur names in the
-   * content are Argentinosaurus and Rhamphorhynchus, both 15. The genus is
-   * the collectible, so it is not allowed to be truncated — the buttons
-   * moved right until it fit.
+   * The sheet's four lines, all in the same `SHEET_COL_W` column — see
+   * that constant for where 272 comes from. Four slots and not one string:
+   * the genus, the family and stage, the comparable numbers, the
+   * modifiers. `sheet.ts` builds them.
    */
-  sheetName: { x: GUTTER + 4, y: HUD_Y + 146, w: 272 },
-  sheetKind: { x: GUTTER + 4, y: HUD_Y + 174 },
-  sheetStats: { x: GUTTER + 4, y: HUD_Y + 196 },
-  sheetExtras: { x: GUTTER + 4, y: HUD_Y + 224 },
-  grow: { x: 300, y: HUD_Y + 163, w: 228, h: 82 },
+  sheetName: { x: GUTTER + 4, y: HUD_Y + 146, w: SHEET_COL_W },
+  sheetKind: { x: GUTTER + 4, y: HUD_Y + 174, w: SHEET_COL_W },
+  sheetStats: { x: GUTTER + 4, y: HUD_Y + 196, w: SHEET_COL_W },
+  sheetExtras: { x: GUTTER + 4, y: HUD_Y + 224, w: SHEET_COL_W },
+  /**
+   * Grow begins where the sheet column ends plus a 12px gutter: 20 + 304 +
+   * 12. It gave up 36px of its own width to it and still clears the hit
+   * floor three times over, which is the right trade — a button that is
+   * 104pt instead of 123pt is the same button, and a modifier line that
+   * runs under it is unreadable.
+   */
+  grow: { x: 336, y: HUD_Y + 163, w: 192, h: 82 },
   sell: { x: 540, y: HUD_Y + 163, w: 164, h: 82 },
 } as const;
 

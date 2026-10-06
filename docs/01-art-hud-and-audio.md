@@ -350,17 +350,37 @@ silhouette at full strength — it is still a label, just not yet a purchase.
 
 | element | box | note |
 | --- | --- | --- |
-| genus | `20, 1154, 272 wide`, `title` | **never truncated** — see below |
-| kind + stage | `20, 1182`, `label` | e.g. `tyrant adult` |
-| stat line | `20, 1204`, `body` | damage per second |
-| range line | `20, 1232`, `label` | in cells, one decimal |
-| **Grow** | `300, 1171, 228 x 82` | **123.5 x 44.4pt** |
+| genus | `20, 1154, 304 wide`, `title` | **never truncated** — see below |
+| kind + stage | `20, 1182, 304 wide`, `label` | e.g. `tyrant adult` |
+| stat line | `20, 1204, 304 wide`, `body` | damage per second, then range in cells |
+| modifier line | `20, 1232, 304 wide`, `label` | what it can shoot, then splash / slow / stun / multi-target |
+| **Grow** | `336, 1171, 192 x 82` | **104.0 x 44.4pt** |
 | **Sell** | `540, 1171, 164 x 82` | **88.8 x 44.4pt** |
 
-The name column is 272px because that is 15 characters of `title`, and the
-two longest genus names in the content — *Argentinosaurus* and
-*Rhamphorhynchus* — are both exactly 15. The genus is the collectible; it
-is not allowed to be truncated. The buttons moved right until it fit.
+Four lines and not one. The sheet is the only screen that explains a
+dinosaur, and the temptation is to run its facts together into a sentence;
+the demo build did exactly that and the sentence was 558px wide in a 272px
+column, so for every adult with two modifiers it ran under **Grow** and
+**Sell**. The split is also what the lines are *for*: the genus is the
+collectible, the kind line is the chart the player is learning, the stat
+line is the two numbers you compare one dinosaur to another with, and the
+modifier line is everything qualitative. What is deliberately absent is
+per-hit damage and the cooldown — damage per second is the figure the
+decision in front of the player turns on, and the type scale is short on
+purpose because the HUD says less rather than smaller.
+`packages/game/src/sheet.ts` builds all four, and is the only place that
+does: the client and the frame generator draw the same strings.
+
+All four lines share one 304px column, and the column is a measurement.
+The genus is never truncated — *Argentinosaurus* and *Rhamphorhynchus* are
+both 15 characters, the longest in the content — but it is not the widest
+line in the column. Over all 18 dinosaur defs, drawn in the running client
+at the sizes in this table: genus 242, kind 179, stat 264, modifier 296.
+The widest is a longneck adult's `hits ground · splash · slow 45%`. 304 is
+that plus a little, **Grow** gave up 36px of its own width to it and still
+clears the hit floor twice over, and `tests/client/dino-sheet.spec.ts`
+re-takes the measurement on every run so a content edit cannot quietly
+push a line past it.
 
 **Grow** shows the cost when affordable, dims to `FULLY GROWN` at stage 3,
 and dims to the cost when it is not affordable — the player should be able
