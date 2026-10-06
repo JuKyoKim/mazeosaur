@@ -19,11 +19,11 @@ describe("docs/01 §4 against layout.ts", () => {
 
   it("is checked at all, which is the part that was missing", () => {
     // A parser that silently matched nothing would pass on any drift. Row 1
-    // has 8 rows (migration label/value counts once), the sheet tray has 6,
+    // has 9 rows (migration label/value counts once), the sheet tray has 6,
     // and Sell -- the row that actually drifted in ARB-186 -- must be among
     // them or this guard is not reaching the row it exists for.
     const spec = docSpec(readDoc(ROOT));
-    expect(spec.size).toBe(14);
+    expect(spec.size).toBe(15);
     expect(spec.has("sell")).toBe(true);
     expect(spec.get("sell")).toEqual(["540, 1171, 164 x 82"]);
     // Every row the doc lists has a matching entry in codeSpec -- otherwise
