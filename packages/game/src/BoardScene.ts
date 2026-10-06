@@ -17,6 +17,7 @@ import {
   CANVAS_W,
   CELL_PX,
   CONTENT_W,
+  ENDED_RUN,
   GUTTER,
   HUD_H,
   HUD_Y,
@@ -422,6 +423,15 @@ export class BoardScene extends Phaser.Scene {
     this.cardFlashDefId = null;
     this.cardFlashUntil = 0;
     this.trayCards = [];
+    // `wireInput`'s pointerdown returns early whenever this is set, and the
+    // only "Play again" that reaches it — the one `showOverlay` draws for a
+    // run the *player* ended — calls `scene.restart()` without closing the
+    // overlay first. So this line is what makes the restarted board take a
+    // tap at all; without it the field still points at the container
+    // `shutdown` destroyed, the guard reads it as an overlay that is up, and
+    // neither a cell nor the pause button responds. The two are far apart in
+    // this file and have come unstuck twice.
+    this.overlay = null;
     this.toastUntil = 0;
     // "" is not any migration's key, so the first `refreshPreview` of a
     // run always rebuilds row 2 rather than trusting the previous run's.
@@ -1396,9 +1406,12 @@ export class BoardScene extends Phaser.Scene {
   private showOverlay(title: string, sub: string): void {
     if (this.overlay) return;
     const c = this.scrim();
-    c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 - 60, title, text(48)).setOrigin(0.5));
-    c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 + 4, sub, text(22, COLORS.textDim)).setOrigin(0.5));
-    const b = this.button(CANVAS_W / 2 - 120, BOARD_H / 2 + 60, 240, 64, "Play again", () => this.scene.restart(), 22);
+    c.add(this.add.text(CANVAS_W / 2, ENDED_RUN.title.y, title, text(48)).setOrigin(0.5));
+    c.add(this.add.text(CANVAS_W / 2, ENDED_RUN.sub.y, sub, text(22, COLORS.textDim)).setOrigin(0.5));
+    const a = ENDED_RUN.again;
+    // Bare `scene.restart()`: `create()` nulls `overlay` for us, and it has
+    // to, because this callback outlives the container it sits in.
+    const b = this.button(a.x, a.y, a.w, a.h, "Play again", () => this.scene.restart(), 22);
     c.add([b.bg, b.label]);
     this.overlay = c;
   }

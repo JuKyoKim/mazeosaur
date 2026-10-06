@@ -3,6 +3,7 @@ import {
   END_RUN_BUTTON,
   PAUSE_BUTTON,
   PAUSE_SCRIM_BARE,
+  PLAY_AGAIN_BUTTON,
   RESTART_RUN_BUTTON,
   RESUME_BUTTON,
   SEND_BUTTON,
@@ -197,6 +198,67 @@ test("ending the run shows the end-of-run screen and leaves nothing to resume", 
   const afterReload = await simSnapshot(page);
   expect(afterReload).toMatchObject({ dinos: 0, phase: "build" });
   await waitForTickAdvance(page, afterReload.tick);
+
+  expect(errors.messages).toEqual([]);
+});
+
+/**
+ * "Play again" on the ended-run overlay, clicked.
+ *
+ * This is the one `scene.restart()` a finger can still reach — the results
+ * screen's "Again" is a `scene.start("board")` from another scene, and
+ * `restart-regression.spec.ts` drives `scene.restart()` from the harness
+ * rather than through a button. So it is the only place a spec can catch
+ * the pair that broke here: `showOverlay`'s button restarts *without*
+ * calling `closeOverlay()`, which is only safe because `create()` nulls
+ * `overlay` — and `wireInput`'s `pointerdown` returns early whenever that
+ * field is set. Drop the reset and every tap on the restarted board is
+ * swallowed before `cellAt`, including the pause button's.
+ *
+ * Which is why the assertions are about **taps landing**, not about the
+ * overlay being gone. A board that restarted, reset its sim, and redrew
+ * its HUD but takes no input looks entirely correct in a sim snapshot and
+ * in a screenshot; it only shows up when something is clicked.
+ */
+test("Play again on the ended-run screen gives back a board that takes a tap", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, SEED);
+
+  await place(page, CELL);
+  expect((await simSnapshot(page)).dinos).toBe(1);
+
+  await page.mouse.click(PAUSE_BUTTON.x, PAUSE_BUTTON.y);
+  await waitAFrame(page);
+  await page.mouse.click(END_RUN_BUTTON.x, END_RUN_BUTTON.y);
+  await waitAFrame(page);
+  expect(await clockSnapshot(page)).toMatchObject({ paused: true, abandoned: true });
+
+  await page.mouse.click(PLAY_AGAIN_BUTTON.x, PLAY_AGAIN_BUTTON.y);
+  await waitAFrame(page);
+
+  // A run's opening state, on the same seed: §5.3's "again (same seed)".
+  // Not `tick: 0` — the clock is running again by the time this is read,
+  // which is the point of `waitForTickAdvance` below.
+  const fresh = await simSnapshot(page);
+  expect(fresh).toMatchObject({ dinos: 0, phase: "build" });
+  expect(await page.evaluate(() => window.mazeosaurBoard!().sim.seed)).toBe(SEED);
+  expect(await clockSnapshot(page)).toMatchObject({ paused: false, abandoned: false, speed: 1 });
+  await waitForTickAdvance(page, fresh.tick);
+
+  // The assertion the regression turns on: two taps, one dinosaur. A
+  // stale `overlay` makes this 0 while everything above still passes.
+  await place(page, CELL);
+  expect((await simSnapshot(page)).dinos).toBe(1);
+
+  // And the pause button, which guards on the same field, so a stale
+  // `overlay` locks the player out of the menu as well as the board.
+  await page.mouse.click(PAUSE_BUTTON.x, PAUSE_BUTTON.y);
+  await waitAFrame(page);
+  expect((await clockSnapshot(page)).paused).toBe(true);
+  await page.mouse.click(RESUME_BUTTON.x, RESUME_BUTTON.y);
+  await waitAFrame(page);
+  expect((await clockSnapshot(page)).paused).toBe(false);
+  await waitForTickAdvance(page, (await replaySnapshot(page)).tick);
 
   expect(errors.messages).toEqual([]);
 });

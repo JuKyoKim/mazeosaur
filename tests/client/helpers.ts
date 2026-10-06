@@ -1,6 +1,6 @@
 import type { ConsoleMessage, Page } from "@playwright/test";
 import type { BoardScene, GameHandle, ResultsScene, RunSummary } from "@mazeosaur/game";
-import { CANVAS_W, CELL_PX, PAUSE_MENU, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
+import { CANVAS_W, CELL_PX, ENDED_RUN, PAUSE_MENU, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
 
 /**
  * Where to click. The board is one canvas with no DOM to query, so driving
@@ -50,15 +50,24 @@ export const HUD_BARE = { x: CANVAS_W / 2, y: ROW2.y + ROW2.h / 2 };
  * `RESULTS.again` is where the renderer gets it too, so this cannot drift
  * from the button actually on screen.
  *
- * This replaces `PLAY_AGAIN_BUTTON`, which was the same button on the
- * in-board overlay: a won or lost run goes to `results` now, and both of
- * that constant's callers (`smoke.spec.ts`, `win-screen.spec.ts`) came
- * here with it. The overlay `showOverlay` still draws for a run the
- * *player* ended keeps a "Play again" of its own, but no spec clicks it —
- * `pause.spec.ts` asserts that path through the reload instead — so there
- * is no constant for it rather than an unused one.
+ * A won or lost run goes to `results` now, so this is not the same button
+ * as `PLAY_AGAIN_BUTTON` below, which is the one the in-board overlay
+ * draws for a run the *player* ended. Both of this constant's callers
+ * (`smoke.spec.ts`, `win-screen.spec.ts`) follow the won/lost path.
  */
 export const AGAIN_BUTTON = { x: RESULTS.again.x + RESULTS.again.w / 2, y: RESULTS.again.y + RESULTS.again.h / 2 };
+
+/**
+ * "Play again" on the in-board overlay a player's own "End run" leaves up,
+ * from `ENDED_RUN.again` — the same constant `showOverlay` draws from.
+ *
+ * It is the one reachable `scene.restart()` left in the package: the
+ * results screen's "Again" is a `scene.start("board")` from another scene,
+ * and `restartScene()` calls `scene.restart()` from the harness rather
+ * than through a button. So a click here is the only test of the restart
+ * rule on the path a finger actually takes to it.
+ */
+export const PLAY_AGAIN_BUTTON = { x: ENDED_RUN.again.x + ENDED_RUN.again.w / 2, y: ENDED_RUN.again.y + ENDED_RUN.again.h / 2 };
 
 /**
  * The pause menu's three entries, from `PAUSE_MENU` in `layout.ts` like
