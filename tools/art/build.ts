@@ -2,8 +2,9 @@
 //
 //   node tools/art/build.ts frames     the three sample frames the board picks from
 //   node tools/art/build.ts verify     the committed frames still match, without writing
-//   node tools/art/build.ts compare    all three directions in one picture
+//   node tools/art/build.ts compare    every direction in one picture
 //   node tools/art/build.ts atlas <id> the shipping atlases for one direction
+//   node tools/art/build.ts anim <id>  the idle and attack clips, as APNGs
 //   node tools/art/build.ts check      colour-blindness, contrast and byte budget
 //
 // Every *pixel* here is a pure function of this directory, so a frame can be
@@ -32,12 +33,13 @@ import {
   type Direction,
   type Kind,
 } from "./directions.js";
+import { CLIPS, CLIP_MS, clipFrames, type Clip } from "./animate.js";
 import { describeProblem as describeDocProblem, geometryDrift, readDoc } from "./doc-table.js";
-import { drawText, effectsPlate, renderBoardFrame, strikesPlate } from "./frame.js";
+import { blitScaled, drawText, effectsPlate, renderBoardFrame, strikesPlate } from "./frame.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, DRAW_CELLS, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
-import { encodePng, pngHasPixels } from "./png.js";
+import { encodeApng, encodePng, pngHasPixels } from "./png.js";
 import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
-import { dinoSprite, invaderSprite, pack, strikeEntries } from "./sprites.js";
+import { dinoSprite, inkBox, invaderSprite, pack, strikeEntries } from "./sprites.js";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -288,7 +290,7 @@ function compareSheet(): Raster {
   const stripY = rowsY + subjects.length * rowH + 28;
   const stripH = 300;
 
-  const COST = `Fossil Pixel passes the colour-blindness check as drawn. The other three repaint the kind hues before they reach the board, so each needs its own hue table - about an afternoon, and it travels with whichever wins. Toy Box needs the least of that work and Valley Naturalist the most. Toy Box is also the only one that is not a flat drawing: same board, same square grid, but every animal is a solid under one fixed camera. That camera spends pixels on a top face which the others spend on the profile, so judge it on the 20px column rather than the 96px one. Atlas sizes run 23 kB to 126 kB, all irrelevant against a 40 MB binary.`;
+  const COST = `Fossil Pixel and Tactics Pixel pass the colour-blindness check as drawn. The other three repaint the kind hues before they reach the board, so each needs its own hue table - about an afternoon, and it travels with whichever wins. Toy Box is the only one that is not a flat drawing: same board, same square grid, but every animal is a solid under one fixed camera. Tactics Pixel is the only one that moves - an idle bob and an attack lunge on every kind - and the clips are a transform of a finished sprite, so any of the five could have them. Judge all five on the 20px column rather than the 96px one. Atlas sizes run 7 kB to 126 kB, all irrelevant against a 40 MB binary, and five frames a dinosaur does not change that.`;
 
   // The surface is sized to the prose, not the other way round: measure the
   // footer's wrapped height before allocating, so adding a sentence can
@@ -395,6 +397,136 @@ function colourSheet(): Raster {
   return r;
 }
 
+/** Draw a sprite at `box` pixels: nearest-neighbour when the scale is whole. */
+function drawSprite(dst: Raster, src: Raster, x: number, y: number, box: number): void {
+  const s = box / src.w;
+  if (Number.isInteger(s)) dst.blit(src, x, y, s);
+  else blitScaled(dst, src, x + box / 2, y + box / 2, box);
+}
+
+/** One sprite rendered into its own `box`-pixel raster, ready to resample. */
+function spriteAt(src: Raster, box: number): Raster {
+  const r = new Raster(box, box);
+  drawSprite(r, src, 0, 0, box);
+  return r;
+}
+
+/**
+ * The animation plate: every kind's idle and attack frames, at the size they
+ * are drawn and at the size the phone shows.
+ *
+ * The three columns answer three different questions and the middle one is
+ * the only one that decides anything:
+ *
+ * - **drawn** is `CELL_PX * DRAW_CELLS` = 45px, what the logical canvas gets.
+ * - **phone** is that resampled to 24px by the same 0.5417 the device applies.
+ *   A one-pixel breath on a 15px sprite is a quarter of a pixel here, so this
+ *   is the column that says whether the animation is visible at all or only
+ *   in the generator.
+ * - **6x** is for seeing what moved. It is not a claim about the game.
+ *
+ * Generated for every direction, not only the pixel one, because the clips
+ * are a transform of a finished sprite and are not specific to a direction —
+ * see `animate.ts`. The plate is where that claim is checkable.
+ */
+function animationSheet(d: Direction): Raster {
+  const kinds = KINDS.map((kind) => {
+    const def = Object.values(content.dinos).find((x) => x.kind === kind && x.stage === 3);
+    return { kind, label: def?.name ?? kind, note: KIND_SILHOUETTE_NOTE[kind] };
+  });
+  const frames = CLIPS.flatMap((clip) =>
+    CLIP_MS[clip].map((ms, i) => ({ clip, i, ms, head: `${clip === "idle" ? "i" : "a"}${i}` })),
+  );
+
+  const drawn = Math.round(CELL_PX * DRAW_CELLS); // 45
+  const phone = Math.round(drawn * SCALE); // 24
+  const big = 90;
+  const labelX = 16;
+  const nameAdvance = 6 * fontScale(TYPE.body);
+  const labelW = Math.max(...kinds.map((k) => k.label.length)) * nameAdvance + 24;
+  const drawnX = labelX + labelW;
+  // The column step is the wider of the sprite and its own heading, so a
+  // heading can never run into the next column: at 45px the sprite is
+  // narrower than "380ms" at TYPE.label.
+  const headW = 5 * 6 * fontScale(TYPE.label);
+  const drawnStep = Math.max(drawn, headW) + 14;
+  const phoneX = drawnX + frames.length * drawnStep + 26;
+  const phoneStep = phone + 12;
+  const bigX = phoneX + frames.length * phoneStep + 26;
+  const rowH = 116;
+  const rowsY = 150;
+  const width = bigX + big * 2 + 4 + 26;
+
+  // How far a pixel of animation actually travels, which is the number the
+  // plate exists to report and the one that is easy to get wrong. An
+  // authored pixel is `drawn / spritePx` logical pixels — 3 for a 15px
+  // sprite in a 45px box — and the device scale turns that into points.
+  const travel = (drawn / d.spritePx) * SCALE;
+
+  // Which adults have no column to lunge into, measured on this direction
+  // rather than asserted. The sentence below is the one the merge gate on
+  // #35 caught the last version of: a plate that states a fact about the
+  // pixels has to state it about *these* pixels, and the full-square case is
+  // Tactics Pixel's at 15px, not Toy Box's at 64.
+  const tight = KINDS.filter((kind) => {
+    const ink = inkBox(dinoSprite(kind, 3, d));
+    return ink.x === 0 && ink.x + ink.w === d.spritePx;
+  });
+  const names = tight.length < 2 ? tight.join("") : `${tight.slice(0, -1).join(", ")} and ${tight[tight.length - 1]}`;
+  const SLIDE = !tight.length
+    ? ""
+    : ` Where the ink fills the square - ${names} ${tight.length === 1 ? "has" : "have"} no free column on either side - the lunge keeps its shape and slides back into itself, so the trailing edge gives up a pixel rather than the snout, and the feet are what travel.`;
+  const NOTE =
+    `One pixel of movement, twice: the idle lifts everything above the feet by a pixel and holds it for 380ms, and the attack leans back a pixel, lunges two with a three-pixel strike flash, then recovers. Frame 0 of each clip is the sprite at rest, so reduced motion (section 7) is a renderer that draws frame 0 and stops. One authored pixel is ${(drawn / d.spritePx).toFixed(2)} logical pixels and about ${travel.toFixed(1)}pt on the reference phone, so the breath moves ${travel.toFixed(1)}pt and the head leads the lunge by ${(2 * travel).toFixed(1)}pt - small, and the reason the attack also carries a flash.${SLIDE} Section 5.6.`;
+  const proseCols = Math.floor((width - labelX * 2) / (6 * fontScale(TYPE.label)));
+  const noteLines = wrap(NOTE, proseCols, 99);
+
+  const r = new Raster(width, rowsY + kinds.length * rowH + 30 + noteLines.length * 20 + 16);
+  r.clear(BOARD.hud, 1);
+  drawText(r, labelX, 16, `${d.name} — idle and attack`, TYPE.title, BOARD.text);
+  drawText(
+    r,
+    labelX,
+    50,
+    `${d.spritePx}px authored, drawn at ${drawn}px, shown at ${phone}px on a 390pt phone. i = idle, a = attack`,
+    TYPE.label,
+    BOARD.textDim,
+  );
+
+  frames.forEach((f, i) => {
+    drawText(r, drawnX + i * drawnStep + drawn / 2, 90, f.head, TYPE.body, BOARD.text, "center");
+    drawText(r, drawnX + i * drawnStep + drawn / 2, 114, `${f.ms}ms`, TYPE.label, BOARD.textDim, "center");
+    drawText(r, phoneX + i * phoneStep + phone / 2, 114, f.head, TYPE.label, BOARD.textDim, "center");
+  });
+  drawText(r, drawnX, 134, `drawn, ${drawn}px`, TYPE.label, BOARD.textDim);
+  drawText(r, phoneX, 134, `phone, ${phone}px`, TYPE.label, BOARD.textDim);
+  drawText(r, bigX, 134, "6x", TYPE.label, BOARD.textDim);
+
+  kinds.forEach((k, row) => {
+    const y = rowsY + row * rowH;
+    const p = d.palette(KIND_HUE[k.kind]);
+    const rest = dinoSprite(k.kind, 3, d);
+    drawText(r, labelX, y + 30, k.label, TYPE.body, BOARD.text);
+    wrap(k.note, Math.floor((labelW - 16) / (6 * fontScale(TYPE.label))), 3).forEach((line, i) =>
+      drawText(r, labelX, y + 56 + i * 20, line, TYPE.label, BOARD.textDim),
+    );
+    const clip = (c: Clip): Raster[] => clipFrames(rest, c, p);
+    frames.forEach((f, i) => {
+      const src = clip(f.clip)[f.i] as Raster;
+      drawSprite(r, src, drawnX + i * drawnStep, y + 18, drawn);
+      // The phone column is resampled from the drawn size, by the same box
+      // filter the device applies to the canvas — not drawn small.
+      r.blit(resample(spriteAt(src, drawn), phone, phone), phoneX + i * phoneStep, y + 18 + (drawn - phone));
+    });
+    r.blit(spriteAt(clip("idle")[1] as Raster, big), bigX, y + 8);
+    r.blit(spriteAt(clip("attack")[1] as Raster, big), bigX + big + 4, y + 8);
+  });
+
+  const noteY = rowsY + kinds.length * rowH + 16;
+  noteLines.forEach((line, i) => drawText(r, labelX, noteY + i * 20, line, TYPE.label, BOARD.textDim));
+  return r;
+}
+
 /**
  * Every frame `frames` owns, generated in memory and not yet written. One
  * list, so `doFrames` and `doVerify` can never disagree about which files
@@ -430,6 +562,7 @@ function generatedFrames(): { rel: string; raster: Raster }[] {
     // the three archived ones do not, and a plate of six empty cells would
     // be a picture asserting something that is not true of them.
     if (strikeEntries(d).length) out.push({ rel: `docs/art/${d.id}-strikes.png`, raster: strikesPlate(d) });
+    out.push({ rel: `docs/art/${d.id}-animation.png`, raster: animationSheet(d) });
   }
   out.push({ rel: "docs/art/kind-hues.png", raster: colourSheet() });
   out.push({ rel: "docs/art/directions-compared.png", raster: compareSheet() });
@@ -498,6 +631,82 @@ function doVerify(): void {
   // `packages/game/assets` for as long as this command existed.
   bad += verifyAtlas();
   if (bad) process.exit(1);
+}
+
+// -------------------------------------------------------------- the clips
+
+/**
+ * The animations as animations: three APNGs under `docs/art/anim/`.
+ *
+ * A still strip cannot answer the question the clips exist to answer. The
+ * brief is that units breathe and lunge, and whether a one-pixel breath
+ * survives a 19.5pt cell is a thing you have to watch, not read. So:
+ *
+ *   <id>-idle.png         the six adults, 45px and 24px, breathing
+ *   <id>-attack.png       the same six lunging
+ *   <id>-board-phone.png  the whole board at 390x693, breathing
+ *
+ * The board one is the one that decides it. Sixty cells of maze all breathing
+ * together is either alive or seasick, and nothing smaller than the real
+ * board at the real size shows which.
+ *
+ * Deliberately a separate command, like `atlas <id>`, rather than part of
+ * `frames`: `verify` compares one raster per file and has nothing to say
+ * about a file with five of them. The gap that leaves is real and small —
+ * every pixel in these comes from the same `clipFrames` as the committed
+ * `<id>-animation.png`, which *is* verified, so a drift in the clips fails
+ * the gate on the still plate first.
+ */
+function doAnim(id: string): void {
+  const d = direction(id);
+  console.log(`clips for ${d.name} (${d.id})`);
+
+  const drawn = Math.round(CELL_PX * DRAW_CELLS);
+  const phone = Math.round(drawn * SCALE);
+  const pad = 10;
+  const strip = (clip: Clip): { raster: Raster; ms: number }[] =>
+    CLIP_MS[clip].map((ms, i) => {
+      const r = new Raster(pad + KINDS.length * (drawn + pad), pad + drawn + pad + phone + pad);
+      r.clear(BOARD.boardBg, 1);
+      KINDS.forEach((kind, k) => {
+        const src = clipFrames(dinoSprite(kind, 3, d), clip, d.palette(KIND_HUE[kind]))[i] as Raster;
+        const x = pad + k * (drawn + pad);
+        drawSprite(r, src, x, pad, drawn);
+        r.blit(resample(spriteAt(src, drawn), phone, phone), x + (drawn - phone) / 2, pad + drawn + pad);
+      });
+      return { raster: r, ms };
+    });
+
+  for (const clip of CLIPS) {
+    const fs = strip(clip);
+    const first = fs[0] as { raster: Raster };
+    write(
+      `docs/art/anim/${d.id}-${clip}.png`,
+      encodeApng(
+        first.raster.w,
+        first.raster.h,
+        fs.map((f) => f.raster.px),
+        fs.map((f) => f.ms),
+      ),
+    );
+  }
+
+  // The board, at the phone's rendered size, on each idle frame. The scene is
+  // the same seed and tick as the committed board frame, so this is that
+  // picture breathing and not a different board.
+  const boards = CLIP_MS.idle.map((ms, i) => ({
+    raster: resample(renderBoardFrame(d, { migration: 49, ticks: 260, effects: true, phase: { clip: "idle", index: i } }), PHONE_W, PHONE_H),
+    ms,
+  }));
+  write(
+    `docs/art/anim/${d.id}-board-phone.png`,
+    encodeApng(
+      PHONE_W,
+      PHONE_H,
+      boards.map((b) => b.raster.px),
+      boards.map((b) => b.ms),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------- the atlases
@@ -622,9 +831,9 @@ function doCheck(): void {
   // trims to the ink that survived, so the authored square is a working area
   // and a pixel at its edge is a pixel that was thrown away.
   //
-  // Gated for the direction that ships and reported for the other three,
+  // Gated for the direction that ships and reported for the other four,
   // which is the exemption that was left open when this check was added.
-  // The reason is not a difference of art intent — it is that those three are
+  // The reason is not a difference of art intent — it is that those four are
   // the *record of how the choice was made*. Their frames in `docs/art/` are
   // what the board looked at; regenerating them to pull the ink in a pixel
   // would edit the evidence, and nothing in them is in an atlas. Measured, it
@@ -719,9 +928,10 @@ if (cmd === "frames") doFrames();
 else if (cmd === "verify") doVerify();
 else if (cmd === "compare") png("docs/art/directions-compared.png", compareSheet());
 else if (cmd === "atlas") doAtlas(arg ?? CHOSEN.id);
+else if (cmd === "anim") doAnim(arg ?? CHOSEN.id);
 else if (cmd === "check") doCheck();
 else {
-  console.log("usage: node tools/art/build.ts [frames|verify|atlas <direction>|check]");
+  console.log("usage: node tools/art/build.ts [frames|verify|compare|atlas <direction>|anim <direction>|check]");
   console.log(`directions: ${DIRECTIONS.map((d) => d.id).join(", ")}`);
   process.exit(1);
 }
