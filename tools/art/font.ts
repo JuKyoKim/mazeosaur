@@ -78,6 +78,10 @@ const GLYPHS: Record<string, string> = {
   ":": "00000/01100/01100/00000/01100/01100/00000",
   ";": "00000/01100/01100/00000/01100/00100/01000",
   "-": "00000/00000/00000/11111/00000/00000/00000",
+  // Added when a legend reading "i = idle, a = attack" rendered as "i   idle"
+  // on the animation plate: an unmapped glyph is dropped silently, so the
+  // sentence loses a word and still looks deliberate.
+  "=": "00000/00000/11111/00000/11111/00000/00000",
   "+": "00000/00100/00100/11111/00100/00100/00000",
   "/": "00001/00010/00100/00100/01000/10000/00000",
   "%": "10001/00010/00100/01000/10001/00000/00000",

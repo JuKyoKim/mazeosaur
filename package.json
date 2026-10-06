@@ -25,6 +25,7 @@
     "art:check": "tsx tools/art/build.ts check",
     "art:frames": "tsx tools/art/build.ts frames",
     "art:atlas": "tsx tools/art/build.ts atlas",
+    "art:anim": "tsx tools/art/build.ts anim",
     "art:verify": "tsx tools/art/build.ts verify"
   },
   "engines": {

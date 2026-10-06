@@ -11,7 +11,9 @@ layout number in it is also a constant in
 sample frames. The spec and the picture read the same constants on purpose:
 if they disagree, one of them is lying, and there is no way to tell which.
 The timings in sections 5.4 and 6 are the exception — they are behaviour,
-not layout, and the mock does not animate.
+not layout, and the still frames do not animate. Section 5.6's clips do:
+`build.ts anim` writes them as APNGs, because whether a one-pixel breath
+survives a 19.5pt cell is a thing you watch rather than read.
 
 Regenerate everything this document refers to:
 
@@ -19,6 +21,7 @@ Regenerate everything this document refers to:
 npx tsx tools/art/build.ts frames        # the sample frames in docs/art
 npx tsx tools/art/build.ts check         # colour, contrast, hit targets, bytes
 npx tsx tools/art/build.ts atlas <id>    # the shipping atlases for one direction
+npx tsx tools/art/build.ts anim <id>     # the idle and attack clips, as APNGs
 ```
 
 ---
@@ -65,9 +68,16 @@ wants to be smaller than `label` should instead not be on the screen.
 ## 2. The art direction: Toy Box
 
 **Mazeosaur is drawn in blocks. The direction is `toy-box`, it is the only
-one with a shipped atlas, and the other three below are the record of how it
+one with a shipped atlas, and the other four below are the record of how it
 was chosen rather than live options.** Section 9 item 4 of the proposal is
-closed; the dated entry is in section 10 there.
+closed; the decision is `docs/decisions/0004-the-art-direction-is-toy-box.md`.
+
+**The idle loop and the attack cycle are part of the brief, and they are not
+part of the direction.** They were asked for alongside a fifth candidate and
+they outlived it: section 5.6's clips are a transform of a finished sprite,
+so the blocks breathe with the same code that made a pixel sprite bob.
+`build.ts anim <id>` writes them for any direction, which is why that machinery
+stays while `tactics-pixel` does not ship.
 
 The proposal left two axes open: pixel versus hand-drawn vector, and
 cute-round versus fierce-realistic. Three points on that grid were rendered
@@ -77,7 +87,8 @@ a fourth off that grid: blocks, in the Crossy Road register, "steer away from
 2d". **Toy Box** is that brief, built the same way and rendered into the same
 frames, and it is what the board then chose — with the instruction to keep
 working the models, which is why `blocks.ts` has had a second pass and why
-the anchor in 5.0 exists at all.
+the anchor in 5.0 exists at all. A fifth was briefed and rendered the day
+after, and the owner looked at it and kept Toy Box.
 
 | direction | axes | authored | ink | atlas | the pitch |
 | --- | --- | --- | --- | --- | --- |
@@ -85,6 +96,36 @@ the anchor in 5.0 exists at all.
 | **Clay Pack** | vector, cute-round | 48px | 2px | 126 kB | Sticker-weight line, heads a third too big, an eye you can still see at 20px. Friendliest read, easiest to animate. |
 | **Valley Naturalist** | vector, fierce | 48px | 1px | 121 kB | Skeletal proportions, hairline edge, deep belly shadow, cold rim light. Reads as an animal, not a mascot. |
 | **Toy Box** | blocks, cute-round | 64px | 2px | 68 kB | Six to fourteen boxes an animal under one fixed isometric camera, three flat tones a face. Reads as a solid toy rather than a drawing of one. |
+| **Tactics Pixel** | pixel, cute-round | 15px | 1px | **7 kB** | GBA map sprites: chunky pixels at an exact 3x, two body tones and a dark outline. Smallest atlas of the five, and the candidate the idle bob and the attack lunge were built for. |
+
+### Tactics Pixel, the fifth candidate — not shipped
+
+**This direction was rendered, looked at, and turned down.** It is written up
+because the owner asked for it by name and because the 15px arithmetic below
+is the kind of thing that gets rediscovered expensively; it is not a live
+option, it has no atlas, and nothing in the client references it.
+
+**15px authored is the whole trick and it looks arbitrary.** A dinosaur is
+drawn into a 45px box (5.0), and 45/15 is exactly 3 — so one authored pixel
+is a 3x3 block of canvas pixels and the pixel grid survives. 16px, the
+obvious number, gives 2.8125 and smears every edge. Two honest limits, both
+of which Fossil Pixel shares: invaders are drawn at one cell, so their scale
+is 36/15 = 2.4 and their pixels come out 2 and 3 wide alternately; and the
+canvas is FIT-scaled to the device (0.5417 here), so the display resamples
+once whatever we do. This is pixel-art *style* with the grid intact in
+logical space, not a pixel-perfect renderer.
+
+**It is an homage and not a copy.** Every sprite comes out of the same
+`bestiary.ts` silhouettes as the other four directions, through the same
+generator, in palettes derived from our own six kind hues. No sheet from any
+other game is read, traced or shipped — rule 5, and it is the reason this
+direction is a hundred lines of numbers rather than a folder of PNGs.
+
+The animation is section 5.6, and it is the part of this candidate that
+survived it. The clips are a transform of a finished sprite, not of this
+direction's sprites, so the blocks breathe with the same code;
+`docs/art/<id>-animation.png` is generated for all five, which is how that
+claim gets checked rather than believed.
 
 ### What Toy Box is, and what it is not
 
@@ -1121,7 +1162,7 @@ Frame names are `<kind>-<stage>`, `<archetype>-<kind>` and
 `strike-<kind>-<step>`, all lowercase, so the client can build a frame name
 from sim state without a lookup table.
 
-`strikes` exists only for a `blocks` direction and the three archived ones
+`strikes` exists only for a `blocks` direction and the four archived ones
 have two atlases, not three. They are the record of how the choice was made
 and nothing in them is in an atlas, so the honest answer for them is that
 they have no strikes rather than a half-converted one.
@@ -1226,7 +1267,7 @@ a pixel on its edge is a pixel that was thrown away — usually the outline,
 which is why it is nearly invisible and worth asserting rather than looking
 for. Toy Box is clear on all 72.
 
-The three archived directions are **formally exempt and reported instead**.
+The four archived directions are **formally exempt and reported instead**.
 They are the record of how the choice was made; their frames in `docs/art/`
 are what the board looked at, and redrawing a silhouette to pull it in a
 pixel would edit that evidence while fixing nothing that ships. Measured,
@@ -1240,6 +1281,7 @@ archetype, so it comes from the shared silhouette reaching x = 0:
 | Fossil Pixel | 48 of 72 | 133 | `flier-3`, 16 |
 | Clay Pack | 57 of 72 | 606 | `longneck-3`, 40 |
 | Valley Naturalist | 42 of 72 | 150 | `flier-3`, 21 |
+| Tactics Pixel | 42 of 72 | 61 | `raptor-3`, 7 |
 
 Clay Pack is the only one that loses *feet* as well as outline — cute
 proportions inflate mass into the bottom edge — which is the one place the
@@ -1254,17 +1296,126 @@ inside it. Measured by `art:check`:
 | Fossil Pixel | 36px | 72 | 23.0 kB |
 | Clay Pack | 48px | 72 | 124.9 kB |
 | Valley Naturalist | 48px | 72 | 119.7 kB |
+| Tactics Pixel | 15px | 72 | **6.3 kB** |
 
-Toy Box carries 18 frames the other three do not: the attack strikes. They
+Toy Box carries 18 frames the other four do not: the attack strikes. They
 cost 12.4 kB, which is also the measured answer to the question section 10
 item 3 asks about animation — a frame in this direction is a camera pass
 over a model, and eighteen of them did not move the budget.
 
-All four are irrelevant against 40 MB, which is the useful finding: **the
+All five are irrelevant against 40 MB, which is the useful finding: **the
 atlas is not what will blow the budget, and the direction was therefore
 rightly not chosen on size.** Audio and the Phaser runtime are the real
 consumers. The budget line to hold is section 6's: v1 audio stays under
 1.5 MB.
+
+Tactics Pixel has the most headroom and is the only direction that needs
+it: five frames a dinosaur instead of one takes its 6.3 kB to about 26 kB,
+which is still under half of what the shipped atlas costs at rest. Toy Box's
+rest frames are 57.6 kB of its 70.0 kB — the strikes are the other 12.4 —
+and animating them the same way would take that to roughly 230 kB. Both are
+nothing against 40 MB. **Animation is not an argument for the small
+direction**, and it would be convenient to pretend otherwise.
+
+### 5.6 The clips: idle and attack
+
+Two clips, five frames, on dinosaurs only.
+
+| clip | frames | timing | what moves |
+| --- | --- | --- | --- |
+| `idle` | 2 | 380ms, 380ms | everything above the feet rises one authored pixel and holds |
+| `attack` | 3 | 90ms, 110ms, 130ms | lean back one, lunge two with a three-pixel strike flash, recover |
+
+**Frame 0 of each clip is the sprite at rest.** That is the contract that
+makes reduced motion (section 7) a renderer that draws frame 0 and stops,
+and it is why a client that ignores animation entirely still draws the right
+picture.
+
+**How far a pixel actually travels.** One authored pixel is
+`CELL_PX * DRAW_CELLS / authored` logical pixels — 3.00 for Tactics Pixel —
+and 1.6pt on the reference phone. So the breath moves 1.6pt and the head
+leads the lunge by 3.3pt. Small, and the reason the attack also carries a
+flash: the lunge alone is not feedback at a 19.5pt cell, and the flash is.
+The flash is drawn in `glint` and `accent`, never in a kind hue, so it cannot
+be mistaken for a seventh family colour.
+
+**The idle must not move the ink box.** The feet stay planted, so the
+sprite's contact with the cell floor — 5.0's anchor — does not move. An idle
+that changed the anchor would make every dinosaur on the board jitter against
+its own tile.
+
+**The attack may move it, and on half the kinds it has to.** The lunge is a
+shape — head ahead of body ahead of feet — and only the *differences* between
+the three bands are visible at a 19.5pt cell; the same picture translated is
+the same picture. So the shape is preserved and the whole figure slides to
+wherever it fits.
+
+It does not always fit, and Tactics Pixel is the direction where it does not.
+A 15px square holding 15px of ink has no free column to lunge into:
+
+| adult | ink | free behind | free ahead |
+| --- | --- | --- | --- |
+| raptor, tyrant, flier | 15 wide | 0 | 0 |
+| armored, horned | 14 wide | 0 | 1 |
+| longneck | 13 wide | 0 | 2 |
+
+**No adult has a free column behind it, and three have none on either side.**
+Clamping each band into the square independently — the obvious
+implementation, and the one this started as — turns that into *no animation
+at all*: the wind-up's one pixel back became zero on all six kinds, and the
+strike's two forward became zero on three of them, leaving a three-pixel
+flash on a sprite that never moved. The plate said "an attack lunge on every
+kind" and the pixels did it on half.
+
+So when the square is full the figure is pushed **back** until the shape fits
+and the *trailing* edge is what falls off — a tail or a back leg losing a
+column, never the snout, because the snout is the one feature the strike
+frame exists to show. Measured across the six adults the cost is 0 to 2
+pixels of ink, and every kind now differs from its rest frame on every
+attack frame.
+
+The honest consequence: on a full-square kind the feet are what visibly
+travel, and the animal recoils by a pixel or two over the clip rather than
+planting. At 90–130ms that reads as a strike. It is also why `attack` and
+`idle` are specified separately rather than as one rule — **the idle's
+promise not to move the anchor is not a promise the attack makes.**
+
+**Frame names** extend 5.5's rule rather than replacing it:
+`<kind>-<stage>` stays the rest frame, and an animated atlas adds
+`<kind>-<stage>-<clip><n>` — `raptor-3-idle1`, `raptor-3-attack0`. Everything
+in 5.5 about `meta`, trimming and the anchor is unchanged, including that
+each frame is trimmed to its own ink.
+
+**What is not animated, and why.** Invaders. Their motion is a walk cycle
+tied to a continuously interpolated position rather than a loop in place,
+there can be sixty of them, and the archetype tells in 5.2 are structural
+rather than postural. That is a separate piece of work and it is not in v1.
+
+**The open question, and it needs watching rather than reading.** Every
+dinosaur on the board breathes **in phase** — one `Sheet` holds one phase, so
+a frame of the board is one instant. 560 cells rising together is either a
+field breathing or a pulse, and a still plate cannot tell you which;
+`docs/art/anim/<id>-board-phone.png` is the artifact that can. If it pulses,
+the fix is a per-cell phase offset from `(x + y) % 2`, which stays
+deterministic and costs nothing.
+
+**Generated by** `npm run art:anim` (`build.ts anim <direction>`), which
+writes three APNGs to `docs/art/anim/`: the six adults idling, the six
+attacking, and the whole board at 390x693 breathing. They are deliberately
+outside `art:verify`, which compares one raster per file and has nothing to
+say about a file with five. The gap is small for the *clips*: every pixel of
+the two sprite strips comes from the same `clipFrames` as the committed
+`<id>-animation.png`, which **is** verified, so a drift in the clips fails
+the gate on the still plate first.
+
+**It is not small for the board strip, and that one has already gone stale
+once.** `<id>-board-phone.png` is a whole `renderBoardFrame` — HUD, maze,
+invaders — so anything that changes how the board draws changes it, and
+nothing in `art:frames` or `art:verify` writes or reads it. A change that
+regenerates `<id>-board.png` and `<id>-board-phone.png` leaves the breathing
+one on the older board, silently, and the two plates then disagree about the
+same scene. Until that is gated, **`npm run art:anim <id>` belongs in the
+same commit as any change that moves the still board plates.**
 
 ---
 
@@ -1448,23 +1599,21 @@ see
 
 ## 10. What this leaves open
 
-1. **The models, not the direction.** The direction is settled — blocks,
-   section 2 — and the board's instruction with it was to keep working the
-   models. `tools/art/blocks.ts` is where that happens and it does not
-   change anything in this document.
-2. **The kind-hue change** in section 3 is a proposed replacement for
+1. **The kind-hue change** in section 3 is a proposed replacement for
    `KIND_COLOR` and can land independently of the art — it is measured, and
    it is an improvement on M2 under every eye.
-3. **Animation, minus the attack.** The owner has since asked for the
-   attack effect by name, so **the attack strike is in v1 and is specified**:
-   section 5.4.1, eighteen frames in the atlas. What is still open is
-   everything about the *animal*: **idle breath and a two-frame walk are not
-   in v1 and are not specified here.** In blocks they are cheap in a way
-   they would not have been in the flat directions — a frame is a camera
-   pass over a model, so a bob is a translation of a few boxes rather than a
-   redrawn sprite — and the strikes are now the measurement of that: 18
-   frames for 12.4 kB against a 40 MB binary. Size is not what defers them.
-   Nobody has specified what a Toy Box dinosaur does standing still.
-4. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
+2. **Animation beyond the attack strike and the two clips.** Two separate
+   things are now specified and neither is the whole of it. The *effect* is
+   in v1 because the owner asked for it by name: section 5.4.1's attack
+   strike, eighteen frames in the atlas for 12.4 kB against a 40 MB binary,
+   so size is not what defers anything here. The *animal* is section 5.6's
+   two clips — an idle breath and an attack lunge, as pixel transforms of a
+   finished sprite rather than second drawings, which is why they are
+   generated for all five directions and not only the shipped one. What is
+   still open: **an invader walk cycle is not specified and is not in v1**,
+   for the reasons 5.6 gives; and whether the board's collective breath
+   reads as a field of life or as one pulse is the one thing in 5.6 that has
+   to be watched rather than argued. `npm run art:anim` is what to watch.
+3. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
    it stands. The proposal says "a final one to be designed", so this is a
    placeholder the content can change without touching this document.

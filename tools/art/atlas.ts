@@ -44,7 +44,7 @@ export type AtlasFile =
  * there is nothing to trim away without losing it. It is also empty for a
  * direction that is not `blocks` — `strikeEntries` says why — and an empty
  * set is skipped rather than written as a sheet with no frames in it, so
- * the three archived directions keep exactly the two atlases they had.
+ * the four archived directions keep exactly the two atlases they had.
  */
 export function atlasFiles(d: Direction): AtlasFile[] {
   const sets = [

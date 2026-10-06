@@ -13,7 +13,7 @@
 import { ARCHETYPE_SILHOUETTE, KIND_SILHOUETTE, type Archetype, type Part } from "./bestiary.js";
 import { ARCHETYPE_BLOCKS, BLOCK_SPAN, KIND_BLOCKS } from "./blocks.js";
 import { KIND_HUE, KINDS, type Direction, type Kind, type Palette } from "./directions.js";
-import { Raster, lighten, darken, scaleShape, union, type Rgb } from "./raster.js";
+import { Raster, fitShape, lighten, darken, scaleShape, union, type Rgb, type Shape } from "./raster.js";
 import { KIND_STRIKE, STRIKE_FRAMES, STRIKE_SEQUENCE, type StrikeStep } from "./strikes.js";
 import { fitFor, outlined, project, renderBoxes, type Box, type Fit } from "./voxel.js";
 
@@ -58,9 +58,16 @@ function sculpt(r: Raster, d: Direction): void {
   }
 }
 
-/** Render parts authored in the 0..1 unit box into an n-by-n sprite. */
+/**
+ * Render parts authored in the 0..1 unit box into an n-by-n sprite.
+ *
+ * `d.inset` reserves room for the outline: see `fitShape`. It is 0 for every
+ * direction authored at 36px and up, where the bestiary's own appendage
+ * overhang is already wider than the ink.
+ */
 export function renderParts(parts: Part[], d: Direction, p: Palette, n: number): Raster {
-  const solids = parts.filter((x) => !x.detail).map((x) => scaleShape(x.shape, n));
+  const fit = (s: Shape): Shape => fitShape(s, n, d.inset ?? 0);
+  const solids = parts.filter((x) => !x.detail).map((x) => fit(x.shape));
   const out = new Raster(n, n);
 
   if (solids.length && d.outline > 0) {
@@ -70,14 +77,14 @@ export function renderParts(parts: Part[], d: Direction, p: Palette, n: number):
   const body = new Raster(n, n);
   for (const part of parts) {
     if (part.detail) continue;
-    body.fill(scaleShape(part.shape, n), toneColor(part.tone, p), 1, d.samples);
+    body.fill(fit(part.shape), toneColor(part.tone, p), 1, d.samples);
   }
   sculpt(body, d);
   out.blit(body, 0, 0);
 
   for (const part of parts) {
     if (!part.detail) continue;
-    out.fill(scaleShape(part.shape, n), toneColor(part.tone, p), 1, d.samples);
+    out.fill(fit(part.shape), toneColor(part.tone, p), 1, d.samples);
   }
   return out;
 }
@@ -178,8 +185,8 @@ export function strikeSprite(kind: Kind, step: StrikeStep, d: Direction): Raster
  *
  * Empty for a direction that is not `blocks`. The strikes were authored for
  * the direction that shipped and they are block models; rendering them
- * through a flat direction's palette would put a solid in a picture that has
- * no solids in it. The other three directions are the record of how the
+ * through a non-blocks direction's palette would put a solid in a picture
+ * that has no solids in it. The other four directions are the record of how the
  * choice was made (section 5.5) and nothing in them is in an atlas, so the
  * honest answer for them is that they have no strikes rather than a
  * half-converted one.
