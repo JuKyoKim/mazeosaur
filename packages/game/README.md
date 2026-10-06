@@ -86,19 +86,25 @@ the transitions between them — is section 5 of
 
 `test/profile.test.ts` covers the pure accounting in `src/profile.ts`,
 `test/resume.test.ts` covers the resume-vs-replay decision in
-`src/resume.ts`, and `test/audio.test.ts` covers the `hit`/`kill` cap in
+`src/resume.ts`, `test/audio.test.ts` covers the `hit`/`kill` cap in
 `src/audio.ts` — a cap that silently stopped working would fail no other
 test and would not look wrong in a screenshot, so it is asserted rather
-than listened to. Everything else here is Phaser and has no tests; it is
-checked by driving it (`npm run dev`, then port 5173). Three things have
-produced false conclusions:
+than listened to — and `test/layout.test.ts` covers the HUD's
+*constants*. Everything else here is Phaser: it is checked either by
+driving it (`npm run dev`, then port 5173) or by a browser spec under
+`tests/client`, which is the only thing that can see what the renderer
+actually built — `hud-hit-targets.spec.ts` exists because
+`test/layout.test.ts` was green for the whole period in which every
+control on screen was under the 44pt floor, and nothing compared the two.
+Three things have produced false conclusions:
 
 - **Tap a tray card and check it did not also cancel.** Placement is two
   taps, and a tap on bare HUD clears the selection. The only thing
   keeping a tray card from doing both is the `ev.stopPropagation()` in
-  `button()`, which suppresses the scene-level `pointerdown`. Drop it and
+  `onTap()`, which suppresses the scene-level `pointerdown`. Drop it and
   every card tap selects and immediately deselects, which looks like a
-  card that cannot be selected at all.
+  card that cannot be selected at all. Everything in the HUD that takes a
+  pointer is wired through `onTap()` for exactly that reason.
 - **Wait a frame before screenshotting after an input.** The renderer
   draws on the next animation frame, so a capture in the same instant
   shows the state before the click.

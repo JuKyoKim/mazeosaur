@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { content } from "@mazeosaur/content";
 import { SHEET_COL_W } from "@mazeosaur/game/layout";
-import { GROW_BUTTON, cellCenter, openGame, paletteButtonCenter, trackPageErrors, waitAFrame } from "./helpers.js";
+import { GROW_BUTTON, HUD_BARE, cellCenter, openGame, paletteButtonCenter, trackPageErrors, waitAFrame } from "./helpers.js";
 
 /**
  * The dinosaur sheet has to fit the column it is drawn in, and whether it
@@ -42,6 +42,13 @@ test("every dinosaur's sheet fits the sheet column", async ({ page }) => {
     // One column of the valley per kind, well clear of the trail.
     const cell = cellCenter(1 + kind * 3, 3);
     const tray = paletteButtonCenter(kind);
+    // Dismiss the previous kind's sheet first. Row 3 is one tray at a time,
+    // so while a sheet is open the shop is not on screen at all and a tap
+    // at a card's coordinates reaches nothing — it is the sheet that has to
+    // go before the next card can be tapped. This is the gesture a player
+    // has: a tap on bare HUD clears whatever is selected.
+    await page.mouse.click(HUD_BARE.x, HUD_BARE.y);
+    await waitAFrame(page);
     await page.mouse.click(tray.x, tray.y);
     await page.mouse.click(cell.x, cell.y);
     await waitAFrame(page);

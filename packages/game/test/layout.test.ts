@@ -13,8 +13,11 @@ import {
   HUD_Y,
   MIN_HIT,
   ROW1,
+  ROW1_WRAP,
   ROW2,
+  ROW2_TEXT_WRAP,
   ROW3,
+  SELECT_BORDER,
   SHEET_COL_W,
   TOAST,
   TYPE,
@@ -33,8 +36,11 @@ import {
  * different edge. Both are arithmetic, and arithmetic belongs in a test rather
  * than in a screenshot somebody has to squint at.
  *
- * This covers the *constants*. That `BoardScene` builds its controls from them
- * is the second half, and is ARB-186.
+ * This covers the *constants*. That `BoardScene` actually builds its controls
+ * from them cannot be checked here — it needs a running renderer — and is
+ * `tests/client/hud-hit-targets.spec.ts`, which reads the geometry back off
+ * the live display objects. Both halves are needed: this file was green for
+ * the whole period in which every control on screen was under the floor.
  */
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -104,6 +110,18 @@ describe("the three rows", () => {
     expect(ROW1.migrationLabel.y).toBeLessThan(ROW1.migrationValue.y);
     expect(ROW1.migrationValue.y + TYPE.body).toBeLessThanOrEqual(ROW1.y + ROW1.h);
   });
+
+  it("wrap every variable row-1 field at the origin of what is to its right", () => {
+    // Row 1 is five variable-length fields on 720px, and it is the one row
+    // that over-subscribes itself silently — Phaser draws a long count over
+    // its neighbour rather than failing. The wrap is the bound: a field can
+    // be no wider than the gap to whatever comes next, so it can only ever
+    // break a line, never cross one.
+    expect(ROW1.meatValue.x + ROW1_WRAP.meat).toBe(ROW1.eggIcon.x);
+    expect(ROW1.eggValue.x + ROW1_WRAP.eggs).toBe(ROW1.migrationLabel.x);
+    expect(ROW1.migrationValue.x + ROW1_WRAP.migration).toBe(ROW1.send.x);
+    for (const w of Object.values(ROW1_WRAP)) expect(w).toBeGreaterThan(0);
+  });
 });
 
 describe("row 3, the tray", () => {
@@ -116,6 +134,25 @@ describe("row 3, the tray", () => {
     }
     expect(kb.y).toBe(ROW3.y + 8);
     expect(kb.y + kb.h).toBeLessThanOrEqual(ROW3.y + ROW3.h);
+  });
+
+  it("spends a kind card's height on a silhouette, a name and a cost", () => {
+    const kb = ROW3.kindButton;
+    const art = ROW3.kindArt;
+    // Top to bottom, each inside the card. The cost is the last thing in
+    // it, so its bottom is what proves the card is not over-filled.
+    expect(art.dy).toBeGreaterThan(0);
+    expect(art.dy + art.h).toBeLessThanOrEqual(ROW3.kindName.dy);
+    expect(ROW3.kindName.dy + TYPE.label).toBeLessThanOrEqual(ROW3.kindCost.dy);
+    expect(ROW3.kindCost.dy + TYPE.label).toBeLessThanOrEqual(kb.h);
+    // The silhouette fits the card at *both* sizes: §4's third selection
+    // channel draws it larger, and a card that only fits at rest would
+    // bleed into its neighbour the moment it was selected. 56 and 60 are
+    // §4's own pair — it also calls the ratio 1.08, which is 60/56 = 1.071
+    // rounded, so the pixels are the number to pin and the ratio is not.
+    expect([art.w, art.selectedW]).toEqual([56, 60]);
+    expect(art.selectedW).toBeGreaterThan(art.w);
+    expect(art.selectedW).toBeLessThanOrEqual(kb.w);
   });
 
   it("gives the sheet four lines that do not collide with Grow or Sell", () => {
@@ -164,10 +201,25 @@ describe("row 2 and the toast", () => {
     expect(ROW2.text.y + TYPE.label).toBeLessThanOrEqual(ROW2.y + ROW2.h);
   });
 
+  it("gives the migration line and its meta block a fixed edge each", () => {
+    // Two variable strings facing each other across one 40px line: the
+    // count and genus grow rightwards, the archetype and kind leftwards
+    // from the content edge. Both need an anchor and a wrap, or the longest
+    // pair lands on top of itself.
+    expect(ROW2.meta.right).toBe(CONTENT_RIGHT);
+    expect(ROW2.meta.y + TYPE.label).toBeLessThanOrEqual(ROW2.y + ROW2.h);
+    expect(ROW2_TEXT_WRAP).toBeGreaterThan(0);
+    expect(ROW2.text.x + ROW2_TEXT_WRAP).toBeLessThanOrEqual(ROW2.meta.right - ROW2.meta.w);
+  });
+
   it("puts the toast over the board and never into the HUD", () => {
     expect(bottom(TOAST)).toBeLessThanOrEqual(HUD_Y);
     expect(TOAST.x).toBe(GUTTER);
     expect(right(TOAST)).toBe(CONTENT_RIGHT);
+    // The refusal bar is the HUD's one line weight, and the text clears it.
+    expect(TOAST.barW).toBe(SELECT_BORDER);
+    expect(TOAST.pad).toBeGreaterThan(TOAST.barW);
+    expect(TYPE.body).toBeLessThanOrEqual(TOAST.h);
   });
 });
 
