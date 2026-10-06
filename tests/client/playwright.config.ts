@@ -24,6 +24,24 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false, // one dev server, one port; keep it simple
+  /**
+   * One worker, so a spec's own 60 s timeout measures the spec and not how
+   * many other browsers are competing for the runner.
+   *
+   * `fullyParallel: false` only serialises *within* a file; separate spec
+   * files still ran on separate workers, which on the 2-core GitHub runner
+   * means each one gets half a core to drive a canvas at 60 fps. The smoke
+   * spec's "full run" was finishing in 58.3 s, 57.6 s and 44.8 s against
+   * that 60 s budget across three consecutive `main` runs — one second from
+   * red, because of load rather than anything in the client. Adding a
+   * seventh test tipped it over.
+   *
+   * Serially the whole suite is a few minutes, well inside `client-smoke`'s
+   * 15-minute job timeout, and every spec gets the machine it is timed
+   * against. Raising the per-test timeout instead would keep a number that
+   * measures the runner.
+   */
+  workers: 1,
   forbidOnly: !!process.env.CI,
   // No retry net: these specs drive a local dev server and a local browser
   // with a pinned seed, so a failure is a real defect or a real race, not a

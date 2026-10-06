@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIFFICULTIES, Game, isDifficulty, kindMultiplier, type GameEvent } from "../src/index.js";
+import { DIFFICULTIES, Game, isDifficulty, kindMultiplier, type GameEvent, type InvaderDef } from "../src/index.js";
 import { fixture } from "./fixture.js";
 
 function run(game: Game, ticks: number): GameEvent[] {
@@ -63,13 +63,40 @@ describe("placing, growing, selling", () => {
     expect(g.log).toHaveLength(5);
   });
 
-  it("refuses rock, lane cells, stage-2 defs and unknown defs", () => {
+  it("refuses rock, the spawn, the nest, stage-2 defs and unknown defs", () => {
     const g = new Game(fixture, 1);
     expect(g.apply({ type: "place", defId: "raptor-1", x: 2, y: 3 })).toBe("rock");
-    expect(g.apply({ type: "place", defId: "raptor-1", x: 5, y: 0 })).toBe("lane-cell");
+    expect(g.apply({ type: "place", defId: "raptor-1", x: 0, y: 0 })).toBe("lane-cell");
+    expect(g.apply({ type: "place", defId: "raptor-1", x: 5, y: 5 })).toBe("lane-cell");
     expect(g.apply({ type: "place", defId: "raptor-2", x: 1, y: 1 })).toBe("unknown-dino");
     expect(g.apply({ type: "place", defId: "nope", x: 1, y: 1 })).toBe("unknown-dino");
     expect(g.log).toHaveLength(0);
+    // the checkpoint is not one of them; placeRefusal is a pure query, so
+    // asking does not build anything and the log is still empty
+    expect(g.placeRefusal("raptor-1", 5, 0)).toBeNull();
+    expect(g.log).toHaveLength(0);
+  });
+
+  it("routes a migration past a dinosaur standing on the checkpoint", () => {
+    // The compy is given enough hp to survive the walk, because the claim
+    // under test is that it still completes both legs with the waypoint
+    // occupied — not that it dies next to it.
+    const content = {
+      ...fixture,
+      invaders: { ...fixture.invaders, compy: { ...(fixture.invaders["compy"] as InvaderDef), hp: 1000 } },
+    };
+    const g = new Game(content, 1);
+    expect(g.apply({ type: "place", defId: "raptor-1", x: 5, y: 0 })).toBeNull();
+    expect(g.grid.isBlocked(5, 0)).toBe(true);
+
+    g.apply({ type: "send" });
+    let furthestLeg = 0;
+    const ev = runUntil(g, () => {
+      for (const inv of g.state.invaders) if (inv.leg > furthestLeg) furthestLeg = inv.leg;
+      return g.state.eggs < content.rules.eggs;
+    });
+    expect(furthestLeg).toBe(1); // leg 0 finished beside the checkpoint
+    expect(ev.some((e) => e.type === "leaked")).toBe(true);
   });
 
   it("refuses the placement that would seal the valley", () => {
