@@ -135,10 +135,17 @@ export const CONTENT_RIGHT = GUTTER + CONTENT_W; // 704
  *
  * 304 is that 296 plus a little, and it is a measurement rather than an
  * estimate: `tests/client/dino-sheet.spec.ts` re-takes it on every run and
- * fails if a content edit pushes a line past it. The measuring font is the
- * sandbox's DejaVu Sans, which is wider than the Roboto or SF a phone
- * resolves `system-ui` to, so the bound is conservative in the right
- * direction.
+ * fails if a content edit pushes a line past it.
+ *
+ * Read those four px figures as an ordering, not as a budget. They are
+ * whatever face one box resolved `system-ui` to; a second box resolved a
+ * narrower one and measured the same four lines at 189 / 145 / 187 / 239 —
+ * not a scale factor, a different font. The portable facts are the ordering
+ * (the modifier line is the widest, and the genus is not), the assertion
+ * the spec actually enforces (every line `<= SHEET_COL_W` in whatever font
+ * the client resolves), and the character caps in
+ * `packages/game/test/sheet.test.ts`, which fire in under a second when a
+ * content edit lengthens a line.
  */
 export const SHEET_COL_W = 304;
 
@@ -205,8 +212,8 @@ export const ROW3 = {
   kindButton: { y: HUD_Y + 144, w: 109, h: 120, gap: 6 },
   /**
    * The sheet's four lines, all in the same `SHEET_COL_W` column — see
-   * that constant for where 272 comes from. Four slots and not one string:
-   * the genus, the family and stage, the comparable numbers, the
+   * that constant for where the number comes from. Four slots and not one
+   * string: the genus, the family and stage, the comparable numbers, the
    * modifiers. `sheet.ts` builds them.
    */
   sheetName: { x: GUTTER + 4, y: HUD_Y + 146, w: SHEET_COL_W },

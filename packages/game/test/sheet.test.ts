@@ -28,9 +28,10 @@ describe("the dinosaur sheet's four lines", () => {
     for (const def of defs) {
       expect(sheetLines(def).name).toBe(def.name);
     }
-    // 15 characters is what SHEET_COL_W was sized for; a longer genus is a
-    // content change that has to re-measure the column, not one that
-    // silently overflows it.
+    // 15 characters is the longest genus the content ships, which is why
+    // the genus gets a line to itself; the column is sized off the modifier
+    // line, not off this. A longer genus is still a content change that has
+    // to re-measure the column rather than one that silently overflows it.
     expect(Math.max(...defs.map((d) => d.name.length))).toBe(15);
   });
 
@@ -71,9 +72,14 @@ describe("the dinosaur sheet's four lines", () => {
   /**
    * Character caps, not a font model. Each one is the longest the shipped
    * content actually produces, and beside it is what that string measured
-   * in the running client at its own `TYPE` size. `SHEET_COL_W` is 304, so
-   * the widest line has 8px of room — which is also why these are caps and
-   * not a guideline: a content edit that lengthens one of them has to
+   * in one running client at its own `TYPE` size.
+   *
+   * Those px figures are that box's `system-ui` fallback rather than a
+   * property of the code — another box resolved a narrower face and
+   * measured the four lines non-uniformly smaller — so the room left in the
+   * column is not a portable number. What travels is the ordering (the
+   * modifier line is the widest) and these caps, which is why they are caps
+   * and not a guideline: a content edit that lengthens one of them has to
    * re-measure the column, and this is the test that says so in under a
    * second instead of leaving it to a browser nobody runs.
    */
