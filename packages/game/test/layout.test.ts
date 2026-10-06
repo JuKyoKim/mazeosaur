@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { content, hatchlings } from "@mazeosaur/content";
+import { MIGRATION_LABEL, migrationCounter } from "../src/row1.js";
 import {
   BOARD_H,
   CANVAS_H,
@@ -150,6 +151,36 @@ describe("the three rows", () => {
     expect(ROW1.eggValue.x + ROW1_WRAP.eggs).toBe(ROW1.migrationLabel.x);
     expect(ROW1.migrationValue.x + ROW1_WRAP.migration).toBe(ROW1.send.x);
     for (const w of Object.values(ROW1_WRAP)) expect(w).toBeGreaterThan(0);
+  });
+
+  /**
+   * Character caps, not a font model, and the third leg under §4's row-1
+   * width table.
+   *
+   * The other two are measured: `tests/client/hud-row1-widths.spec.ts`
+   * asserts every field inside its band and on one line in a running
+   * client, and that `MIGRATION` is still the wider of the readout's two
+   * lines, which is the claim 428 and therefore Send's origin rest on.
+   * Neither of those notices the string itself growing. The label's band is
+   * 124 and §4 costs it at 108, so `MIGRATIONS` renders 120px wide, passes
+   * every measurement in the repo, and leaves §4 arguing from 16px of
+   * clearance that is really 4.
+   *
+   * Beside each cap is what the string measured at its own `TYPE` size in
+   * one running client. Those px are that box's `system-ui` fallback rather
+   * than a property of the code — the same caveat the sheet column carries
+   * — so what travels is the ordering and these caps: lengthen one and the
+   * band has to be re-measured, and this says so in under a second instead
+   * of leaving it to a browser.
+   */
+  it("hold the row-1 strings to the lengths §4 costed them at", () => {
+    const total = content.migrations.length;
+    expect(MIGRATION_LABEL.length, "'MIGRATION', 108px at TYPE.label").toBe(9);
+    expect(migrationCounter(total - 1, total).length, "'50 / 50', 77px at TYPE.body").toBe(7);
+    // One-based and clamped: the last migration reads `50 / 50`, never
+    // `51 / 50`, which is also what keeps the cap above a real bound.
+    expect(migrationCounter(total, total)).toBe(migrationCounter(total - 1, total));
+    expect(migrationCounter(0, total).length).toBeLessThanOrEqual(7);
   });
 });
 

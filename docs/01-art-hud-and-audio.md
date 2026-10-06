@@ -334,11 +334,12 @@ stay at 444, and the row ends at the content edge — so 260px carry three
 hit-floor squares and two 7px gaps with nothing over. Send paid for Pause
 because it was the only control here with anything to give: it was 164
 wide against a floor of 82, where everything else in the row is either at
-the floor already or a text field whose measured clearance is the 8 or 16px
-in the table below. What it cost is Send's bonus label, which is now two
-lines — `Send` over `+25` — exactly as Grow and Sell already are. A fourth
-control does not fit in this row at any width, and adding one means taking
-the space from somewhere `packages/game/test/layout.test.ts` can see.
+the floor already or a text field, and the only text field on this band is
+the migration readout with the 16px of clearance in the table below. What
+it cost is Send's bonus label, which is now two lines — `Send` over `+25` —
+exactly as Grow and Sell already are. A fourth control does not fit in this
+row at any width, and adding one means taking the space from somewhere
+`packages/game/test/layout.test.ts` can see.
 
 **The timer is a draining bar, not digits.** A full-width bar across the
 seam between board and HUD is legible without being read, which is the
@@ -361,6 +362,35 @@ font at the sizes above:
 | meat | `9999` at `vital` | 88 | 148 | 192, the egg icon |
 | eggs | `20` at `vital` | 44 | 274 | 320 |
 | migration | `MIGRATION` at `label` | 108 | 428 | 444, **Send** |
+
+Those three widths are what a running client rendered, measured the way the
+sheet column below is measured and carrying the same caveat: they are one
+machine's `system-ui` fallback rather than a property of the game, and a box
+that resolves a narrower face measures them smaller. **So they are the
+indicative half of this table, and three other things are the enforced
+half.** Each is a separate guard, because no one of them can see what the
+others do:
+
+| what | where | what it catches |
+| --- | --- | --- |
+| each field inside its band, on one line, and `MIGRATION` still the wider of the readout's two lines | `tests/client/hud-row1-widths.spec.ts`, in a running client | a face wide enough to push a field onto its neighbour, and the ordering flipping |
+| `MIGRATION` is 9 characters, `50 / 50` is 7 | `packages/game/test/layout.test.ts`, no font at all | the *string* growing — `MIGRATIONS` renders 120px, fits the 124px band, and would leave this table costing it at 108 |
+| each row ends at its own origin plus its own width, beside the neighbour it names | `tools/art/test/doc-table.test.ts` | this table drifting from `layout.ts`, or quietly stopping being parsed |
+
+What travels between machines is the ordering, the bands and the character
+counts. The pixels are what one of them came to.
+
+**Not from the plates.** The board plates in `docs/art/` cannot answer any
+of this and must not be measured for it. They are drawn by
+`tools/art/font.ts`, a fixed-pitch 5x7 bitmap font standing in for type
+Node cannot rasterise, and on a digit run it is about 1.6x wider: `49 / 50`
+is 123px there against 77 here, so in a plate the counter arrives 1px short
+of Send and looks like it touches. Worse for anyone reading one, the order
+of the readout's two lines *reverses* — `MIGRATION` is the wider line in a
+proportional font and the narrower one in the mock. The mock is
+deliberately pessimistic about crowding, which is what makes it useful for
+judging a frame; it is not a measurement of this table, and ARB-307 is what
+reading it as one costs.
 
 The migration readout is `label` over `body` — two lines at one x — and not
 one line, and that is what buys the 16px it clears Send by: on one line
