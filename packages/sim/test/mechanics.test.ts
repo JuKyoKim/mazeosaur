@@ -140,7 +140,7 @@ describe("stun", () => {
 });
 
 describe("multi-target", () => {
-  it("hits the N furthest-along invaders per cooldown", () => {
+  it("hits the N furthest-along invaders per cooldown [@baseline]", () => {
     const c = withMigration(
       {
         dinos: {

@@ -21,7 +21,7 @@ const SEED = 42;
  * the run. Either way `create()` re-runs, which is what this checks — but a
  * periodic autosave would change what "fresh" means here.
  */
-test("scene.restart() leaves the canvas rendering with no renderer errors", async ({ page }) => {
+test("scene.restart() leaves the canvas rendering with no renderer errors [@baseline]", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 

@@ -51,7 +51,7 @@ describe("difficulty", () => {
 });
 
 describe("placing, growing, selling", () => {
-  it("charges meat, blocks the cell, and refuses when broke", () => {
+  it("charges meat, blocks the cell, and refuses when broke [@baseline]", () => {
     const g = new Game(fixture, 1);
     expect(g.apply({ type: "place", defId: "raptor-1", x: 2, y: 2 })).toBeNull();
     expect(g.state.meat).toBe(40);
@@ -140,7 +140,7 @@ describe("migrations", () => {
     expect(h.apply({ type: "send" })).toBe("wrong-phase");
   });
 
-  it("leaks eat eggs and an empty nest loses the game", () => {
+  it("leaks eat eggs and an empty nest loses the game [@baseline]", () => {
     const g = new Game(fixture, 1);
     g.apply({ type: "send" });
     const events = runUntil(g, () => g.state.invaders.length === 0 && g.state.spawnQueue.length === 0);
@@ -154,7 +154,7 @@ describe("migrations", () => {
     expect(g.state.eggs).toBe(0);
   });
 
-  it("kills pay bounty, clearing pays the bonus, and clearing the last migration wins", () => {
+  it("kills pay bounty, clearing pays the bonus, and clearing the last migration wins [@baseline]", () => {
     const g = new Game(fixture, 7);
     // a raptor next to the spawn kills compies (10 hp, 5 dmg every 4 ticks) before they get far
     for (const p of [
@@ -180,7 +180,7 @@ describe("migrations", () => {
     expect(g.state.migration).toBe(fixture.migrations.length);
   });
 
-  it("ground-only dinosaurs ignore fliers", () => {
+  it("ground-only dinosaurs ignore fliers [@baseline]", () => {
     const g = new Game(fixture, 3);
     g.apply({ type: "send" }); // compies, will leak past nothing
     runUntil(g, () => g.state.phase === "build");

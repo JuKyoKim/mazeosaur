@@ -49,7 +49,7 @@ const LANE_CELL = { x: 0, y: 0 };
 
 const HATCHLING_COST = 10;
 
-test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again", async ({ page }) => {
+test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again [@baseline]", async ({ page }) => {
   // ARB-242: this used to wait out a real invader's walk down the full
   // lane in wall-clock time, which made the test's duration hostage to
   // whatever else was loading the CI runner — a 53.5s pass next to a 60s
