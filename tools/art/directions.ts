@@ -238,7 +238,7 @@ const valleyNaturalist: Direction = {
  * Each animal is six to fourteen axis-aligned boxes rendered under one
  * fixed isometric camera, three flat tones per box — top, front, side — and
  * no gradient anywhere. The solidity is doing the work that shading does in
- * the other three, which is why the palette can stay saturated.
+ * the other four, which is why the palette can stay saturated.
  *
  * What this is honestly not: the board is still a square top-down grid, and
  * this changes the *assets*, not the camera the game is played through.
@@ -370,7 +370,7 @@ export function direction(id: string): Direction {
  * The direction that ships. Everything downstream — which atlas
  * `npm run art:atlas` writes, which direction the frame-border check gates
  * rather than reports — reads it from here instead of restating the id, so
- * the other three stay buildable as the record of how the choice was made
+ * the other four stay buildable as the record of how the choice was made
  * without being mistaken for candidates. Changing direction is this line.
  */
 export const CHOSEN: Direction = direction("toy-box");

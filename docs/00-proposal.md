@@ -570,10 +570,10 @@ reasoning is
   because the client integration is live against it and a half-swapped
   direction would have the game loading an atlas no document describes.
 - 2026-10-05: **the frame-border check gates the direction that ships and
-  reports the other three, which are formally exempt.** A sprite touching
+  reports the other four, which are formally exempt.** A sprite touching
   the edge of its authored square has lost ink there, and trimming does not
   recover it. The exemption is not a difference of art intent: the three
-  flat directions are the record of how the choice was made, their frames
+  archived candidates are the record of how the choice was made, their frames
   in `docs/art/` are what the board looked at, and pulling their silhouettes
   in a pixel would edit that evidence while fixing nothing that ships.
   Measured, the contact is also not the per-genus appendage overhang

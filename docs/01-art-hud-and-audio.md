@@ -1120,7 +1120,7 @@ Frame names are `<kind>-<stage>`, `<archetype>-<kind>` and
 `strike-<kind>-<step>`, all lowercase, so the client can build a frame name
 from sim state without a lookup table.
 
-`strikes` exists only for a `blocks` direction and the three archived ones
+`strikes` exists only for a `blocks` direction and the four archived ones
 have two atlases, not three. They are the record of how the choice was made
 and nothing in them is in an atlas, so the honest answer for them is that
 they have no strikes rather than a half-converted one.
@@ -1225,7 +1225,7 @@ a pixel on its edge is a pixel that was thrown away — usually the outline,
 which is why it is nearly invisible and worth asserting rather than looking
 for. Toy Box is clear on all 72.
 
-The three archived directions are **formally exempt and reported instead**.
+The four archived directions are **formally exempt and reported instead**.
 They are the record of how the choice was made; their frames in `docs/art/`
 are what the board looked at, and redrawing a silhouette to pull it in a
 pixel would edit that evidence while fixing nothing that ships. Measured,
@@ -1254,7 +1254,7 @@ inside it. Measured by `art:check`:
 | Fossil Pixel | 36px | 72 | 23.0 kB |
 | Clay Pack | 48px | 72 | 124.9 kB |
 | Valley Naturalist | 48px | 72 | 119.7 kB |
-| Tactics Pixel | 15px | 72 | **7.2 kB** |
+| Tactics Pixel | 15px | 72 | **6.3 kB** |
 
 Toy Box carries 18 frames the other four do not: the attack strikes. They
 cost 12.4 kB, which is also the measured answer to the question section 10
@@ -1268,11 +1268,12 @@ consumers. The budget line to hold is section 6's: v1 audio stays under
 1.5 MB.
 
 Tactics Pixel has the most headroom and is the only direction that needs
-it: five frames a dinosaur instead of one takes its 7.2 kB to about 30 kB,
-which is still half of what the current atlas costs at rest. Animating Toy
-Box instead would cost it 57.7 kB -> roughly 230 kB. Both are nothing against
-40 MB. **Animation is not an argument for the small direction**, and it would
-be convenient to pretend otherwise.
+it: five frames a dinosaur instead of one takes its 6.3 kB to about 26 kB,
+which is still under half of what the shipped atlas costs at rest. Toy Box's
+rest frames are 57.6 kB of its 70.0 kB — the strikes are the other 12.4 —
+and animating them the same way would take that to roughly 230 kB. Both are
+nothing against 40 MB. **Animation is not an argument for the small
+direction**, and it would be convenient to pretend otherwise.
 
 ### 5.6 The clips: idle and attack
 

@@ -2,7 +2,7 @@
 //
 //   node tools/art/build.ts frames     the three sample frames the board picks from
 //   node tools/art/build.ts verify     the committed frames still match, without writing
-//   node tools/art/build.ts compare    all three directions in one picture
+//   node tools/art/build.ts compare    every direction in one picture
 //   node tools/art/build.ts atlas <id> the shipping atlases for one direction
 //   node tools/art/build.ts anim <id>  the idle and attack clips, as APNGs
 //   node tools/art/build.ts check      colour-blindness, contrast and byte budget
@@ -816,9 +816,9 @@ function doCheck(): void {
   // trims to the ink that survived, so the authored square is a working area
   // and a pixel at its edge is a pixel that was thrown away.
   //
-  // Gated for the direction that ships and reported for the other three,
+  // Gated for the direction that ships and reported for the other four,
   // which is the exemption that was left open when this check was added.
-  // The reason is not a difference of art intent — it is that those three are
+  // The reason is not a difference of art intent — it is that those four are
   // the *record of how the choice was made*. Their frames in `docs/art/` are
   // what the board looked at; regenerating them to pull the ink in a pixel
   // would edit the evidence, and nothing in them is in an atlas. Measured, it

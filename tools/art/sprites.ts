@@ -185,8 +185,8 @@ export function strikeSprite(kind: Kind, step: StrikeStep, d: Direction): Raster
  *
  * Empty for a direction that is not `blocks`. The strikes were authored for
  * the direction that shipped and they are block models; rendering them
- * through a flat direction's palette would put a solid in a picture that has
- * no solids in it. The other three directions are the record of how the
+ * through a non-blocks direction's palette would put a solid in a picture
+ * that has no solids in it. The other four directions are the record of how the
  * choice was made (section 5.5) and nothing in them is in an atlas, so the
  * honest answer for them is that they have no strikes rather than a
  * half-converted one.
