@@ -119,6 +119,7 @@ export function codeSpec(): Map<string, string[]> {
     ["egg value", [xy(ROW1.eggValue)]],
     ["migration label / value", [xy(ROW1.migrationLabel), xy(ROW1.migrationValue)]],
     ["send", [wh(ROW1.send)]],
+    ["pause", [wh(ROW1.pause)]],
     ["speed toggle", [wh(ROW1.speed)]],
     ["genus", [wide(ROW3.sheetName)]],
     ["kind + stage", [wide(ROW3.sheetKind)]],

@@ -262,7 +262,7 @@ y=0     ┌───────────────────────
         │                                     │
         │   toast lives here, y=932, 56 tall  │
 y=1008  ├━━━━━━━━━ build timer bar ━━━━━━━━━━━┤   8px, full width
-        │ 🍖 214   🥚 14   MIGRATION   SEND  1x│   row 1, 96 tall
+        │ 🍖 214  🥚 14  MIGRATION SEND PAUSE 1x│   row 1, 96 tall
         │                  49 / 50             │
 y=1104  ├─────────────────────────────────────┤
         │ ▪ NOW  12x Dakotaraptor   fast·raptor│   row 2, 40 tall
@@ -281,8 +281,23 @@ y=1280  └───────────────────────
 | egg icon | `192, 1038, 30 x 34` | — |
 | egg value | `230, 1038`, `vital` | — |
 | migration label / value | `320, 1034` / `320, 1058` | `label` over `body` |
-| **Send** | `444, 1019, 164 x 82` | **88.8 x 44.4pt** |
+| **Send** | `444, 1019, 82 x 82` | **44.4 x 44.4pt** |
+| **Pause** | `533, 1019, 82 x 82` | **44.4 x 44.4pt** |
 | **speed toggle** | `622, 1019, 82 x 82` | **44.4 x 44.4pt** |
+
+**Three controls, all three on the floor.** Send, Pause and the speed
+toggle are 82px squares because that is the only width three of them fit
+in, not because 82 looked right. Their band is fixed at both ends — the
+migration readout's widest value ends at 428 and needs Send's origin to
+stay at 444, and the row ends at the content edge — so 260px carry three
+hit-floor squares and two 7px gaps with nothing over. Send paid for Pause
+because it was the only control here with anything to give: it was 164
+wide against a floor of 82, where everything else in the row is either at
+the floor already or a text field whose measured clearance is the 8 or 16px
+in the table below. What it cost is Send's bonus label, which is now two
+lines — `Send` over `+25` — exactly as Grow and Sell already are. A fourth
+control does not fit in this row at any width, and adding one means taking
+the space from somewhere `packages/game/test/layout.test.ts` can see.
 
 **The timer is a draining bar, not digits.** A full-width bar across the
 seam between board and HUD is legible without being read, which is the
@@ -1400,8 +1415,34 @@ The pack row is the one piece of this screen that is not a statistic. A
 player who grew three *Utahraptors* and one *Triceratops* sees exactly
 that, and the next run's first thought is about what is missing from it.
 
-**Again** sits in the HUD band at the bottom, in the same place the Send
-button was, so the thumb does not move.
+**Again** sits in the HUD band at the bottom, at the same height as the
+Send button, so the thumb does not move between the run that ended and the
+next one.
+
+### The pause menu
+
+The same shape one layer earlier: the full canvas over the same 70% scrim,
+the board still visible, three entries down the middle of the board area.
+
+| element | position | type |
+| --- | --- | --- |
+| headline | centred, y=328 | `Paused`, `title` at 2x, as the results headline |
+| the run so far | centred, y=388 | `body` dim — which migration, eggs, meat |
+| **Resume** | `196, 432, 328 x 82` | primary |
+| **Restart run** | `196, 528, 328 x 82` | default |
+| **End run** | `196, 624, 328 x 82` | `danger` |
+
+The entries are `Again`'s box at three heights, so a player who ends a run
+lands on the results screen with the button under the same thumb. The 14px
+between them is more separation than any two HUD controls get, and that is
+deliberate: the third entry throws the run away, and this is the one menu
+in the client where a mis-tap cannot be undone. Tapping the scrim anywhere
+off the three resumes, because the safe answer should be the easy one.
+
+A pause is the client's clock stopping and nothing else — the sim does not
+know about it, so nothing on the board moves, including the decorations:
+see
+[the pause decision](decisions/0004-pause-stops-the-clients-clock.md).
 
 ---
 
