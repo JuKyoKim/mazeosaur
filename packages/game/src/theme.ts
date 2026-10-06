@@ -18,6 +18,15 @@ export const COLORS = {
   textDim: "#95a5a6",
   meat: "#e67e22",
   eggs: "#f5f6fa",
+  /**
+   * `meat` and `eggs` as numbers, for the row-1 icons and the tray's cost
+   * pip. Phaser wants a CSS string for text and a number for a shape, so a
+   * colour used by both kinds of object needs both forms — the alternative
+   * is parsing the string again on every draw. Same convention as
+   * `refusalText` below, in the other direction.
+   */
+  meatFill: 0xe67e22,
+  eggsFill: 0xf5f6fa,
   refusal: 0xe74c3c,
   /** `refusal` as a CSS string, for the text the card's cost flashes to. */
   refusalText: "#e74c3c",
@@ -62,4 +71,22 @@ export const FONT = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
 
 export function text(size: number, color: string = COLORS.text): Phaser.Types.GameObjects.Text.TextStyle {
   return { fontFamily: FONT, fontSize: `${size}px`, color };
+}
+
+/**
+ * `text()` with a hard wrap at `width`.
+ *
+ * Every variable-length string in the HUD gets one, and the width is always
+ * a `layout.ts` number. The strings are content — a genus, a count, a
+ * modifier line — so their pixel widths are not knowable from the layout,
+ * and a field with no wrap over-subscribes its row *silently*: Phaser draws
+ * it over its neighbour rather than failing. A wrap turns that into a
+ * visibly broken line, which is the failure mode that gets fixed.
+ */
+export function wrapped(
+  size: number,
+  width: number,
+  color: string = COLORS.text,
+): Phaser.Types.GameObjects.Text.TextStyle {
+  return { ...text(size, color), wordWrap: { width } };
 }
