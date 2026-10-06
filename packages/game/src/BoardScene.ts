@@ -1100,13 +1100,22 @@ export class BoardScene extends Phaser.Scene {
       const cell = this.cellAt(p);
       if (!cell) {
         // Off the board: bare HUD, or off-canvas. A tray card, Send, the
-        // speed toggle, Grow and Sell all stop propagation in `button()`,
+        // speed toggle, Grow and Sell all stop propagation in `onTap`,
         // so this only ever fires for HUD chrome — which makes it the
         // "tap away to put the dinosaur back" half of cancel. It cannot
         // be an empty *cell* instead: an empty cell is always a placement
         // target, which is what the armed card is for.
+        //
+        // It clears *both* selections, and that matters more since row 3
+        // became a swapping tray: an open sheet now hides the shop, so a
+        // gesture that cancelled the card and left the sheet up would be a
+        // cancel that cannot reach the thing the player wants back.
+        // Tapping an empty cell closes the sheet too (§4) — this is the
+        // same idea on the one part of the canvas that is not a cell.
         this.selectedDef = null;
+        this.selectedDino = null;
         this.hoverCell = null;
+        this.showSheet(false);
         return;
       }
       // Every tap on a cell leaves the ring, drawn here — before the sim is
