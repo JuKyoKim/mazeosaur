@@ -40,8 +40,12 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
   // `results` is registered but idle until the board hands it a run.
   expect(await resultsShown(page)).toBe(false);
 
+  // No `tick` assertion anywhere in this spec: the build phase is already
+  // counting down by the time `openGame` returns, so "a fresh run" is the
+  // economy and the migration index, not a tick of zero. Liveness is
+  // `waitForTickAdvance` at the end.
   const atStart = await simSnapshot(page);
-  expect(atStart).toMatchObject({ phase: "build", dinos: 0, tick: 0 });
+  expect(atStart).toMatchObject({ phase: "build", dinos: 0, migration: 0 });
 
   // Grow nothing and build nothing in the invaders' way: the run has to
   // end, and the pack row's empty case is the one a first run really hits.
@@ -90,9 +94,11 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
   expect(await resultsShown(page)).toBe(false);
 
   // Identical to the state the first run opened in: a fresh `Game`, not
-  // the finished one resurrected.
+  // the finished one resurrected. The eggs are the sharpest of these — the
+  // run that just ended lost all of them, so a resume would show 0.
   const afterAgain = await simSnapshot(page);
-  expect(afterAgain).toMatchObject({ phase: "build", dinos: 0, meat: atStart.meat, eggs: atStart.eggs, tick: 0, migration: 0 });
+  expect(afterAgain).toMatchObject({ phase: "build", dinos: 0, meat: atStart.meat, eggs: atStart.eggs, migration: 0 });
+  expect(lost.eggs).toBeLessThan(afterAgain.eggs);
   expect(await page.evaluate(() => window.mazeosaurBoard!().sim.seed)).toBe(SEED);
 
   // The re-entry runs `BoardScene.create()` a second time on the same

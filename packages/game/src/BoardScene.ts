@@ -952,7 +952,15 @@ export class BoardScene extends Phaser.Scene {
   private endRun(outcome: "won" | "lost"): void {
     this.autosave();
     const summary = runSummary(outcome, this.game_.state, (d) => this.game_.dinoDef(d), this.runSeed, content);
-    this.scene.start("results", summary);
+    // `launch` + `pause`, not `start`. §9 of the art doc puts the results
+    // screen "over a 70% `bg` scrim, the board still visible behind it,
+    // because the board is what the player wants to look at" — and
+    // `scene.start()` *stops* this scene, which leaves the scrim over an
+    // empty canvas and the last thing the player did invisible. A paused
+    // scene keeps rendering and stops updating, which is exactly the two
+    // halves wanted: the valley stays on screen and its input is dead.
+    this.scene.launch("results", summary);
+    this.scene.pause();
   }
 
   // --------------------------------------------------------------- input

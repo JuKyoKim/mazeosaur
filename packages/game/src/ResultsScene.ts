@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CANVAS_H, CANVAS_W, GUTTER, RESULTS, TYPE } from "./layout.js";
+import { CANVAS_H, CANVAS_W, GUTTER, HUD_H, HUD_Y, RESULTS, TYPE } from "./layout.js";
 import { COLORS, KIND_COLOR, text } from "./theme.js";
 import type { RunSummary } from "./summary.js";
 
@@ -39,6 +39,15 @@ export class ResultsScene extends Phaser.Scene {
     // screen's only affordance is its own button.
     this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, COLORS.bg, 0.7).setOrigin(0, 0).setInteractive();
 
+    // The HUD band is covered opaquely, unlike the board above it. §9 asks
+    // for "the board still visible behind it, because the board is what
+    // the player wants to look at" — the HUD is not that, and leaving it
+    // at 30% puts a legible-but-dead Send button directly behind Again, in
+    // the one place §9 says Again goes. A control you can read and cannot
+    // press is worse than no control, so this row is replaced rather than
+    // dimmed.
+    this.add.rectangle(0, HUD_Y, CANVAS_W, HUD_H, COLORS.hud, 1).setOrigin(0, 0);
+
     // `title` at 2x, per §9's type column.
     this.add
       .text(CANVAS_W / 2, RESULTS.headline.y, s.outcome === "won" ? "The nest holds" : "The valley is quiet", text(TYPE.title * 2))
@@ -72,6 +81,11 @@ export class ResultsScene extends Phaser.Scene {
       // (same seed)": `BoardScene` keeps `runSeed` across a re-entry and
       // only asks `nextSeed()` on its first create(), so the seed is the
       // scene's to hold and not this screen's to pass.
+      //
+      // `start` and not `resume`: the board is *paused* behind this screen
+      // (see `BoardScene.endRun`), and resuming it would hand the player
+      // back the run they just finished. `start` re-runs its `create()`,
+      // which is the fresh run — and stops this scene on the way out.
       this.scene.start("board");
     });
 
@@ -102,18 +116,19 @@ export class ResultsScene extends Phaser.Scene {
       return;
     }
 
-    // Size the cell to the row rather than the row to the cell: a run with
-    // nine genera has to fit the same 688px as a run with two, and §9 gives
-    // the row a fixed height. Capped at PACK_CELL_MAX so two adults are not
-    // drawn the size of a hand.
-    const gap = 12;
-    const cell = Math.min(PACK_CELL_MAX, Math.floor((box.w - (pack.length - 1) * gap) / pack.length));
-    const rowW = pack.length * cell + (pack.length - 1) * gap;
-    const left = box.x + Math.round((box.w - rowW) / 2);
+    // The row is divided into equal columns and the block is centred in
+    // its column — rather than the blocks being packed and the labels hung
+    // under them. The genus is the longest thing in a column
+    // (`Tyrannosaurus` is far wider than a 96px block), so a label given
+    // only the block's width runs under its neighbour's; giving it the
+    // column means the block's size and the label's never fight.
+    const colW = box.w / pack.length;
+    const cell = Math.min(PACK_CELL_MAX, Math.floor(colW - PACK_COL_PAD));
     const gfx = this.add.graphics();
 
     pack.forEach((entry, i) => {
-      const x = left + i * (cell + gap);
+      const cx = box.x + colW * (i + 0.5);
+      const x = Math.round(cx - cell / 2);
       const y = box.y;
       gfx.fillStyle(KIND_COLOR[entry.kind], 1);
       gfx.fillRoundedRect(x, y, cell, cell, Math.round(cell / 6));
@@ -124,14 +139,17 @@ export class ResultsScene extends Phaser.Scene {
       for (let p = 0; p < 3; p++) gfx.fillCircle(x + cell / 2 + (p - 1) * pipR * 3, y + cell - pipR * 3, pipR);
 
       // The genus is the collectible, so it is spelled out rather than
-      // implied by hue. `cell + gap` is the wrap width: a long genus wraps
-      // inside its own column instead of running under its neighbour.
+      // implied by hue, and the count rides the same line: §9's example is
+      // "three Utahraptors", which is one phrase and not a badge. Wrapped
+      // at the column with `useAdvancedWrap`, because a genus is a single
+      // word and the default word wrap cannot break one.
       this.add
-        .text(x + cell / 2, y + cell + 6, entry.name, { ...text(TYPE.label), align: "center", wordWrap: { width: cell + gap } })
+        .text(cx, y + cell + 8, entry.count > 1 ? `${entry.name} x${entry.count}` : entry.name, {
+          ...text(TYPE.label),
+          align: "center",
+          wordWrap: { width: Math.floor(colW - PACK_COL_PAD), useAdvancedWrap: true },
+        })
         .setOrigin(0.5, 0);
-      if (entry.count > 1) {
-        this.add.text(x + cell - 4, y + 4, `x${entry.count}`, text(TYPE.label, COLORS.textDim)).setOrigin(1, 0);
-      }
     });
   }
 
@@ -159,6 +177,8 @@ export class ResultsScene extends Phaser.Scene {
 
 /** The pack blocks stop growing here; a two-genus run is not a mural. */
 const PACK_CELL_MAX = 96;
+/** Breathing room between pack columns, so two labels never touch. */
+const PACK_COL_PAD = 12;
 
 /** `COLORS` holds hues as numbers for the renderer; `Text` wants `#rrggbb`. */
 function hexCss(hue: number): string {
