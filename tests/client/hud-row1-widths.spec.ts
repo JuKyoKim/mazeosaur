@@ -26,11 +26,17 @@ import { openGame, trackPageErrors, waitAFrame } from "./helpers.js";
  * flips between the two fonts, so a plate cannot answer this and a browser
  * can.
  *
- * What is asserted is what survives a different font: every field inside its
- * own band, on one line, and the readout's label line still the wider of the
- * two. §4 already records that the exact px are one machine's `system-ui`
- * fallback — a second machine resolves a narrower face — so the numbers are
- * printed rather than pinned.
+ * What is asserted here is what survives a different font: every field
+ * inside its own band, on one line, and the readout's label line still the
+ * wider of the two. The px are printed rather than pinned, because they are
+ * one machine's `system-ui` fallback and a narrower face moves all of them.
+ *
+ * That leaves one hole this cannot see. A band is wider than the width §4
+ * costs it at, so `MIGRATION` growing to `MIGRATIONS` renders 120px, passes
+ * every assertion below, and leaves §4 arguing a 16px clearance that is
+ * really 4. The character caps in `packages/game/test/layout.test.ts` are
+ * the font-free third leg against that, the way
+ * `packages/game/test/sheet.test.ts` backs the sheet column.
  */
 
 /** Phaser `Text` as this spec reads it back out of the scene. */

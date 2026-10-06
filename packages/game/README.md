@@ -68,6 +68,15 @@ ports themselves are section 2 of
   tested without a browser and without waiting in real time. It names
   sounds and never fetches one; the thing that makes a noise is the
   shell's, injected as `AudioPort`.
+- `src/row1.ts` — the two authored strings in the HUD's vitals row:
+  `MIGRATION_LABEL` and `migrationCounter`. Pure and Phaser-free, exported
+  through the package's `./row1` subpath, so the client and the frame
+  generator draw the same characters. They are here rather than inline at
+  two call sites because section 4 of
+  [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md) sets
+  Send's origin from the label's measured width, and `test/layout.test.ts`
+  holds both to the character count that width was taken at — the one guard
+  on that table needing neither a font nor a browser.
 - `src/sheet.ts` — what the dinosaur sheet says, as four strings: the
   genus, the family and stage, the comparable numbers, the modifiers. Pure
   and Phaser-free, exported through the package's `./sheet` subpath, so the
