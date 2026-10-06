@@ -1340,6 +1340,13 @@ export class BoardScene extends Phaser.Scene {
    */
   private showResults(outcome: "won" | "lost"): void {
     this.autosave();
+    // The toast fades on `playedMs()`, and `scene.pause()` below stops the
+    // clock it reads — so whatever was up when the run ended would sit
+    // there at a fixed alpha for as long as the results screen is, which
+    // on a loss is always "An invader reached the nest: -1 egg". Seen in
+    // the drive. Same argument as `abandonRun`'s `showSheet(false)`: a run
+    // that is over must not leave live-looking HUD behind the scrim.
+    this.hideToast();
     const summary = runSummary(outcome, this.game_.state, (d) => this.game_.dinoDef(d), this.runSeed, content, this.fossilsAwarded);
     // `launch` + `pause`, not `start`. §9 of the art doc puts the results
     // screen "over a 70% `bg` scrim, the board still visible behind it,
@@ -1898,6 +1905,27 @@ export class BoardScene extends Phaser.Scene {
    * has its geometry, and the alternative is a test that silently measures
    * five of the seven.
    */
+  /**
+   * The profile as `flush()` last wrote it, for tests and for the console.
+   *
+   * Exists so a browser spec can hold the award on the results screen
+   * against the award actually banked — the §5.4 claim that there is only
+   * one of them. Nothing else can check it: the player is shown one figure
+   * and credited another, and sees only the first.
+   */
+  get bankedProfile(): SaveDocument["profile"] {
+    return this.doc.profile;
+  }
+
+  /**
+   * Whether the toast is on screen. For `results.spec.ts`, which asserts
+   * it is not: the fade runs on `playedMs()`, and the results screen stops
+   * that clock, so a toast left up would stay up.
+   */
+  get toastShown(): boolean {
+    return this.toastPanel.visible;
+  }
+
   get hudTargets(): { name: string; x: number; y: number; w: number; h: number }[] {
     const box = (name: string, r: Phaser.GameObjects.Rectangle) => ({
       name,

@@ -3,6 +3,7 @@ import {
   AGAIN_BUTTON,
   SEND_BUTTON,
   SPEED_BUTTON,
+  bankedProfile,
   cellCenter,
   fastForwardUntilEggsBelow,
   loseOnNextLeak,
@@ -11,6 +12,7 @@ import {
   resultsShown,
   resultsSummary,
   simSnapshot,
+  toastShown,
   trackPageErrors,
   waitAFrame,
   waitForResults,
@@ -84,7 +86,30 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
   // One hatchling placed and never grown, so the pack is empty: it is what
   // the player grew to adult, not what they placed.
   expect(summary.pack).toEqual([]);
-  expect(summary.fossilsAwarded).toBeGreaterThanOrEqual(0);
+
+  /**
+   * The award on screen is the award banked. `>= 0` would pass on a
+   * summary that dropped the number entirely, so this compares the two:
+   * `profile.fossilsEarned` starts at 0 on a fresh profile and this is its
+   * first finished run, so the lifetime total *is* this run's award.
+   *
+   * Drives the §5.4 claim end to end — one `fossilAward` call, in
+   * `flush()`, handed to the screen — which is the one thing a player
+   * cannot check for themselves: they see one figure and are credited
+   * another, with no way to tell which is wrong.
+   */
+  const banked = await bankedProfile(page);
+  expect(banked.runsFinished).toBe(1);
+  expect(summary.fossilsAwarded).toBe(banked.fossilsEarned);
+  expect(summary.fossilsAwarded).toBeGreaterThan(0);
+
+  /**
+   * And the toast is down. It fades on `playedMs()`, which `scene.pause()`
+   * stops, so a toast still up when the run ended would sit at a fixed
+   * alpha for as long as this screen is — on a loss, always "An invader
+   * reached the nest". Found by driving it; `showResults` hides it.
+   */
+  expect(await toastShown(page)).toBe(false);
 
   // Again: back through `board`, which is the only scene that builds a
   // `Game`. §5.3 is "again (same seed)", so the seed is kept and

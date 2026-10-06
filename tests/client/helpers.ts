@@ -54,7 +54,7 @@ export const HUD_BARE = { x: CANVAS_W / 2, y: ROW2.y + ROW2.h / 2 };
  * in-board overlay: a won or lost run goes to `results` now, and both of
  * that constant's callers (`smoke.spec.ts`, `win-screen.spec.ts`) came
  * here with it. The overlay `showOverlay` still draws for a run the
- * *player* ended has a "Play again" of its own, and no spec clicks it —
+ * *player* ended keeps a "Play again" of its own, but no spec clicks it —
  * `pause.spec.ts` asserts that path through the reload instead — so there
  * is no constant for it rather than an unused one.
  */
@@ -231,6 +231,16 @@ export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; 
  * (`BoardScene.hudTargets`), which is the only thing that can tell a
  * layout constant from the box actually on screen.
  */
+/** The profile `flush()` last wrote: the award a finished run actually banked. */
+export function bankedProfile(page: Page): Promise<{ fossilsEarned: number; runsFinished: number }> {
+  return page.evaluate(() => window.mazeosaurBoard!().bankedProfile);
+}
+
+/** Whether the board's toast is on screen. */
+export function toastShown(page: Page): Promise<boolean> {
+  return page.evaluate(() => window.mazeosaurBoard!().toastShown);
+}
+
 export function hudTargets(page: Page): Promise<{ name: string; x: number; y: number; w: number; h: number }[]> {
   return page.evaluate(() => window.mazeosaurBoard!().hudTargets);
 }
