@@ -1613,17 +1613,18 @@ be brighter, not louder.
 
 ## 9. The results screen
 
-Shown on defeat (eggs at 0) and on victory (migration 50 cleared). Full
-canvas over a 70% `bg` scrim, the board still visible behind it, because
-the board is what the player wants to look at.
+Shown on defeat (eggs at 0), on victory (migration 50 cleared), and on the
+run the player ends from the pause menu. Full canvas over a 70% `bg`
+scrim, the board still visible behind it, because the board is what the
+player wants to look at.
 
 | element | position | type |
 | --- | --- | --- |
-| headline | centred, y=360 | `title` at 2x — `The valley is quiet` / `The nest holds` |
+| headline | centred, y=360 | `title` at 2x — one line per outcome, below |
 | migrations cleared | centred, y=440 | `vital` — the number first, big |
 | eggs kept | y=520, left of centre | `body` with egg pips, not digits |
 | meat unspent | y=520, right of centre | `body` with the meat icon |
-| fossils earned | centred, y=600 | `vital` in `checkpoint` yellow |
+| fossils earned | centred, y=600 | `vital` in `checkpoint` yellow when the run was paid, `body` in `textDim` when it was not — below |
 | the pack | y=680, 180 tall | every dinosaur the player grew to adult, as its sprite, in a row — the collection, which is the reason the stages are real genus names |
 | **Again** | `196, 1019, 328 x 82` | primary, centred in the HUD band |
 
@@ -1634,6 +1635,82 @@ that, and the next run's first thought is about what is missing from it.
 **Again** sits in the HUD band at the bottom, at the same height as the
 Send button, so the thumb does not move between the run that ended and the
 next one.
+
+### The three headlines
+
+`RunSummary.outcome` has three values, so this screen has three headlines.
+All three are the same sentence shape — a noun the player recognises, a
+verb in the present tense, no second person and no verdict on the player —
+because the screen should report what happened to the valley and let the
+player decide how to feel about it.
+
+| outcome | headline |
+| --- | --- |
+| `won` | `The nest holds` |
+| `lost` | `The valley is quiet` |
+| `abandoned` | `The pack withdraws` |
+
+`abandoned` is the player's own **End run**, and it is neither of the other
+two. It is not a defeat: nobody beat them, and `The valley is quiet` would
+tell a player who walked away that the nest had fallen. It is not a win
+either. `The pack withdraws` is the player's own side leaving of its own
+accord — the same pack the row below the headline is about, so the
+headline names what the player is looking at — and withdrawing is a thing
+you choose, which a loss is not.
+
+Measured at `title` at 2x in the client, the three are 382, 475 and 521 px
+wide against a `CONTENT_W` of 688. Read those as an ordering and a bound,
+not as a budget: they are whatever face this machine resolved `system-ui`
+to, the same caveat §4 carries. The bound is the one that matters — a
+headline is centred and never wraps, so one that outgrows `CONTENT_W` is
+clipped at the canvas edge rather than reflowed. The existing two sit at
+56% and 69% of it; keep a new one in that band.
+
+### The award line when the award is zero
+
+A run that is paid draws `+{n} fossils` at `vital` in `checkpoint` yellow,
+and nothing about that changes: it is the one reward on the screen and it
+should be the loudest thing under the headline.
+
+A run that is **not** paid draws the same line at `body` in `textDim`:
+
+| case | line |
+| --- | --- |
+| `abandoned` | `No fossils for an ended run` |
+| any other outcome, award 0 | `No fossils earned` |
+
+Three things this is deciding, in order of how much they matter.
+
+**The zero is not a prize, so it does not wear the prize's clothes.**
+`checkpoint` yellow at `vital` is this screen's reward signal. Spending it
+on a zero makes the single loudest element on the screen the thing the
+player did not get, which is juice pointed at the smallest possible
+stakes. Dropping to `body` in `textDim` costs the line nothing it needs —
+`textDim` on `bg` is 6.5:1, well past the 4.5:1 §1 asks of HUD text — and
+it moves the emphasis back onto the headline, where the news actually is.
+
+**The line stays, rather than being omitted.** Hiding it would be the
+easier fix and the wrong one. An ended run paying nothing is a *rule*, and
+this is the only place the game ever states it; a player who sees the
+award line simply vanish learns nothing except that the screen is
+inconsistent, and cannot tell a rule from a bug. The screen also keeps the
+same element set for all three outcomes, which is what makes two runs
+comparable at a glance.
+
+**Zero is reachable on a loss too, so the quiet treatment is keyed on the
+number and not on the outcome.** `fossilAward` pays per egg kept, per
+migration cleared and per meat unspent; a player who loses migration 1
+with nothing banked has all three at zero. Keying on `fossilsAwarded === 0`
+covers that case for free. Only the *wording* is keyed on the outcome, and
+it has to be: on an abandoned run the zero is a rule, and on a lost one it
+is arithmetic. `No fossils for an ended run` names **End run**, the button
+the player just pressed, which is the whole of the teaching; telling a
+player who lost migration 1 the same thing would teach them a rule that
+does not exist.
+
+The geometry does not move. Both variants sit at y=600 with `setOrigin(0.5)`,
+so the line shrinks about its own centre and the pack row below it is
+untouched.
 
 ### The pause menu
 
