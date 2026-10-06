@@ -64,6 +64,14 @@ export const BOARD = {
   meat: rgb(0xe67e22),
   eggs: rgb(0xf5f6fa),
   refusal: rgb(0xe74c3c),
+  // `COLORS.ink` in packages/game/src/theme.ts, and flat on purpose. Every
+  // Direction's palette has an `ink` too, but that one is a dark tint of a
+  // *kind hue* — it is the outline around an animal. This is the board's
+  // ink: the mark laid over a cell whose colour the mark does not control.
+  // §4 is explicit that the value has to be fixed ("a fixed dark that the
+  // cell underneath cannot climb to"), so the refusal hatching cannot take
+  // a per-direction value without losing the property it was chosen for.
+  ink: rgb(0x111111),
   button: rgb(0x2e4a38),
   // M2's 3f7a55 put #ecf0f1 at 4.44:1 — just under AA. Darkened until it
   // clears 4.5 with margin; the Send button is the one control a player

@@ -262,7 +262,7 @@ y=0     ┌───────────────────────
         │                                     │
         │   toast lives here, y=932, 56 tall  │
 y=1008  ├━━━━━━━━━ build timer bar ━━━━━━━━━━━┤   8px, full width
-        │ 🍖 214   🥚 14   MIGRATION   SEND  1x│   row 1, 96 tall
+        │ 🍖 214  🥚 14  MIGRATION SEND PAUSE 1x│   row 1, 96 tall
         │                  49 / 50             │
 y=1104  ├─────────────────────────────────────┤
         │ ▪ NOW  12x Dakotaraptor   fast·raptor│   row 2, 40 tall
@@ -281,8 +281,23 @@ y=1280  └───────────────────────
 | egg icon | `192, 1038, 30 x 34` | — |
 | egg value | `230, 1038`, `vital` | — |
 | migration label / value | `320, 1034` / `320, 1058` | `label` over `body` |
-| **Send** | `444, 1019, 164 x 82` | **88.8 x 44.4pt** |
+| **Send** | `444, 1019, 82 x 82` | **44.4 x 44.4pt** |
+| **Pause** | `533, 1019, 82 x 82` | **44.4 x 44.4pt** |
 | **speed toggle** | `622, 1019, 82 x 82` | **44.4 x 44.4pt** |
+
+**Three controls, all three on the floor.** Send, Pause and the speed
+toggle are 82px squares because that is the only width three of them fit
+in, not because 82 looked right. Their band is fixed at both ends — the
+migration readout's widest value ends at 428 and needs Send's origin to
+stay at 444, and the row ends at the content edge — so 260px carry three
+hit-floor squares and two 7px gaps with nothing over. Send paid for Pause
+because it was the only control here with anything to give: it was 164
+wide against a floor of 82, where everything else in the row is either at
+the floor already or a text field whose measured clearance is the 8 or 16px
+in the table below. What it cost is Send's bonus label, which is now two
+lines — `Send` over `+25` — exactly as Grow and Sell already are. A fourth
+control does not fit in this row at any width, and adding one means taking
+the space from somewhere `packages/game/test/layout.test.ts` can see.
 
 **The timer is a draining bar, not digits.** A full-width bar across the
 seam between board and HUD is legible without being read, which is the
@@ -535,9 +550,37 @@ the frame generator. Matching the board's selection ring — the outline
 `drawDynamic` strokes around the selected dinosaur's cell — is deliberate: a
 player should learn one selection convention, not two. The card's interior
 does not change at all, which is also deliberate — every text-on-panel pair in
-section 3's contrast table stays exactly as measured.
-Under `prefers-reduced-motion` the lift is a static offset and not an
-animation: it is state, not feedback (section 7).
+section 3's contrast table stays exactly as measured. Under
+`prefers-reduced-motion` the lift is a static offset and not an animation: it
+is state, not feedback (section 7).
+
+**One selection colour, and it is `#ecf0f1`.** Everything that marks a
+selection or a tap takes `COLORS.selection` — the selected dinosaur's range
+ring and its 3px cell outline, the valid cell's preview range ring, the tray
+card's 3px border, and the tap ring. There is no second near-white for marks
+on the board.
+
+It is decided on cost, not on appearance, because the difference is real to a
+colour picker and useless to a player. `#ffffff` and `#ecf0f1` are ΔE76 **5.7**
+apart (L\* 100 against 94.5), which clears the ~2.3 that two large patches need
+to be told apart — but only when they are large and adjacent, and these never
+are. One is a 3px stroke on a 36px cell in the grid, the other a 3px border
+around a card 500px below it; they never appear at the same size in the same
+glance, so no player can read the step as a signal. A difference only a
+measurement can see cannot teach a convention. It can only drift, and the next
+person to add a ring picks whichever literal they land on.
+
+Contrast does not decide it either. The dinosaur's outline is inset 1px and the
+kind fill starts at 3px, so the stroke rides the gutter and is measured against
+`boardBg` `#213127`: **13.7:1** at `#ffffff` against **11.9:1** at `#ecf0f1`.
+Both are far past anything that matters for a stroke. And selection is carried
+by weight and geometry — 3px, a range ring, a 5px lift — not by hue, which is
+section 3's rule applied to a state, so nothing is lost by giving up the
+brighter value.
+
+`ghost` `#ffffff` is what the board's rings used to be. Nothing reads it today
+— the rings that still look white hold the literal, not the token — so it
+should go rather than sit in `theme.ts` as the obvious thing to reach for.
 
 **The selection does not survive the placement.** Settled by the owner on
 2026-10-05: **one-shot, the PvZ-exact behaviour.** A successful place returns
@@ -591,9 +634,9 @@ the cell would refuse and why.
 
 | state | what is drawn |
 | --- | --- |
-| valid cell | the kind's hue at 0.45 in a rounded rect inset 3px, radius 6, plus a 1px `#ffffff` range ring at 0.35 |
+| valid cell | the kind's hue at 0.45 in a rounded rect inset 3px, radius 6, plus a 1px `selection` range ring at 0.35 |
 | invalid cell | `refusal` at 0.45 in the same rect, **plus diagonal hatching: 3px stripes of `ink` at alpha 1, stepped 8px**, and no range ring |
-| any tap, the instant it lands | a 2px `#ecf0f1` ring at 0.6 from the cell centre out to a **54px radius**, 120ms, then gone — drawn on `pointerdown` before the sim is called |
+| any tap, the instant it lands | a 2px `selection` ring at 0.6 from the cell centre out to a **54px radius**, 120ms, then gone — drawn on `pointerdown` before the sim is called |
 
 The hatching is not decoration: it is the second channel for a *state*, which
 section 3's rule covers as much as it covers kinds, and section 8 step 5
@@ -951,7 +994,7 @@ is noise.
 | hit | a 2px tapered line from the dinosaur to the target, in the dinosaur's hue | 1–3 cells | 80ms |
 | kill | a 24px expanding ring in the kind hue, plus a meat pip that rises 18px and fades | 1 cell | 260ms |
 | leak | a 40px ring in `refusal` around the nest, egg count flashes | 1 cell | 420ms |
-| blocked | the refused cell fills with 45° `refusal` hatching, no movement | 1 cell | 200ms |
+| blocked | the refused cell fills with 45° `ink` hatching, no movement — §4's preview table is the specification and this row restates it | 1 cell | 200ms |
 | slow | a `#74b9ff` ring around the slowed invader, held while the debuff lasts | 1 cell | held |
 
 A kill is small and constant. A leak is sharp and the egg count is the
@@ -1372,8 +1415,34 @@ The pack row is the one piece of this screen that is not a statistic. A
 player who grew three *Utahraptors* and one *Triceratops* sees exactly
 that, and the next run's first thought is about what is missing from it.
 
-**Again** sits in the HUD band at the bottom, in the same place the Send
-button was, so the thumb does not move.
+**Again** sits in the HUD band at the bottom, at the same height as the
+Send button, so the thumb does not move between the run that ended and the
+next one.
+
+### The pause menu
+
+The same shape one layer earlier: the full canvas over the same 70% scrim,
+the board still visible, three entries down the middle of the board area.
+
+| element | position | type |
+| --- | --- | --- |
+| headline | centred, y=328 | `Paused`, `title` at 2x, as the results headline |
+| the run so far | centred, y=388 | `body` dim — which migration, eggs, meat |
+| **Resume** | `196, 432, 328 x 82` | primary |
+| **Restart run** | `196, 528, 328 x 82` | default |
+| **End run** | `196, 624, 328 x 82` | `danger` |
+
+The entries are `Again`'s box at three heights, so a player who ends a run
+lands on the results screen with the button under the same thumb. The 14px
+between them is more separation than any two HUD controls get, and that is
+deliberate: the third entry throws the run away, and this is the one menu
+in the client where a mis-tap cannot be undone. Tapping the scrim anywhere
+off the three resumes, because the safe answer should be the easy one.
+
+A pause is the client's clock stopping and nothing else — the sim does not
+know about it, so nothing on the board moves, including the decorations:
+see
+[the pause decision](decisions/0004-pause-stops-the-clients-clock.md).
 
 ---
 

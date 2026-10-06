@@ -1,61 +1,64 @@
 import type { ConsoleMessage, Page } from "@playwright/test";
 import type { BoardScene, GameHandle } from "@mazeosaur/game";
+import { BOARD_H, CANVAS_W, CELL_PX, PAUSE_MENU, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
 
 /**
- * Pixel geometry mirrors `packages/game/src/theme.ts` and the HUD layout
- * built in `packages/game/src/BoardScene.ts` (`buildHud`). The board is
- * drawn on a single canvas with no DOM to query, so driving it means
- * clicking the same pixels a finger would; these constants are the one
- * place that math lives so a HUD layout change only breaks one file.
+ * Where to click. The board is one canvas with no DOM to query, so driving
+ * it means clicking the same pixels a finger would — and those pixels come
+ * from `packages/game/src/layout.ts`, imported rather than copied.
+ *
+ * Importing is the point. This file used to write the HUD's geometry out by
+ * hand, which is the same defect ARB-186 fixed in the scene: a number that
+ * exists twice agrees only until somebody edits one of the two. The import
+ * resolves through the workspace symlink to a real path inside the repo, so
+ * Playwright transforms it like any other spec file — `dino-sheet.spec.ts`
+ * has imported `SHEET_COL_W` the same way since ARB-84.
  */
-export const CELL_PX = 36;
-export const CANVAS_W = 720;
-const BOARD_H = 28 * CELL_PX; // content.valley.height * CELL_PX
-const HUD_Y = BOARD_H;
+export { CANVAS_W, CELL_PX };
 
 export function cellCenter(x: number, y: number): { x: number; y: number } {
   return { x: x * CELL_PX + CELL_PX / 2, y: y * CELL_PX + CELL_PX / 2 };
 }
 
-/** Center of the Nth palette button (one per hatchling kind), left to right. */
-export function paletteButtonCenter(index: number, kindCount = 6): { x: number; y: number } {
-  const py = HUD_Y + 58;
-  const bw = Math.floor((CANVAS_W - 32 - (kindCount - 1) * 4) / kindCount);
-  return { x: 16 + index * (bw + 4) + bw / 2, y: py + 62 / 2 };
+const center = (b: { x: number; y: number; w: number; h: number }) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+
+/** Center of the Nth kind card in the shop tray, left to right. */
+export function paletteButtonCenter(index: number): { x: number; y: number } {
+  return center({ ...ROW3.kindButton, x: kindButtonX(index) });
 }
 
-export const SEND_BUTTON = { x: 496 + 96 / 2, y: HUD_Y + 8 + 42 / 2 };
-export const PAUSE_BUTTON = { x: 600 + 48 / 2, y: HUD_Y + 8 + 42 / 2 };
-export const SPEED_BUTTON = { x: 656 + 48 / 2, y: HUD_Y + 8 + 42 / 2 };
+export const SEND_BUTTON = center(ROW1.send);
+export const PAUSE_BUTTON = center(ROW1.pause);
+export const SPEED_BUTTON = center(ROW1.speed);
+export const GROW_BUTTON = center(ROW3.grow);
+export const SELL_BUTTON = center(ROW3.sell);
 
 /**
- * A point in the HUD that is not any control: the status/preview text
- * rows, between the kind buttons (which end at `HUD_Y + 120`) and the
- * dinosaur panel (which starts at `HUD_Y + 180`). Text objects are not
- * interactive, so a tap here reaches the scene's own `pointerdown` — this
- * is the "tap away to cancel" gesture, and the only place on the canvas
- * that is neither a cell nor a button.
+ * A point in the HUD that is not any control: row 2, the migration line.
+ * Nothing in that row takes a pointer — it is information only, which is
+ * why §4 lets it sit under the hit floor — and Text objects are not
+ * interactive, so a tap here reaches the scene's own `pointerdown`. That is
+ * the "tap away to put the dinosaur back" half of cancel, and row 2 is now
+ * the only place on the canvas that is neither a cell nor a control: row 3
+ * is wall-to-wall tray.
  */
-export const HUD_BARE = { x: CANVAS_W / 2, y: HUD_Y + 158 };
-
-const PANEL_Y = HUD_Y + 180;
-export const GROW_BUTTON = { x: CANVAS_W - 336 + 190 / 2, y: PANEL_Y + 17 + 52 / 2 };
-export const SELL_BUTTON = { x: CANVAS_W - 136 + 120 / 2, y: PANEL_Y + 17 + 52 / 2 };
+export const HUD_BARE = { x: CANVAS_W / 2, y: ROW2.y + ROW2.h / 2 };
 
 /** The "Play again" button on the end-of-run overlay (`showOverlay`). */
 export const PLAY_AGAIN_BUTTON = { x: CANVAS_W / 2, y: BOARD_H / 2 + 60 + 64 / 2 };
 
 /**
- * The pause menu's three entries (`PAUSE_MENU` in `BoardScene.ts`): 328
- * wide, `MIN_HIT` (82) tall, centred in the board area. A point on the
- * scrim but on none of them, for the tap-to-dismiss gesture, is the gap
- * above the first button.
+ * The pause menu's three entries, from `PAUSE_MENU` in `layout.ts` like
+ * every other control here. A point on the scrim but on none of them, for
+ * the tap-to-dismiss gesture, is the gap above the first button — derived
+ * from `resume.y` rather than written as 420, so widening the gap cannot
+ * quietly move the dismiss test onto a button.
  */
-const PAUSE_MENU = { x: CANVAS_W / 2, h: 82 };
-export const RESUME_BUTTON = { x: PAUSE_MENU.x, y: 432 + PAUSE_MENU.h / 2 };
-export const RESTART_RUN_BUTTON = { x: PAUSE_MENU.x, y: 528 + PAUSE_MENU.h / 2 };
-export const END_RUN_BUTTON = { x: PAUSE_MENU.x, y: 624 + PAUSE_MENU.h / 2 };
-export const PAUSE_SCRIM_BARE = { x: PAUSE_MENU.x, y: 420 };
+const entry = (e: { y: number }) => ({ x: PAUSE_MENU.x + PAUSE_MENU.w / 2, y: e.y + PAUSE_MENU.h / 2 });
+export const RESUME_BUTTON = entry(PAUSE_MENU.resume);
+export const RESTART_RUN_BUTTON = entry(PAUSE_MENU.restart);
+export const END_RUN_BUTTON = entry(PAUSE_MENU.end);
+export const PAUSE_SCRIM_BARE = { x: CANVAS_W / 2, y: PAUSE_MENU.resume.y - 12 };
 
 /**
  * What the harness reaches for inside the page, declared against the real
@@ -197,6 +200,15 @@ export function simSnapshot(page: Page): Promise<{ meat: number; eggs: number; d
  */
 export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; dinoId: number | null; preview: { x: number; y: number } | null }> {
   return page.evaluate(() => window.mazeosaurBoard!().selection);
+}
+
+/**
+ * Every HUD control's geometry as the renderer built it
+ * (`BoardScene.hudTargets`), which is the only thing that can tell a
+ * layout constant from the box actually on screen.
+ */
+export function hudTargets(page: Page): Promise<{ name: string; x: number; y: number; w: number; h: number }[]> {
+  return page.evaluate(() => window.mazeosaurBoard!().hudTargets);
 }
 
 /**

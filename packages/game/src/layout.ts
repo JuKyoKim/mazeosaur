@@ -165,9 +165,21 @@ export const TYPE = {
 
 /**
  * Row 1, the vitals. A full-width build-timer bar across the very top of
- * the HUD, then meat, eggs, the migration counter, Send and the speed
- * toggle. The timer is a draining bar rather than digits so it is legible
- * without being read.
+ * the HUD, then meat, eggs, the migration counter, and the three clock
+ * controls: Send, Pause and the speed toggle. The timer is a draining bar
+ * rather than digits so it is legible without being read.
+ *
+ * The three controls are 82 wide each because that is the only width three
+ * of them fit in at the hit floor, not because 82 looked right. Their band
+ * is fixed at both ends — the migration readout's own widest value ends at
+ * 428 and needs Send's origin to stay at 444, and the row's right edge is
+ * `CONTENT_RIGHT` — so 260px carry 3 * `MIN_HIT` = 246 and two 7px gaps,
+ * with nothing left over. Send gave up the 82 Pause needed because it was
+ * the only control in the row with any to give: it was 164 wide against a
+ * floor of 82, and everything else here is either at the floor already or
+ * a text field whose own measured clearance is 8 or 16px (§4). What it
+ * cost is Send's bonus label, which is now two lines (`Send` over `+25`)
+ * exactly as Grow and Sell already are.
  */
 export const ROW1 = {
   y: HUD_Y,
@@ -181,8 +193,32 @@ export const ROW1 = {
   eggValue: { x: 230, y: HUD_Y + 30 },
   migrationLabel: { x: 320, y: HUD_Y + 26 },
   migrationValue: { x: 320, y: HUD_Y + 50 },
-  send: { x: 444, y: HUD_Y + 11, w: 164, h: 82 },
-  speed: { x: 622, y: HUD_Y + 11, w: 82, h: 82 },
+  send: { x: 444, y: HUD_Y + 11, w: MIN_HIT, h: MIN_HIT },
+  pause: { x: 533, y: HUD_Y + 11, w: MIN_HIT, h: MIN_HIT },
+  speed: { x: 622, y: HUD_Y + 11, w: MIN_HIT, h: MIN_HIT },
+} as const;
+
+/**
+ * Where each variable-length row-1 field is wrapped: at the origin of
+ * whatever sits to its right.
+ *
+ * Section 4 of `docs/01-art-hud-and-audio.md` measures the widest value of
+ * each field and shows it clearing its neighbour — meat's `9999` ends at
+ * 148 against the egg icon at 192. That measurement is the design, and
+ * these are the enforcement: a wrap of `W` means no line of the field can
+ * be wider than `W`, so its right edge cannot pass `x + W` whatever the
+ * string turns out to be. Without them row 1 is five variable fields on
+ * 720px that over-subscribe themselves *silently* — the HUD draws two
+ * strings on top of each other rather than failing — and the failure
+ * arrives on a content edit nobody connects to the HUD.
+ *
+ * Wrapping rather than clipping or shrinking is deliberate: a wrapped
+ * count is ugly and visible, which is what sends somebody back here.
+ */
+export const ROW1_WRAP = {
+  meat: ROW1.eggIcon.x - ROW1.meatValue.x, // 132
+  eggs: ROW1.migrationLabel.x - ROW1.eggValue.x, // 90
+  migration: ROW1.send.x - ROW1.migrationValue.x, // 124
 } as const;
 
 /**
@@ -196,7 +232,26 @@ export const ROW2 = {
   h: 40,
   chip: { x: GUTTER, y: HUD_Y + 102, w: 28, h: 28 },
   text: { x: GUTTER + 36, y: HUD_Y + 105 },
+  /**
+   * The archetype and kind, dim and right-aligned to the content edge, as
+   * section 4 specifies. Anchored to the right rather than placed after
+   * the line to its left, because both strings are variable: `text` is a
+   * count and a genus and this is `regenerator · longneck` at its widest.
+   * Two variable fields facing each other need two fixed edges and a wrap
+   * each, which is what `w` and `ROW2.textWrap` are.
+   *
+   * `y` is 2px below `text`'s so the two baselines line up: this is
+   * `TYPE.label` against `TYPE.body` and the sizes differ by 3.
+   */
+  meta: { right: CONTENT_RIGHT, y: HUD_Y + 107, w: 232 },
 } as const;
+
+/**
+ * The migration line's own wrap: everything between its origin and the
+ * meta block's left edge, less a 12px gutter. Same reason as
+ * `ROW1_WRAP` — the strings are content, so the bound has to be geometry.
+ */
+export const ROW2_TEXT_WRAP = ROW2.meta.right - ROW2.meta.w - 12 - ROW2.text.x; // 412
 
 /**
  * Row 3, the tray. One tray at a time: the six hatchlings while nothing is
@@ -210,6 +265,21 @@ export const ROW3 = {
   h: 136,
   /** Six kind buttons: (688 - 5*6) / 6 = 109.6, floored. */
   kindButton: { y: HUD_Y + 144, w: 109, h: 120, gap: 6 },
+  /**
+   * What is inside a kind card: the silhouette, the kind name, the cost.
+   * All three are offsets from `kindButton.y`, because the card lifts when
+   * it is selected and a lifted card has to carry its contents with it.
+   *
+   * 56 and 60 are section 4's selection table — the silhouette is the
+   * third of the three selection channels, and 60/56 is the 1.08 it
+   * specifies. The three `dy` values spend the card's 120px top to bottom:
+   * 10 + 56 of art, the name at 70, the cost at 94, and 94 + `TYPE.label`
+   * is 113, which leaves 7px of bottom margin.
+   */
+  kindArt: { w: 56, h: 56, dy: 10, selectedW: 60 },
+  kindName: { dy: 70 },
+  /** The cost, as a meat pip and a number centred on the card together. */
+  kindCost: { dy: 94, pipR: 5, pipGap: 10 },
   /**
    * The sheet's four lines, all in the same `SHEET_COL_W` column — see
    * that constant for where the number comes from. Four slots and not one
@@ -256,7 +326,20 @@ export const SELECT_BORDER = 3;
  * layout height and puts the message where the eye already is. It hugs the
  * HUD rather than the last grid row, so a short map does not strand it.
  */
-export const TOAST = { x: GUTTER, y: HUD_Y - 76, w: CONTENT_W, h: 56 } as const;
+export const TOAST = {
+  x: GUTTER,
+  y: HUD_Y - 76,
+  w: CONTENT_W,
+  h: 56,
+  /**
+   * The bar down the left edge that a refusal gets and an event does not,
+   * per section 4. 3px is `SELECT_BORDER` — the same weight as every other
+   * mark this HUD makes, so the toast is not a fourth line width.
+   */
+  barW: 3,
+  /** The text inset, clear of the bar. */
+  pad: 16,
+} as const;
 
 /**
  * The results screen, over a scrim with the board still visible behind it.
@@ -272,4 +355,28 @@ export const RESULTS = {
   /** Every dinosaur grown to adult, as its sprite, in a row. */
   pack: { x: GUTTER, y: 680, w: CONTENT_W, h: 180 },
   again: { x: Math.round((CANVAS_W - 328) / 2), y: HUD_Y + 11, w: 328, h: 82 },
+} as const;
+
+/**
+ * The pause menu, centred in the board area with the board still visible
+ * behind its scrim. Three entries — back to the run, start it over, stop
+ * playing it — each `MIN_HIT` tall with 14px between them, which is more
+ * separation than any two controls in the HUD get and is deliberate: the
+ * third entry throws the run away, so this is the one menu in the client
+ * where a mis-tap is unrecoverable.
+ *
+ * `RESULTS.again`'s width and x, not its own 328: the pause menu and the
+ * results screen are the same shape of thing in the same place, and a
+ * player who ends a run from here lands on that screen with the button
+ * under the same thumb. One number, so they cannot drift apart.
+ */
+export const PAUSE_MENU = {
+  title: { y: 328 },
+  sub: { y: 388 },
+  x: RESULTS.again.x,
+  w: RESULTS.again.w,
+  h: MIN_HIT,
+  resume: { y: 432 },
+  restart: { y: 432 + MIN_HIT + 14 },
+  end: { y: 432 + (MIN_HIT + 14) * 2 },
 } as const;

@@ -26,8 +26,9 @@ ports themselves are section 2 of
   how often to call `tick()`, and a pause is it choosing not to. The
   menu's "Restart run" and "End run" abandon the run — written with
   `run: null` because nothing is left to resume, but not counted as
-  finished; section 10 of
-  [docs/00-proposal.md](../../docs/00-proposal.md) says why.
+  finished;
+  [the pause decision](../../docs/decisions/0004-pause-stops-the-clients-clock.md)
+  says why.
 - `src/resume.ts` — `gameForRun()`: reuses `MountOptions.resumed`
   (`LoadOutcome.resumed` from the shell's `loadSave`) instead of replaying
   the run a second time, falling back to `@mazeosaur/sim`'s `replay()` only
@@ -92,19 +93,25 @@ the transitions between them — is section 5 of
 
 `test/profile.test.ts` covers the pure accounting in `src/profile.ts`,
 `test/resume.test.ts` covers the resume-vs-replay decision in
-`src/resume.ts`, and `test/audio.test.ts` covers the `hit`/`kill` cap in
+`src/resume.ts`, `test/audio.test.ts` covers the `hit`/`kill` cap in
 `src/audio.ts` — a cap that silently stopped working would fail no other
 test and would not look wrong in a screenshot, so it is asserted rather
-than listened to. Everything else here is Phaser and has no tests; it is
-checked by driving it (`npm run dev`, then port 5173). Three things have
-produced false conclusions:
+than listened to — and `test/layout.test.ts` covers the HUD's
+*constants*. Everything else here is Phaser: it is checked either by
+driving it (`npm run dev`, then port 5173) or by a browser spec under
+`tests/client`, which is the only thing that can see what the renderer
+actually built — `hud-hit-targets.spec.ts` exists because
+`test/layout.test.ts` was green for the whole period in which every
+control on screen was under the 44pt floor, and nothing compared the two.
+Three things have produced false conclusions:
 
 - **Tap a tray card and check it did not also cancel.** Placement is two
   taps, and a tap on bare HUD clears the selection. The only thing
   keeping a tray card from doing both is the `ev.stopPropagation()` in
-  `button()`, which suppresses the scene-level `pointerdown`. Drop it and
+  `onTap()`, which suppresses the scene-level `pointerdown`. Drop it and
   every card tap selects and immediately deselects, which looks like a
-  card that cannot be selected at all.
+  card that cannot be selected at all. Everything in the HUD that takes a
+  pointer is wired through `onTap()` for exactly that reason.
 - **Wait a frame before screenshotting after an input.** The renderer
   draws on the next animation frame, so a capture in the same instant
   shows the state before the click.
