@@ -1,23 +1,31 @@
 import { expect, test } from "@playwright/test";
+import { CONTENT_W, RESULTS, TYPE } from "@mazeosaur/game/layout";
+import { COLORS } from "@mazeosaur/game/theme";
 import {
+  AGAIN_BUTTON,
   END_RUN_BUTTON,
   PAUSE_BUTTON,
   PAUSE_SCRIM_BARE,
-  PLAY_AGAIN_BUTTON,
   RESTART_RUN_BUTTON,
   RESUME_BUTTON,
   SEND_BUTTON,
+  SPEED_BUTTON,
   airRouteSnapshot,
+  bankedProfile,
   cellCenter,
   clockSnapshot,
   firstFlierMigration,
   openGame,
   paletteButtonCenter,
   replaySnapshot,
+  resultsLineAt,
+  resultsShown,
+  resultsSummary,
   setMigration,
   simSnapshot,
   trackPageErrors,
   waitAFrame,
+  waitForResults,
   waitForTickAdvance,
 } from "./helpers.js";
 
@@ -156,9 +164,14 @@ test("restart from the pause menu starts a fresh run mid-run, not the one it thr
   expect(errors.messages).toEqual([]);
 });
 
-test("ending the run shows the end-of-run screen and leaves nothing to resume", async ({ page }) => {
+test("ending the run lands on results as `abandoned`, and leaves nothing to resume", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
+
+  // Read before the run is thrown away, so the assertion below is "these
+  // two numbers did not move" and not "these two numbers happen to be 0".
+  const banked = await bankedProfile(page);
+  expect(await resultsShown(page)).toBe(false);
 
   await place(page, CELL);
   expect((await simSnapshot(page)).dinos).toBe(1);
@@ -166,21 +179,75 @@ test("ending the run shows the end-of-run screen and leaves nothing to resume", 
   await page.mouse.click(PAUSE_BUTTON.x, PAUSE_BUTTON.y);
   await waitAFrame(page);
   await page.mouse.click(END_RUN_BUTTON.x, END_RUN_BUTTON.y);
-  await waitAFrame(page);
+  await waitForResults(page);
   expect(await clockSnapshot(page)).toMatchObject({ paused: true, abandoned: true });
+
+  // §5.4's third outcome, and the screen it is drawn on: the same
+  // `results` a win and a loss reach, not an overlay of its own.
+  const summary = await resultsSummary(page);
+  expect(summary.outcome).toBe("abandoned");
+  expect(summary.seed).toBe(SEED);
+
+  // **The point of the issue.** Quitting pays nothing: `flush()` tests the
+  // `won` and `lost` phases only, so no fossil award is produced and the
+  // run is not counted as finished. Without that, "End run" is the optimal
+  // way to farm fossils — a balance hole dressed as a kindness.
+  expect(summary.fossilsAwarded).toBe(0);
+  expect(await bankedProfile(page)).toEqual(banked);
+
+  // And what the player is told it was, which is the other half of the same
+  // rule. §9 (ARB-322) gives this outcome its own headline: a quit is not a
+  // defeat, so "The valley is quiet" here would tell someone who walked away
+  // that the nest had fallen — the exact wrong string the `Record<Outcome,
+  // string>` in `ResultsScene` exists to make unreachable.
+  const headline = await resultsLineAt(page, RESULTS.headline.y);
+  expect(headline?.text).toBe("The pack withdraws");
+  // Centred and never wrapped, so a headline wider than the content column
+  // is clipped at the canvas edge rather than reflowed. §9's bound, not its
+  // measured px: the face is whatever this machine resolves `system-ui` to.
+  expect(headline?.width).toBeLessThanOrEqual(CONTENT_W);
+
+  // The zero award says why, quietly: `body` in `textDim` and not `vital` in
+  // checkpoint yellow, because yellow at `vital` is this screen's reward
+  // signal and a zero is not a prize (§9). The size and the colour are the
+  // assertion as much as the words are — keeping the string and dropping the
+  // de-emphasis is the regression this is here for.
+  const award = await resultsLineAt(page, RESULTS.fossils.y);
+  expect(award).toMatchObject({
+    text: "No fossils for an ended run",
+    fontSize: `${TYPE.body}px`,
+    color: COLORS.textDim,
+  });
 
   // An ended run's phase is still `build`, so unlike a win or a loss there
   // is nothing but the stopped clock to keep the board from ticking on
-  // behind the overlay.
+  // behind the results scrim.
   const ended = await replaySnapshot(page);
   await page.waitForTimeout(A_SECOND);
   await waitAFrame(page);
   expect(await replaySnapshot(page)).toEqual(ended);
 
-  // And the scrim swallows the tap, so Send — which is live, in `build`,
-  // directly underneath — cannot take a command on a run that is over.
-  await page.mouse.click(SEND_BUTTON.x, SEND_BUTTON.y);
+  // And the board underneath takes no input, though it is still in `build`
+  // and all of its controls would accept one. `showResults()` pauses the
+  // scene, which takes its input plugin down with it, and `ResultsScene`'s
+  // scrim swallows what is left.
+  //
+  // The speed toggle and Pause, and deliberately **not** Send: §9 puts
+  // `Again` in the HUD band "at the same height Send was, so the thumb does
+  // not move between the run that ended and the next one", and it is 328
+  // wide against row 1's 82 — so `RESULTS.again` spans x 196–524 and Send's
+  // centre at 485 is inside it. A tap there is a tap on Again, which starts
+  // the next run; it proves nothing about the one that ended. The speed
+  // toggle (663) and Pause (533–615) are the two controls clear of it.
+  expect((await clockSnapshot(page)).speed).toBe(1);
+  await page.mouse.click(SPEED_BUTTON.x, SPEED_BUTTON.y);
   await waitAFrame(page);
+  await page.mouse.click(PAUSE_BUTTON.x, PAUSE_BUTTON.y);
+  await waitAFrame(page);
+  // A live board would have doubled the speed and re-raised the menu; a
+  // dead one is still on the results screen at 1x.
+  expect((await clockSnapshot(page)).speed).toBe(1);
+  expect(await resultsShown(page)).toBe(true);
   expect(await replaySnapshot(page)).toEqual(ended);
   expect((await simSnapshot(page)).phase).toBe("build");
 
@@ -203,24 +270,20 @@ test("ending the run shows the end-of-run screen and leaves nothing to resume", 
 });
 
 /**
- * "Play again" on the ended-run overlay, clicked.
+ * "Again" on the results screen a quit lands on, clicked — the second half
+ * of §5.3's loop from the one entrance into it that is not a win or a loss.
  *
- * This is the one `scene.restart()` a finger can still reach — the results
- * screen's "Again" is a `scene.start("board")` from another scene, and
- * `restart-regression.spec.ts` drives `scene.restart()` from the harness
- * rather than through a button. So it is the only place a spec can catch
- * the pair that broke here: `showOverlay`'s button restarts *without*
- * calling `closeOverlay()`, which is only safe because `create()` nulls
- * `overlay` — and `wireInput`'s `pointerdown` returns early whenever that
- * field is set. Drop the reset and every tap on the restarted board is
- * swallowed before `cellAt`, including the pause button's.
- *
- * Which is why the assertions are about **taps landing**, not about the
- * overlay being gone. A board that restarted, reset its sim, and redrew
- * its HUD but takes no input looks entirely correct in a sim snapshot and
- * in a screenshot; it only shows up when something is clicked.
+ * The assertions are about **taps landing**, not about a screen being gone.
+ * `overlay` is a per-run field holding a display object, and `wireInput`'s
+ * `pointerdown` returns early whenever it is set, so a board that came back
+ * without `create()` nulling it restarts, resets its sim and redraws its
+ * HUD while swallowing every tap before `cellAt` — including the pause
+ * button's. That looks entirely correct in a sim snapshot and in a
+ * screenshot; it only shows up when something is clicked. It is the
+ * ARB-312 defect, and the pause menu still sets the field this path leaves
+ * behind, so the reset is still what this spec is guarding.
  */
-test("Play again on the ended-run screen gives back a board that takes a tap", async ({ page }) => {
+test("Again after a quit gives back a board that takes a tap", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 
@@ -230,11 +293,12 @@ test("Play again on the ended-run screen gives back a board that takes a tap", a
   await page.mouse.click(PAUSE_BUTTON.x, PAUSE_BUTTON.y);
   await waitAFrame(page);
   await page.mouse.click(END_RUN_BUTTON.x, END_RUN_BUTTON.y);
-  await waitAFrame(page);
+  await waitForResults(page);
   expect(await clockSnapshot(page)).toMatchObject({ paused: true, abandoned: true });
 
-  await page.mouse.click(PLAY_AGAIN_BUTTON.x, PLAY_AGAIN_BUTTON.y);
+  await page.mouse.click(AGAIN_BUTTON.x, AGAIN_BUTTON.y);
   await waitAFrame(page);
+  expect(await resultsShown(page)).toBe(false);
 
   // A run's opening state, on the same seed: §5.3's "again (same seed)".
   // Not `tick: 0` — the clock is running again by the time this is read,

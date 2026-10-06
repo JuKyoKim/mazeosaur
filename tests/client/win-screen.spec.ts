@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { content } from "@mazeosaur/content";
+import { RESULTS } from "@mazeosaur/game/layout";
 import {
   AGAIN_BUTTON,
   SEND_BUTTON,
   clearActiveMigration,
   openGame,
+  resultsLineAt,
   resultsSummary,
   simSnapshot,
   trackPageErrors,
@@ -49,6 +51,10 @@ test("win screen: clearing the last migration shows it, and Again starts a fresh
   // cannot see.
   await waitForResults(page);
   expect(await resultsSummary(page)).toMatchObject({ outcome: "won", migrationsCleared: content.migrations.length });
+  // The headline itself, which the comment above has always been about:
+  // §9's table gives one line per outcome and this is the only path that
+  // reaches the winning one. The third, `abandoned`, is in `pause.spec.ts`.
+  expect((await resultsLineAt(page, RESULTS.headline.y))?.text).toBe("The nest holds");
 
   await page.mouse.click(AGAIN_BUTTON.x, AGAIN_BUTTON.y);
   await waitAFrame(page);

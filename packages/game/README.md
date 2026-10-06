@@ -29,10 +29,11 @@ ports themselves are section 2 of
   finished;
   [the pause decision](../../docs/decisions/0004-pause-stops-the-clients-clock.md)
   says why. `showResults()` is the single place the
-  `board ──won / lost──▶ results` transition is written, and the order
-  inside it is load-bearing — see the comment there. It is a separate
-  method from the menu's `endRun()` on purpose: a run the player quits is
-  neither won nor lost, so it still ends on the in-board overlay.
+  `board ──won / lost / abandoned──▶ results` transition is written, and
+  the order inside it is load-bearing — see the comment there. All three
+  outcomes go through it, the menu's `endRun()` included: a run the player
+  quits ends on the same screen a won or lost one does, and differs only
+  in what that screen says and in what the run was paid.
 - `src/ResultsScene.ts` — the end-of-run screen (section 9 of
   [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md)): the
   headline, the four statistics, the pack row, and "Again". It owns no

@@ -17,7 +17,6 @@ import {
   CANVAS_W,
   CELL_PX,
   CONTENT_W,
-  ENDED_RUN,
   GUTTER,
   HUD_H,
   HUD_Y,
@@ -46,6 +45,7 @@ import { services } from "./platform.js";
 import { runFinished, runStarted } from "./profile.js";
 import { gameForRun } from "./resume.js";
 import { runSummary } from "./summary.js";
+import type { Outcome } from "./summary.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 /**
@@ -309,14 +309,14 @@ export class BoardScene extends Phaser.Scene {
   private toastUntil!: number;
 
   /**
-   * Whichever overlay is up: the pause menu, or the screen a player who
-   * chose "End run" is left on. One field, because only one is ever up.
+   * The pause menu's container while it is up, null otherwise.
    *
-   * A *won or lost* run no longer appears here — §5.3 sends it to the
-   * `results` scene, which is a scene and not a container. The abandon
-   * path still draws in here because `RunSummary.outcome` is `won | lost`
-   * by §5.4 and quitting is neither; routing it to `results` is a design
-   * question (does quitting pay fossils?) and not a merge decision.
+   * It is the only overlay drawn *inside* this scene. Every way a run ends
+   * — won, lost, and the player's own "End run" — goes to the `results`
+   * scene, which is a scene and not a container (§5.3). The field keeps
+   * its nullable shape and its `create()` reset because the menu is still
+   * per-run state holding a display object, and §5.2 makes no exception
+   * for the last one left.
    */
   private overlay!: Phaser.GameObjects.Container | null;
 
@@ -424,14 +424,17 @@ export class BoardScene extends Phaser.Scene {
     this.cardFlashDefId = null;
     this.cardFlashUntil = 0;
     this.trayCards = [];
-    // `wireInput`'s pointerdown returns early whenever this is set, and the
-    // only "Play again" that reaches it — the one `showOverlay` draws for a
-    // run the *player* ended — calls `scene.restart()` without closing the
-    // overlay first. So this line is what makes the restarted board take a
-    // tap at all; without it the field still points at the container
-    // `shutdown` destroyed, the guard reads it as an overlay that is up, and
-    // neither a cell nor the pause button responds. The two are far apart in
-    // this file and have come unstuck twice.
+    // `wireInput`'s pointerdown returns early whenever this is set, so a
+    // field left pointing at the container `shutdown` destroyed reads as an
+    // overlay that is up, and neither a cell nor the pause button responds
+    // on the restarted board. §5.2's reset rule, and the one field where
+    // skipping it produces a board that looks entirely correct in a sim
+    // snapshot and in a screenshot while taking no input at all.
+    //
+    // Every path that raises the pause menu — the only thing `overlay`
+    // holds now — does close it before leaving. That is not what this line
+    // rests on: the two have come unstuck twice, and the guard above is
+    // what makes the failure silent rather than loud.
     this.overlay = null;
     this.toastUntil = 0;
     // "" is not any migration's key, so the first `refreshPreview` of a
@@ -1324,14 +1327,19 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Hand a won or lost run to `results` (§5.3's `board ──won / lost──▶
-   * results`). Replaces the in-board "Play again" overlay this scene used
-   * to raise for itself.
+   * Hand a run that is over to `results` (§5.3's
+   * `board ──won / lost / abandoned──▶ results`). Replaces the in-board
+   * "Play again" overlay this scene used to raise for itself.
    *
-   * Named `showResults` and not `endRun`, which the pause menu already
-   * owns for the player's own "End run" — two different events that both
-   * finish a run, and §5.4's `outcome` is `won | lost`, so they are not
-   * the same call with a third argument.
+   * All three of §5.4's outcomes come through here, including the player's
+   * own `abandoned`. They differ in what the screen says and in what the
+   * run was paid, never in which screen it lands on: one end-of-run shape
+   * means the second one cannot drift away from it, which is what the
+   * in-board overlay had already started doing — its own geometry, its own
+   * "Play again", and a reset contract only it depended on.
+   *
+   * Still named `showResults` and not `endRun`: the pause menu owns that
+   * name for the gesture, and this is the handoff the gesture ends in.
    *
    * **The order of these two statements is the restart contract.**
    * `flush()` writes a won or lost run with `run: null` and assigns
@@ -1349,7 +1357,7 @@ export class BoardScene extends Phaser.Scene {
    * `doc.run` reason above: `flush()` is where §5.4 pays the run, so
    * `this.fossilsAwarded` is only the award after it has run.
    */
-  private showResults(outcome: "won" | "lost"): void {
+  private showResults(outcome: Outcome): void {
     this.autosave();
     // The toast fades on `playedMs()`, and `scene.pause()` below stops the
     // clock it reads — so whatever was up when the run ended would sit
@@ -1371,26 +1379,28 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * The scrim every overlay sits on, with the board still legible behind
-   * it. Two jobs beyond the dimming:
+   * The scrim the pause menu sits on, with the board still legible behind
+   * it. The only overlay this scene still draws for itself — every
+   * end-of-run screen is `results`, which raises its own. Two jobs beyond
+   * the dimming:
    *
    * It **swallows the tap**. The rectangle is interactive and sits above
    * the HUD in the display list, but Phaser keeps walking the candidates
    * under a pointer unless one of them cancels the event — so without the
    * `stopPropagation` here a tap on the scrim reached the live Send and
-   * speed buttons behind it. Harmless on a won or lost run, whose phase
-   * refuses a `send` anyway; not harmless on an ended run, which is still
-   * in `build` and would have taken the command.
+   * speed buttons behind it. A paused run is still in `build` or
+   * `migration`, so that Send would have taken the command.
    *
-   * And `onTap` is the dismiss gesture. Only the pause menu has one: a
-   * won, lost or ended run has nothing behind the scrim to go back to.
+   * And `onTap` is the dismiss gesture, which is the pause menu's whole
+   * reason for being an overlay rather than a scene: there is a run behind
+   * it to go back to.
    */
-  private scrim(onTap?: () => void): Phaser.GameObjects.Container {
+  private scrim(onTap: () => void): Phaser.GameObjects.Container {
     const c = this.add.container(0, 0);
     const r = this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7).setOrigin(0, 0).setInteractive();
     r.on("pointerdown", (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
-      onTap?.();
+      onTap();
     });
     c.add(r);
     return c;
@@ -1401,20 +1411,6 @@ export class BoardScene extends Phaser.Scene {
     const s = this.game_.state;
     const total = content.migrations.length;
     return `Migration ${Math.min(s.migration + 1, total)}/${total} · ${s.eggs} eggs · ${s.meat} meat`;
-  }
-
-  /** The end-of-run screen: won, lost, or ended by the player. Terminal. */
-  private showOverlay(title: string, sub: string): void {
-    if (this.overlay) return;
-    const c = this.scrim();
-    c.add(this.add.text(CANVAS_W / 2, ENDED_RUN.title.y, title, text(48)).setOrigin(0.5));
-    c.add(this.add.text(CANVAS_W / 2, ENDED_RUN.sub.y, sub, text(22, COLORS.textDim)).setOrigin(0.5));
-    const a = ENDED_RUN.again;
-    // Bare `scene.restart()`: `create()` nulls `overlay` for us, and it has
-    // to, because this callback outlives the container it sits in.
-    const b = this.button(a.x, a.y, a.w, a.h, "Play again", () => this.scene.restart(), 22);
-    c.add([b.bg, b.label]);
-    this.overlay = c;
   }
 
   private closeOverlay(): void {
@@ -1447,12 +1443,12 @@ export class BoardScene extends Phaser.Scene {
     this.playedMsBase += this.time.now - this.sessionStartMs;
 
     const c = this.scrim(() => this.resume());
-    // 48 and 22 are `showOverlay`'s own literals, deliberately repeated
-    // rather than pulled into `TYPE`: the two overlays have to read as one
-    // screen, and 48 is above the four-size scale in `layout.ts` for both
-    // of them. Fixing that is the results-screen recut's (§5.1), which
-    // moves both at once — the same argument `ROW1` just settled for the
-    // HUD, one layer up.
+    // 48 is off the four-size scale in `layout.ts`, and so is the results
+    // screen's own headline at `TYPE.title * 2` = 52. Two headline sizes
+    // for the two screens a run ends on, neither of them named, and 4px
+    // apart: a drift worth settling, but in the results-screen recut
+    // (§5.1), which moves both at once. The same argument `ROW1` settled
+    // for the HUD, one layer up.
     c.add(this.add.text(CANVAS_W / 2, PAUSE_MENU.title.y, "Paused", text(48)).setOrigin(0.5));
     c.add(this.add.text(CANVAS_W / 2, PAUSE_MENU.sub.y, this.runLine(), text(TYPE.body, COLORS.textDim)).setOrigin(0.5));
     const entries = [
@@ -1517,19 +1513,32 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Stop playing. Section 5.1's `results` scene is where this goes once it
-   * exists, and `title` after that; until then the end-of-run overlay the
-   * won and lost paths already draw *is* the results screen, so ending a
-   * run shows that rather than inventing a second shape for it.
+   * Stop playing. Section 5.1's `results` scene, the same one a win and a
+   * loss reach — with `abandoned` as the outcome, so the screen can say
+   * which of the three it is drawing.
    *
-   * `paused` stays true underneath, which is what stops the board ticking
-   * on behind the scrim — an ended run's phase is still `build` or
-   * `migration`, so unlike a win or a loss it has nothing else to stop it.
+   * `closeOverlay()` first and not last: the pause menu is the container
+   * `overlay` is holding right now, and it has to be destroyed before
+   * `results` is launched over the board, or the menu stays drawn under
+   * the new scrim with its own Resume still on screen.
+   *
+   * The award is `showResults`'s to read and nothing here produces one.
+   * `abandonRun()` has already set `abandoned`, and §5.4's payment is
+   * `flush()`'s `accountFinish`, which tests the `won` and `lost` phases
+   * only — so an abandoned run arrives at the screen with `fossilsAwarded`
+   * still 0 and `finishedAccounted` still false, which is the whole of
+   * rule 2 of this path and is asserted from the player's side in
+   * `tests/client/pause.spec.ts`.
+   *
+   * `paused` stays true underneath as well as `scene.pause()`, which
+   * matters here and not on the won/lost paths: an ended run's phase is
+   * still `build` or `migration`, so it has no terminal phase of its own
+   * to stop it if the scene is ever resumed.
    */
   private endRun(): void {
     this.abandonRun();
     this.closeOverlay();
-    this.showOverlay("The run is over", `${this.runLine()}. Nothing to resume.`);
+    this.showResults("abandoned");
   }
 
   // --------------------------------------------------------------- input

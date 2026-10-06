@@ -1,6 +1,6 @@
 import type { ConsoleMessage, Page } from "@playwright/test";
 import type { BoardScene, GameHandle, ResultsScene, RunSummary } from "@mazeosaur/game";
-import { CANVAS_W, CELL_PX, ENDED_RUN, PAUSE_MENU, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
+import { CANVAS_W, CELL_PX, PAUSE_MENU, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
 
 /**
  * Where to click. The board is one canvas with no DOM to query, so driving
@@ -50,24 +50,12 @@ export const HUD_BARE = { x: CANVAS_W / 2, y: ROW2.y + ROW2.h / 2 };
  * `RESULTS.again` is where the renderer gets it too, so this cannot drift
  * from the button actually on screen.
  *
- * A won or lost run goes to `results` now, so this is not the same button
- * as `PLAY_AGAIN_BUTTON` below, which is the one the in-board overlay
- * draws for a run the *player* ended. Both of this constant's callers
- * (`smoke.spec.ts`, `win-screen.spec.ts`) follow the won/lost path.
+ * The only end-of-run button there is. All three of §5.4's outcomes —
+ * won, lost and the player's own `abandoned` — land on `results`, so the
+ * in-board overlay's separate "Play again" and the `ENDED_RUN` geometry it
+ * was drawn from are both gone.
  */
 export const AGAIN_BUTTON = { x: RESULTS.again.x + RESULTS.again.w / 2, y: RESULTS.again.y + RESULTS.again.h / 2 };
-
-/**
- * "Play again" on the in-board overlay a player's own "End run" leaves up,
- * from `ENDED_RUN.again` — the same constant `showOverlay` draws from.
- *
- * It is the one reachable `scene.restart()` left in the package: the
- * results screen's "Again" is a `scene.start("board")` from another scene,
- * and `restartScene()` calls `scene.restart()` from the harness rather
- * than through a button. So a click here is the only test of the restart
- * rule on the path a finger actually takes to it.
- */
-export const PLAY_AGAIN_BUTTON = { x: ENDED_RUN.again.x + ENDED_RUN.again.w / 2, y: ENDED_RUN.again.y + ENDED_RUN.again.h / 2 };
 
 /**
  * The pause menu's three entries, from `PAUSE_MENU` in `layout.ts` like
@@ -467,6 +455,50 @@ export function resultsShown(page: Page): Promise<boolean> {
  */
 export function resultsSummary(page: Page): Promise<RunSummary> {
   return page.evaluate(() => window.mazeosaurResults!().runSummary);
+}
+
+/** One line of text on the results screen, as a spec reads it back. */
+export interface ResultsLine {
+  readonly text: string;
+  readonly y: number;
+  readonly width: number;
+  readonly fontSize: string;
+  readonly color: string;
+}
+
+/**
+ * Every line the results screen is drawing, keyed by nothing: §9 gives each
+ * element a string, a type size and a colour, and all three are read off the
+ * scene here rather than guessed from pixels.
+ *
+ * Colour and size are the point, not decoration. §9's zero-award rule is
+ * about *emphasis* — the same y, the same origin, a smaller type and a dim
+ * colour — so a change that kept the wording and dropped the de-emphasis
+ * would pass a text-only assertion while putting the reward signal back on
+ * the thing the player did not get.
+ */
+export function resultsLines(page: Page): Promise<ResultsLine[]> {
+  return page.evaluate(() => {
+    const scene = window.mazeosaurResults!() as unknown as Phaser.Scene;
+    type T = Phaser.GameObjects.Text;
+    return (scene.children.list as unknown[])
+      .filter((o): o is T => typeof (o as T).text === "string" && typeof (o as T).width === "number")
+      .map((t) => ({
+        text: t.text,
+        y: Math.round(t.y),
+        width: Math.round(t.width),
+        fontSize: String(t.style.fontSize),
+        // Phaser types this as a gradient or a pattern too, which nothing
+        // on this screen uses: `text()` in `theme.ts` only ever sets a CSS
+        // string, so stringifying is the narrowing and not a cast.
+        color: String(t.style.color),
+      }));
+  });
+}
+
+/** The one results line at `y`, which §9's element table makes unique. */
+export async function resultsLineAt(page: Page, y: number): Promise<ResultsLine | undefined> {
+  return (await resultsLines(page)).find((l) => l.y === y);
 }
 
 /** Resolves once the board has handed off and `results` is up. */

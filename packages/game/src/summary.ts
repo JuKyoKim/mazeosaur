@@ -10,8 +10,22 @@ import type { Content, Dino, DinoDef, Kind } from "@mazeosaur/sim";
  * describes it. Building it here, outside the scene, is what keeps it
  * unit-testable without Phaser.
  */
+/**
+ * How a run ended. `abandoned` is the player's own "End run" from the
+ * pause menu, and it is a third value rather than a flag beside `outcome`
+ * or a reuse of `lost`: quitting is a distinct terminal event, and a save
+ * or a replay should be able to tell a run that was beaten from one that
+ * was walked out of.
+ *
+ * It is **not** a *finished* run. `BoardScene.flush()` tests only the
+ * `won` and `lost` phases before paying the fossil award, so an abandoned
+ * run earns 0 and leaves `profile.runsFinished` alone — otherwise "End
+ * run" would be the optimal way to farm fossils.
+ */
+export type Outcome = "won" | "lost" | "abandoned";
+
 export interface RunSummary {
-  readonly outcome: "won" | "lost";
+  readonly outcome: Outcome;
   /**
    * Migrations fully turned back. `state.migration` is the index of the
    * one in progress, which is exactly the count of the ones before it, so
@@ -24,7 +38,8 @@ export interface RunSummary {
   readonly meatUnspent: number;
   /**
    * What this run earned. Computed once, where it was awarded — §5.4. This
-   * run's award only, not `profile.fossilsEarned`'s running total.
+   * run's award only, not `profile.fossilsEarned`'s running total. Always 0
+   * on an `abandoned` run, because nothing pays one; see `Outcome`.
    */
   readonly fossilsAwarded: number;
   /** So the run can be reproduced with `?seed=`. */
@@ -82,7 +97,7 @@ export function packFrom(dinos: readonly Dino[], dinoDef: (d: Dino) => DinoDef):
  * invisible to the player, who sees only one of them.
  */
 export function runSummary(
-  outcome: "won" | "lost",
+  outcome: Outcome,
   state: { readonly migration: number; readonly eggs: number; readonly meat: number; readonly dinos: readonly Dino[] },
   dinoDef: (d: Dino) => DinoDef,
   seed: number,

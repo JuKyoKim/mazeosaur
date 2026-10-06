@@ -380,23 +380,3 @@ export const PAUSE_MENU = {
   restart: { y: 432 + MIN_HIT + 14 },
   end: { y: 432 + (MIN_HIT + 14) * 2 },
 } as const;
-
-/**
- * The screen a player who chose "End run" is left on. Unlike a won or lost
- * run, which §5.3 hands to the `results` scene, this one is a container
- * drawn inside the board — see `BoardScene.overlay` for why quitting has
- * not joined `results` yet — so it is centred on the board area rather than
- * anchored to the HUD band the way `RESULTS.again` is.
- *
- * Here rather than as literals at the draw call because a test has to click
- * that button, and a coordinate written twice agrees only until somebody
- * edits one of the two. `again` is deliberately *not* `MIN_HIT` tall: 64 is
- * what this overlay has always drawn, and widening it is a layout decision
- * for whoever routes the abandon path to `results`, not a side effect of
- * moving the number into this file.
- */
-export const ENDED_RUN = {
-  title: { y: BOARD_H / 2 - 60 },
-  sub: { y: BOARD_H / 2 + 4 },
-  again: { x: CANVAS_W / 2 - 120, y: BOARD_H / 2 + 60, w: 240, h: 64 },
-} as const;

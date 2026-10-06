@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { RESULTS, TYPE } from "@mazeosaur/game/layout";
+import { COLORS, hexCss } from "@mazeosaur/game/theme";
 import {
   AGAIN_BUTTON,
   SEND_BUTTON,
@@ -9,6 +11,7 @@ import {
   loseOnNextLeak,
   openGame,
   paletteButtonCenter,
+  resultsLineAt,
   resultsShown,
   resultsSummary,
   simSnapshot,
@@ -23,17 +26,18 @@ import {
 const SEED = 123;
 
 /**
- * The `board ──won / lost──▶ results ──again──▶ board` loop of §5.3, from
- * the player's side.
+ * The `board ──won / lost / abandoned──▶ results ──again──▶ board` loop of
+ * §5.3, from the player's side.
  *
  * Deliberately **not** `[@baseline]`: lines 6a and 6b of
  * `docs/03-v1-baseline.md` are already carried by `smoke.spec.ts` and
  * `win-screen.spec.ts`, and that set is eight lines by definition. This is
  * the extra coverage the new scene needs, not a ninth line.
  *
- * `win-screen.spec.ts` covers the same seam from a win. This one drives a
- * loss, because the two differ in the headline and in the numbers, and
- * because a loss is the end of a run a player actually reaches.
+ * One edge each: `win-screen.spec.ts` drives the win and `pause.spec.ts`
+ * the player's own quit. This one drives a **loss**, because the three
+ * differ in the headline and in the numbers, and because a loss is the end
+ * of a run a player actually reaches.
  */
 test("results: a lost run lands on the summary, and Again replays the same seed fresh", async ({ page }) => {
   const errors = trackPageErrors(page);
@@ -102,6 +106,45 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
   expect(banked.runsFinished).toBe(1);
   expect(summary.fossilsAwarded).toBe(banked.fossilsEarned);
   expect(summary.fossilsAwarded).toBeGreaterThan(0);
+
+  // A loss has its own headline, and a paid run's award keeps the loud
+  // treatment §9 gives it: `vital` in checkpoint yellow, the one reward on
+  // the screen. This is the control for the zero case below — the point of
+  // ARB-322's rule is the *difference* between the two, so a change that
+  // dimmed every award would have to fail here.
+  expect((await resultsLineAt(page, RESULTS.headline.y))?.text).toBe("The valley is quiet");
+  expect(await resultsLineAt(page, RESULTS.fossils.y)).toMatchObject({
+    text: `+${summary.fossilsAwarded} fossils`,
+    fontSize: `${TYPE.vital}px`,
+    color: hexCss(COLORS.checkpoint),
+  });
+
+  /**
+   * The third of §9's award lines, which a real loss here cannot reach.
+   *
+   * `fossilAward` pays per egg kept, per migration cleared and per meat
+   * unspent, so the zero case on a loss is a player who ends migration 1
+   * with none of the three — `packages/content/test/content.test.ts` pins
+   * that the all-zeros input pays zero, and this run banked meat it never
+   * spent. Rather than contriving a drive for it, the scene is re-entered
+   * with the same summary at an award of 0: `init()` is the whole of this
+   * screen's input (§5.1 — it owns no `Game`), so a `scene.start` with a
+   * `RunSummary` is the same entry the board makes.
+   *
+   * The wording is what is being checked. `No fossils for an ended run`
+   * names **End run**, a button this player never pressed; telling someone
+   * who lost migration 1 that would teach them a rule that does not exist.
+   */
+  await page.evaluate((s) => {
+    window.mazeosaurResults!().scene.start("results", { ...s, fossilsAwarded: 0 });
+  }, summary);
+  await waitForResults(page);
+  expect(await resultsLineAt(page, RESULTS.fossils.y)).toMatchObject({
+    text: "No fossils earned",
+    fontSize: `${TYPE.body}px`,
+    color: COLORS.textDim,
+  });
+  expect((await resultsLineAt(page, RESULTS.headline.y))?.text).toBe("The valley is quiet");
 
   /**
    * And the toast is down. It fades on `playedMs()`, which `scene.pause()`

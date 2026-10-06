@@ -444,6 +444,9 @@ transitions are the natural save points, and the shell decides when to
 - end of a build phase (the migration is about to start)
 - a migration cleared
 - a run won or lost (writes `profile.best`, sets `run` to null)
+- a run the player ends or restarts (sets `run` to null and *not*
+  `profile.best`: section 5.4's `abandoned` is unresumable without being
+  finished, so it earns nothing)
 - a settings change
 - `GameHandle.suspend()` — see section 2
 
@@ -811,14 +814,24 @@ Until then that half is a review item.
 ### 5.3 Transitions
 
 ```
-title ──start / resume──▶ board ──won / lost──▶ results ──▶ title
-                            ▲                                 │
-                            └──────── again (same seed) ──────┘
+title ──start / resume──▶ board ──won / lost / abandoned──▶ results ──▶ title
+                            ▲                                             │
+                            └────────────── again (same seed) ────────────┘
 ```
 
 `board` asks `nextSeed()` for a fresh run and takes the seed from
 `save.run` for a resume. Nothing holds a reference to a scene it is not
 currently in.
+
+**One edge, three outcomes.** The `board ──▶ results` arrow carries every
+one of section 5.4's `outcome` values, the player's own `abandoned`
+included: a run that is over goes to the same screen however it ended, and
+`showResults()` is the only place that transition is written. They differ
+in what the headline says and in what the run was paid, never in where the
+player lands — a second end-of-run shape is a second thing to keep in step
+with the first, and the in-board overlay that used to hold the quit path
+had already grown its own geometry, its own button and a reset contract
+only it depended on.
 
 **Every way into `board` says which way it is.** There are three — a fresh
 run from `title`, a resume from `title`, and *again* from `results` — and
@@ -861,7 +874,7 @@ So the summary carries the award rather than the ingredients for it:
 
 ```ts
 export interface RunSummary {
-  readonly outcome: "won" | "lost";
+  readonly outcome: "won" | "lost" | "abandoned";
   readonly migrationsCleared: number;
   readonly eggsKept: number;
   readonly meatUnspent: number;
@@ -878,6 +891,20 @@ the caller and handed to both. Not a second `fossilAward` call on the
 summary's own numbers: two call sites on the same inputs are two things to
 keep in step for no gain. And not read back out of `profile.best`, which
 is the wrong source because a run that was not a best never appears there.
+
+**`abandoned` is the player's own "End run"**, from the pause menu. It is a
+third outcome rather than a flag beside `outcome` or a reuse of `lost`,
+because a quit is a distinct terminal event and a save or a replay should
+be able to tell a run that was beaten from one that was walked out of.
+
+It reaches the same `results` scene the other two do — one end-of-run
+shape, so a second one cannot drift away from it — and it carries the run's
+own true figures, because the player wants to see how far they got. What it
+does **not** carry is an award. `flush()`'s `accountFinish` tests the `won`
+and `lost` phases only, so an abandoned run arrives with `fossilsAwarded`
+at 0 and leaves `profile.runsFinished` and `profile.best` alone. Section
+1.2's accounting belongs to a run that reached a terminal phase; paying for
+a quit would make "End run" the cheapest way to farm fossils.
 
 ## 6. The review protocol
 
