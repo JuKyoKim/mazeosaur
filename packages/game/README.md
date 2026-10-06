@@ -29,11 +29,20 @@ ports themselves are section 2 of
   finished;
   [the pause decision](../../docs/decisions/0004-pause-stops-the-clients-clock.md)
   says why. `showResults()` is the single place the
-  `board ──won / lost / abandoned──▶ results` transition is written, and
-  the order inside it is load-bearing — see the comment there. All three
-  outcomes go through it, the menu's `endRun()` included: a run the player
-  quits ends on the same screen a won or lost one does, and differs only
-  in what that screen says and in what the run was paid.
+  `board ──won / lost / abandoned──▶ results` transition is written. All
+  three outcomes go through it, the menu's `endRun()` included: a run the
+  player quits ends on the same screen a won or lost one does, and differs
+  only in what that screen says and in what the run was paid. Which run a
+  later `create()` plays comes from `src/entry.ts`'s mode, and from nothing
+  else.
+- `src/entry.ts` — `BoardEntry`: the three ways into `board` (`FRESH`,
+  `RESUME`, `again(seed)`) and `boardEntry()`, which narrows what Phaser
+  handed `init()` and throws on anything else. Section 5.3's contract — the
+  entry intent is data on the transition — so `fresh` and `again` never read
+  the document's run and no caller has to clear it first to avoid resuming
+  by accident. Imports nothing, exported through the package's `./entry`
+  subpath, so the client harness and `title` narrow against the same code
+  the scene does.
 - `src/ResultsScene.ts` — the end-of-run screen (section 9 of
   [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md)): the
   headline, the four statistics, the pack row, and "Again". It owns no

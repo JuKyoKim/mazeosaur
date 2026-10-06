@@ -41,6 +41,7 @@ import { MIGRATION_LABEL, migrationCounter } from "./row1.js";
 import { sheetLines } from "./sheet.js";
 import { COLORS, KIND_COLOR, text, wrapped } from "./theme.js";
 import { SfxBus } from "./audio.js";
+import { again, boardEntry, type BoardEntry } from "./entry.js";
 import { services } from "./platform.js";
 import { runFinished, runStarted } from "./profile.js";
 import { gameForRun } from "./resume.js";
@@ -222,9 +223,20 @@ export class BoardScene extends Phaser.Scene {
   /** `warn-eggs` is "once" per §6, so the crossing is latched. */
   private warnedEggs!: boolean;
 
-  // Persistence. `doc` is the save as loaded, minus `run`, which is
-  // rebuilt from `game_` on every autosave; see `flush()`.
-  private doc!: SaveDocument;
+  /**
+   * Persistence. The save as this scene last wrote it, minus `run`, which
+   * is rebuilt from `game_` on every autosave; see `flush()`.
+   *
+   * The one field here that is not per-run, and the only one assigned in
+   * the constructor: it spans every run this mount plays, because
+   * `profile` accumulates across them (`runsStarted`, `runsFinished`,
+   * `best`). §5.2's rule still holds — it is not initialised at its
+   * declaration, and a re-entry reads what `flush()` left here rather than
+   * the mount's frozen document. The mount's document is this field's
+   * first value and nothing else; there is no second field holding it, so
+   * there is nothing for a re-entry to resurrect.
+   */
+  private doc: SaveDocument;
   private runSeed!: number;
   private startedBy!: BuildStamp;
   private playedMsBase!: number;
@@ -320,13 +332,14 @@ export class BoardScene extends Phaser.Scene {
    */
   private overlay!: Phaser.GameObjects.Container | null;
 
-  // Set once in the constructor, not per-run: whether a later create() is
-  // "Play again" rather than the scene's first create(). Per §5.3 that
-  // transition keeps the same seed instead of drawing a fresh one.
-  private hasStarted: boolean;
+  /**
+   * How this entry into `board` says it got here (§5.3). Assigned in
+   * `init()`, which Phaser runs before `create()` on every start.
+   */
+  private entry!: BoardEntry;
 
   constructor(
-    private readonly initialDoc: SaveDocument,
+    initialDoc: SaveDocument,
     // `LoadOutcome.resumed`: the `Game` the mount-time load's own replay
     // already built, or null. Read and cleared by the first create() --
     // see the comment there -- so a later "Play again" restart can never
@@ -336,7 +349,26 @@ export class BoardScene extends Phaser.Scene {
     private readonly build: BuildStamp,
   ) {
     super("board");
-    this.hasStarted = false;
+    this.doc = initialDoc;
+  }
+
+  /**
+   * §5.3: every way into `board` says which way it is, as data on the
+   * transition. Phaser hands this whatever `scene.start("board", data)` or
+   * `scene.restart(data)` passed, and `mountGame` starts the scene
+   * explicitly so that the very first entry carries its mode too.
+   *
+   * The entry is **consumed**, not merely read. Phaser keeps
+   * `settings.data` from the previous start, so a caller that passed
+   * nothing would silently inherit the last caller's mode — and the mode
+   * it would inherit most often is a mid-run `resume`. Clearing it here
+   * turns §5.3's third-producer hazard into a throw from `boardEntry`
+   * below, at the transition that got it wrong, instead of a board that
+   * quietly hands back a run nobody asked for.
+   */
+  init(data: unknown): void {
+    this.entry = boardEntry(data);
+    this.sys.settings.data = {};
   }
 
   create(): void {
@@ -344,36 +376,29 @@ export class BoardScene extends Phaser.Scene {
     // that refers to a display object or to the previous run must reset
     // here, or the HUD keeps touching destroyed objects.
     //
-    // `initialDoc` is read only once, on the very first create() (the
-    // mount-time load from disk). Every later create() -- an "Again" out
-    // of `results` -- reads `doc` instead, which `flush()` has kept
-    // current with every profile and run update since. Reading
-    // `initialDoc` again on a re-entry would resurrect the run that just
-    // ended (it is frozen at whatever the mount loaded) and discard every
-    // profile change -- `runsStarted`, `runsFinished`, `best` -- that
-    // happened since. `hasStarted` already exists to tell the two apart.
+    // §5.3: the entry mode is the *only* thing that decides whether the
+    // document's run is picked up. `resume` is the one mode that plays a
+    // saved run; `fresh` and `again` ignore `doc.run` whatever it holds, so
+    // no caller has to launder the document before coming in here. That is
+    // the whole point of the mode being data on the transition: the old
+    // shape read `run` unconditionally and depended on every producer
+    // having nulled it first, which is a convention and not a mechanism —
+    // and it was about to acquire a third producer (`title`, whose "New
+    // run" sits on top of exactly the save it must not resume).
     //
-    // §5.1's `results` has landed, so `scene.start("board")` is now the
-    // second way in and this is no longer a single-caller argument. It
-    // still holds, and for a stronger reason than before: the *only*
-    // producer of that second entry is `ResultsScene`, the only way to
-    // reach `ResultsScene` is `showResults()`, which calls `flush()`
-    // -- which assigns `this.doc` with `run: null` synchronously -- before
-    // it starts the scene. So `doc.run` is null on every path that can get
-    // here twice, by construction rather than by a flag. The hazard to
-    // watch is a *third* producer: anything that calls
-    // `scene.start("board")` without having finished a run first would
-    // resume mid-run instead of restarting, which is why `showResults()`
-    // is the one place the transition is written.
-    const base = this.hasStarted ? this.doc : this.initialDoc;
-    const run = base.run;
-    this.doc = { ...base, run: null };
+    // A `resume` whose document has no run falls through to the fresh
+    // branch with a fresh seed. That is not a programmer error: §1.5 drops
+    // an unresumable run at load, so a caller can honestly ask to resume a
+    // document that no longer has anything to resume, and a playable board
+    // is the right answer.
+    const run = this.entry.mode === "resume" ? this.doc.run : null;
+    this.doc = { ...this.doc, run: null };
     // Consumed and cleared in this same block, exactly once: `resumed` is
     // only ever meaningful for the mount-time load's `create()`, and a
     // later "Play again" restart must not receive it a second time even
-    // though by then `run` above is already null anyway (see the restart
-    // note above). Clearing it here, rather than gating it on
-    // `hasStarted`, makes that true by construction.
+    // though by then `run` above is null anyway, because `again` does not
+    // read the document's run at all. Clearing it unconditionally, rather
+    // than per mode, makes that true by construction.
     const resumed = this.resumed;
     this.resumed = null;
     if (run) {
@@ -387,9 +412,12 @@ export class BoardScene extends Phaser.Scene {
       this.startedBy = run.startedBy;
       this.playedMsBase = run.playedMs;
     } else {
-      // §5.3: board draws a fresh seed on the title->board transition, but
-      // every later "again" keeps playing the same seed.
-      this.runSeed = this.hasStarted ? this.runSeed : this.nextSeed();
+      // §5.3: `again` plays the seed it was handed; `fresh` draws one.
+      // The seed rides the transition rather than surviving on this scene,
+      // so nothing in `create()` reads a field the previous run left
+      // behind -- which is §5.2's rule, applied to the one field that used
+      // to be allowed to break it.
+      this.runSeed = this.entry.mode === "again" ? this.entry.seed : this.nextSeed();
       this.game_ = new Game(content, this.runSeed);
       this.startedBy = this.build;
       this.playedMsBase = 0;
@@ -398,7 +426,6 @@ export class BoardScene extends Phaser.Scene {
       // already counted when it first started, in the branch above.
       this.doc = { ...this.doc, profile: runStarted(this.doc.profile) };
     }
-    this.hasStarted = true;
     // §1.2: a won/lost run must be accounted for exactly once, even
     // though `suspend()` keeps calling `flush()` while the terminal
     // phase sits behind the `results` screen. See `flush()`.
@@ -1341,21 +1368,20 @@ export class BoardScene extends Phaser.Scene {
    * Still named `showResults` and not `endRun`: the pause menu owns that
    * name for the gesture, and this is the handoff the gesture ends in.
    *
-   * **The order of these two statements is the restart contract.**
-   * `flush()` writes a won or lost run with `run: null` and assigns
-   * `this.doc` synchronously, before it awaits the store — so by the time
-   * `results` can exist, and therefore long before its `Again` can call
-   * `scene.start("board")`, `doc.run` is already null and the re-entry
-   * falls through `create()`'s resume branch to the fresh-run one. That is
-   * §5.2's "by construction rather than by a flag": the only path into
-   * this scene a second time is through a screen that cannot be reached
-   * until the save that clears `run` has been made.
+   * The `autosave()` below is no longer load-bearing for the re-entry.
+   * It used to be: `create()` read `doc.run` unconditionally, so the only
+   * thing that stopped `Again` resuming the run it had just finished was
+   * that `flush()` had synchronously nulled `doc.run` first. §5.3's entry
+   * mode replaced that ordering argument with a mechanism — `Again` says
+   * `again`, and `again` does not read `doc.run` — so what is left here is
+   * the ordinary reason to save a run that just ended, plus one that has
+   * nothing to do with restarting: `flush()` is where §5.4 pays the run,
+   * so `this.fossilsAwarded` is only the award after it has run, and the
+   * summary below reads it.
    *
    * `autosave()` rather than `flush()` because a storage error must not
    * strand the player on a board whose run is over; the handoff below
-   * happens either way. It still has to come *first*, and not only for the
-   * `doc.run` reason above: `flush()` is where §5.4 pays the run, so
-   * `this.fossilsAwarded` is only the award after it has run.
+   * happens either way.
    */
   private showResults(outcome: Outcome): void {
     this.autosave();
@@ -1498,18 +1524,21 @@ export class BoardScene extends Phaser.Scene {
    * Start this seed over. The clock stays stopped until `create()` clears
    * `paused`, so the abandoned board cannot tick in the frames between.
    *
-   * The discard is not optional. `create()` resumes `doc.run` whenever it
-   * is non-null, and `flush()` has been keeping an in-flight run on `doc`
-   * since the first autosave — so a restart that skipped `abandonRun()`
-   * would hand back the very run it was asked to throw away. The won/lost
-   * path gets this for free, because its own `flush()` already wrote
-   * `run: null` before the overlay offered "Play again"; a mid-run restart
-   * is the first path that does not.
+   * `again` carries the seed (§5.3), so it is this seed that comes back
+   * and not a new one — "Restart run" and not "New run".
+   *
+   * `abandonRun()` is still not optional, but it is no longer what makes
+   * the restart safe: `again` does not read `doc.run` at all, so the run
+   * this throws away cannot come back through `create()` whatever the
+   * document holds. What it is for is the *stored* document — `flush()`
+   * has been keeping an in-flight run on it since the first autosave, and
+   * a tab closed in the frames between here and the next autosave would
+   * otherwise offer to resume a run the player already restarted.
    */
   private restartRun(): void {
     this.abandonRun();
     this.closeOverlay();
-    this.scene.restart();
+    this.scene.restart(again(this.runSeed));
   }
 
   /**

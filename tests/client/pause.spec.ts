@@ -68,11 +68,14 @@ async function place(page: import("@playwright/test").Page, cell: { x: number; y
  * It also carries the restart half of the gap `restart-regression.spec.ts`
  * covers. That spec restarts the scene straight off a page load, where
  * nothing has autosaved yet; the pause menu's "Restart run" is the first
- * path that restarts **mid-run**, with a live run already on `doc` — which
- * `BoardScene.create()` resumes unless the restart discards it first. A
- * restart that skipped the discard would hand back the very run it was
- * asked to throw away, and the two new per-run fields (`paused`,
- * `abandoned`) are state the restart rule now has to reset.
+ * path that restarts **mid-run**, with a live run already on `doc`. That
+ * run coming back used to be the hazard — `create()` read `doc.run`
+ * whenever it was non-null, so the restart was only safe because
+ * `abandonRun()` had nulled it first. §5.3's entry mode is what makes it
+ * safe now: `again` does not read the document's run, so this test asserts
+ * a contract rather than an ordering. The seed still has to survive, and
+ * the two per-run fields (`paused`, `abandoned`) are still state the
+ * restart rule has to reset.
  */
 test("pause stops the clock without the sim knowing, and resume picks the same run back up", async ({ page }) => {
   const errors = trackPageErrors(page);

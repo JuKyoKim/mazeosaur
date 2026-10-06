@@ -1,5 +1,11 @@
 import type { ConsoleMessage, Page } from "@playwright/test";
 import type { BoardScene, GameHandle, ResultsScene, RunSummary } from "@mazeosaur/game";
+// From the subpath, not the package root: this file runs in Node, and
+// `@mazeosaur/game` imports Phaser, which does not. `entry.ts` imports
+// nothing — it is §5.3's contract and three constructors for it — which is
+// what makes it safe to pull into the harness and still be the same code
+// the client narrows against.
+import { again, type BoardEntry } from "@mazeosaur/game/entry";
 import { CANVAS_W, CELL_PX, PAUSE_MENU, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
 
 /**
@@ -437,10 +443,50 @@ export async function waitForRunOver(page: Page, timeoutMs = 45_000): Promise<vo
  * Both re-run `BoardScene.create()`, which is what the regression this
  * guards is about, and the player's path is covered end to end by
  * `results.spec.ts`.
+ *
+ * The harness is the third producer §5.3 warns about, so it says which
+ * entry it means like any other caller: this one is `again` on the seed
+ * already running, which is what the pause menu's "Restart run" passes.
+ * The entry is built here with the game package's own `again()` and handed
+ * into the page as plain data — the same reason the geometry at the top of
+ * this file is imported rather than written out.
  */
 export async function restartScene(page: Page): Promise<void> {
+  const seed = await page.evaluate(() => window.mazeosaurBoard!().sim.seed);
+  await startBoard(page, again(seed), "restart");
+}
+
+/**
+ * Enters `board` with a §5.3 entry the harness chooses, which is the only
+ * way to drive a transition no button reaches yet: `title`'s New run and
+ * Continue are `FRESH` and `RESUME` from a scene that does not exist until
+ * ARB-217 lands, and `board` has to be right about them before it does.
+ *
+ * `how` picks which Phaser call carries it. They are different code paths —
+ * `restart` stops and restarts the scene it is called on, `start` enters it
+ * from somewhere else — and both have to deliver the entry data, so a spec
+ * can ask for either.
+ */
+export async function startBoard(page: Page, entry: BoardEntry, how: "start" | "restart" = "start"): Promise<void> {
+  await page.evaluate(
+    ({ entry, how }) => {
+      const board = window.mazeosaurBoard!();
+      if (how === "restart") board.scene.restart(entry);
+      else board.scene.start("board", entry);
+    },
+    { entry, how },
+  );
+}
+
+/**
+ * Enters `board` with no entry data at all, which is what a producer that
+ * has not read §5.3 does. `BoardScene.init` rejects it, so this is expected
+ * to leave an uncaught error on the page rather than a running board —
+ * drive it last in a spec, and read the error from `trackPageErrors`.
+ */
+export async function startBoardWithNoEntry(page: Page): Promise<void> {
   await page.evaluate(() => {
-    window.mazeosaurBoard!().scene.restart();
+    window.mazeosaurBoard!().scene.start("board");
   });
 }
 
