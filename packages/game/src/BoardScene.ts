@@ -20,10 +20,12 @@ import {
   HUD_Y,
   SELECT_BORDER,
   SELECT_LIFT,
+  SHEET_COL_W,
   colAt,
   gridTop,
   rowAt,
 } from "./layout.js";
+import { sheetLines } from "./sheet.js";
 import { COLORS, KIND_COLOR, text } from "./theme.js";
 import { services } from "./platform.js";
 import { runFinished, runStarted } from "./profile.js";
@@ -176,8 +178,15 @@ export class BoardScene extends Phaser.Scene {
   private paletteButtons!: { def: DinoDef; button: Button; restY: number }[];
   private sendButton!: Button;
   private speedButton!: Button;
+  /**
+   * The sheet's four lines, one Text each. Four and not one string: see
+   * `sheet.ts`. A single line is what ran under Grow and Sell for every
+   * adult with two modifiers.
+   */
   private panelName!: Phaser.GameObjects.Text;
+  private panelKind!: Phaser.GameObjects.Text;
   private panelStats!: Phaser.GameObjects.Text;
+  private panelExtras!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
   private overlay!: Phaser.GameObjects.Container | null;
@@ -690,16 +699,26 @@ export class BoardScene extends Phaser.Scene {
     });
 
     // row 3: status + next migration
-    this.statusText = this.add.text(16, y0 + 132, "", text(18, COLORS.textDim));
-    this.previewText = this.add.text(16, y0 + 160, "", text(18));
+    this.statusText = this.add.text(16, y0 + 126, "", text(18, COLORS.textDim));
+    this.previewText = this.add.text(16, y0 + 152, "", text(18));
 
-    // row 4: selected dino panel
-    const panelY = y0 + 196;
-    this.add.rectangle(8, panelY, CANVAS_W - 16, 68, COLORS.hudPanel).setOrigin(0, 0);
-    this.panelName = this.add.text(20, panelY + 8, "", text(20));
-    this.panelStats = this.add.text(20, panelY + 36, "", text(15, COLORS.textDim));
-    this.growButton = this.button(CANVAS_W - 336, panelY + 8, 190, 52, "Grow", () => this.grow(), 17);
-    this.sellButton = this.button(CANVAS_W - 136, panelY + 8, 120, 52, "Sell", () => this.sell(), 17);
+    // Row 4, the selected dinosaur's sheet. Four text lines, so the panel
+    // is 86px rather than the 68 two lines needed and starts 16px higher;
+    // the status and preview rows above moved up by 6 to pay for it. The
+    // panel still ends inside the HUD: y0 + 180 + 86 = y0 + 266 < HUD_H.
+    const panelY = y0 + 180;
+    this.add.rectangle(8, panelY, CANVAS_W - 16, 86, COLORS.hudPanel).setOrigin(0, 0);
+    // `SHEET_COL_W` on every line, as a hard wrap rather than as a hope:
+    // a content edit that lengthens a line wraps it instead of running it
+    // under the buttons. `tests/client/dino-sheet.spec.ts` asserts no def
+    // in the shipped content actually reaches the wrap.
+    const col = { wordWrap: { width: SHEET_COL_W } };
+    this.panelName = this.add.text(20, panelY + 4, "", { ...text(20), ...col });
+    this.panelKind = this.add.text(20, panelY + 28, "", { ...text(15, COLORS.textDim), ...col });
+    this.panelStats = this.add.text(20, panelY + 46, "", { ...text(15), ...col });
+    this.panelExtras = this.add.text(20, panelY + 64, "", { ...text(15, COLORS.textDim), ...col });
+    this.growButton = this.button(CANVAS_W - 336, panelY + 17, 190, 52, "Grow", () => this.grow(), 17);
+    this.sellButton = this.button(CANVAS_W - 136, panelY + 17, 120, 52, "Sell", () => this.sell(), 17);
     this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
     this.setPanelVisible(false);
     // Nothing is armed at the start of a run, and that is a change from
@@ -713,7 +732,9 @@ export class BoardScene extends Phaser.Scene {
 
   private setPanelVisible(v: boolean): void {
     this.panelName.setVisible(v);
+    this.panelKind.setVisible(v);
     this.panelStats.setVisible(v);
+    this.panelExtras.setVisible(v);
     this.growButton.bg.setVisible(v);
     this.growButton.label.setVisible(v);
     this.sellButton.bg.setVisible(v);
@@ -786,18 +807,11 @@ export class BoardScene extends Phaser.Scene {
       const d = s.dinos.find((x) => x.id === this.selectedDino);
       if (d) {
         const def = g.dinoDef(d);
-        const stage = ["", "hatchling", "juvenile", "adult"][def.stage];
-        this.panelName.setText(`${def.name}  ·  ${def.kind} ${stage}`);
-        const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(1);
-        const extras = [
-          def.splash ? "splash" : "",
-          def.slow ? `slow ${def.slow.percent}%` : "",
-          def.stun ? `stun ${(def.stun.ticks / TICKS_PER_SECOND).toFixed(1)}s` : "",
-          def.targetCount && def.targetCount > 1 ? `${def.targetCount} targets` : "",
-        ].filter(Boolean);
-        this.panelStats.setText(
-          `${def.damage} dmg every ${(def.cooldown / TICKS_PER_SECOND).toFixed(2)}s (${dps}/s) · range ${(def.range / CELL).toFixed(1)} · hits ${def.targets}${extras.length ? " · " + extras.join(", ") : ""}`,
-        );
+        const lines = sheetLines(def);
+        this.panelName.setText(lines.name);
+        this.panelKind.setText(lines.kind);
+        this.panelStats.setText(lines.stats);
+        this.panelExtras.setText(lines.extras);
         const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
         this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "Fully grown").setAlign("center");
         this.growButton.label.setColor(next && s.meat >= next.cost ? COLORS.text : COLORS.textDim);
@@ -1093,6 +1107,28 @@ export class BoardScene extends Phaser.Scene {
    */
   get selection(): { kindId: string | null; dinoId: number | null; preview: { x: number; y: number } | null } {
     return { kindId: this.selectedDef?.id ?? null, dinoId: this.selectedDino, preview: this.hoverCell };
+  }
+
+  /**
+   * The sheet's four lines as the renderer actually laid them out: the
+   * width each one came to, and how many lines the wrap broke it into.
+   *
+   * This exists because the only honest check of "the text fits" is the
+   * measured one. The content is data, the font is the platform's, and the
+   * string lengths are not knowable from the layout constants — so the
+   * guard against a content edit pushing a line under the Grow button has
+   * to read real metrics out of a running client, which is what
+   * `tests/client/dino-sheet.spec.ts` does with this.
+   */
+  get sheetWidths(): { name: number; kind: number; stats: number; extras: number; lines: number } {
+    const rows = [this.panelName, this.panelKind, this.panelStats, this.panelExtras];
+    return {
+      name: this.panelName.width,
+      kind: this.panelKind.width,
+      stats: this.panelStats.width,
+      extras: this.panelExtras.width,
+      lines: rows.reduce((n, t) => n + t.getWrappedText(t.text).length, 0),
+    };
   }
 
   /**
