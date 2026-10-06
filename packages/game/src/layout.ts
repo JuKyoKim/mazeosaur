@@ -186,6 +186,29 @@ export const ROW1 = {
 } as const;
 
 /**
+ * Where each variable-length row-1 field is wrapped: at the origin of
+ * whatever sits to its right.
+ *
+ * Section 4 of `docs/01-art-hud-and-audio.md` measures the widest value of
+ * each field and shows it clearing its neighbour — meat's `9999` ends at
+ * 148 against the egg icon at 192. That measurement is the design, and
+ * these are the enforcement: a wrap of `W` means no line of the field can
+ * be wider than `W`, so its right edge cannot pass `x + W` whatever the
+ * string turns out to be. Without them row 1 is five variable fields on
+ * 720px that over-subscribe themselves *silently* — the HUD draws two
+ * strings on top of each other rather than failing — and the failure
+ * arrives on a content edit nobody connects to the HUD.
+ *
+ * Wrapping rather than clipping or shrinking is deliberate: a wrapped
+ * count is ugly and visible, which is what sends somebody back here.
+ */
+export const ROW1_WRAP = {
+  meat: ROW1.eggIcon.x - ROW1.meatValue.x, // 132
+  eggs: ROW1.migrationLabel.x - ROW1.eggValue.x, // 90
+  migration: ROW1.send.x - ROW1.migrationValue.x, // 124
+} as const;
+
+/**
  * Row 2, the next migration. One line, and the only place the kind chart is
  * ever shown mid-run: a kind chip whose hue and silhouette say what is
  * coming, then the archetype name and count. Information only, never
@@ -196,7 +219,26 @@ export const ROW2 = {
   h: 40,
   chip: { x: GUTTER, y: HUD_Y + 102, w: 28, h: 28 },
   text: { x: GUTTER + 36, y: HUD_Y + 105 },
+  /**
+   * The archetype and kind, dim and right-aligned to the content edge, as
+   * section 4 specifies. Anchored to the right rather than placed after
+   * the line to its left, because both strings are variable: `text` is a
+   * count and a genus and this is `regenerator · longneck` at its widest.
+   * Two variable fields facing each other need two fixed edges and a wrap
+   * each, which is what `w` and `ROW2.textWrap` are.
+   *
+   * `y` is 2px below `text`'s so the two baselines line up: this is
+   * `TYPE.label` against `TYPE.body` and the sizes differ by 3.
+   */
+  meta: { right: CONTENT_RIGHT, y: HUD_Y + 107, w: 232 },
 } as const;
+
+/**
+ * The migration line's own wrap: everything between its origin and the
+ * meta block's left edge, less a 12px gutter. Same reason as
+ * `ROW1_WRAP` — the strings are content, so the bound has to be geometry.
+ */
+export const ROW2_TEXT_WRAP = ROW2.meta.right - ROW2.meta.w - 12 - ROW2.text.x; // 412
 
 /**
  * Row 3, the tray. One tray at a time: the six hatchlings while nothing is
@@ -210,6 +252,21 @@ export const ROW3 = {
   h: 136,
   /** Six kind buttons: (688 - 5*6) / 6 = 109.6, floored. */
   kindButton: { y: HUD_Y + 144, w: 109, h: 120, gap: 6 },
+  /**
+   * What is inside a kind card: the silhouette, the kind name, the cost.
+   * All three are offsets from `kindButton.y`, because the card lifts when
+   * it is selected and a lifted card has to carry its contents with it.
+   *
+   * 56 and 60 are section 4's selection table — the silhouette is the
+   * third of the three selection channels, and 60/56 is the 1.08 it
+   * specifies. The three `dy` values spend the card's 120px top to bottom:
+   * 10 + 56 of art, the name at 70, the cost at 94, and 94 + `TYPE.label`
+   * is 113, which leaves 7px of bottom margin.
+   */
+  kindArt: { w: 56, h: 56, dy: 10, selectedW: 60 },
+  kindName: { dy: 70 },
+  /** The cost, as a meat pip and a number centred on the card together. */
+  kindCost: { dy: 94, pipR: 5, pipGap: 10 },
   /**
    * The sheet's four lines, all in the same `SHEET_COL_W` column — see
    * that constant for where the number comes from. Four slots and not one
@@ -256,7 +313,20 @@ export const SELECT_BORDER = 3;
  * layout height and puts the message where the eye already is. It hugs the
  * HUD rather than the last grid row, so a short map does not strand it.
  */
-export const TOAST = { x: GUTTER, y: HUD_Y - 76, w: CONTENT_W, h: 56 } as const;
+export const TOAST = {
+  x: GUTTER,
+  y: HUD_Y - 76,
+  w: CONTENT_W,
+  h: 56,
+  /**
+   * The bar down the left edge that a refusal gets and an event does not,
+   * per section 4. 3px is `SELECT_BORDER` — the same weight as every other
+   * mark this HUD makes, so the toast is not a fourth line width.
+   */
+  barW: 3,
+  /** The text inset, clear of the bar. */
+  pad: 16,
+} as const;
 
 /**
  * The results screen, over a scrim with the board still visible behind it.

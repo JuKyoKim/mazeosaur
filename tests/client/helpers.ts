@@ -1,45 +1,47 @@
 import type { ConsoleMessage, Page } from "@playwright/test";
 import type { BoardScene, GameHandle } from "@mazeosaur/game";
+import { BOARD_H, CANVAS_W, CELL_PX, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
 
 /**
- * Pixel geometry mirrors `packages/game/src/theme.ts` and the HUD layout
- * built in `packages/game/src/BoardScene.ts` (`buildHud`). The board is
- * drawn on a single canvas with no DOM to query, so driving it means
- * clicking the same pixels a finger would; these constants are the one
- * place that math lives so a HUD layout change only breaks one file.
+ * Where to click. The board is one canvas with no DOM to query, so driving
+ * it means clicking the same pixels a finger would — and those pixels come
+ * from `packages/game/src/layout.ts`, imported rather than copied.
+ *
+ * Importing is the point. This file used to write the HUD's geometry out by
+ * hand, which is the same defect ARB-186 fixed in the scene: a number that
+ * exists twice agrees only until somebody edits one of the two. The import
+ * resolves through the workspace symlink to a real path inside the repo, so
+ * Playwright transforms it like any other spec file — `dino-sheet.spec.ts`
+ * has imported `SHEET_COL_W` the same way since ARB-84.
  */
-export const CELL_PX = 36;
-export const CANVAS_W = 720;
-const BOARD_H = 28 * CELL_PX; // content.valley.height * CELL_PX
-const HUD_Y = BOARD_H;
+export { CANVAS_W, CELL_PX };
 
 export function cellCenter(x: number, y: number): { x: number; y: number } {
   return { x: x * CELL_PX + CELL_PX / 2, y: y * CELL_PX + CELL_PX / 2 };
 }
 
-/** Center of the Nth palette button (one per hatchling kind), left to right. */
-export function paletteButtonCenter(index: number, kindCount = 6): { x: number; y: number } {
-  const py = HUD_Y + 58;
-  const bw = Math.floor((CANVAS_W - 32 - (kindCount - 1) * 4) / kindCount);
-  return { x: 16 + index * (bw + 4) + bw / 2, y: py + 62 / 2 };
+const center = (b: { x: number; y: number; w: number; h: number }) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+
+/** Center of the Nth kind card in the shop tray, left to right. */
+export function paletteButtonCenter(index: number): { x: number; y: number } {
+  return center({ ...ROW3.kindButton, x: kindButtonX(index) });
 }
 
-export const SEND_BUTTON = { x: 496 + 144 / 2, y: HUD_Y + 8 + 42 / 2 };
-export const SPEED_BUTTON = { x: 648 + 56 / 2, y: HUD_Y + 8 + 42 / 2 };
+export const SEND_BUTTON = center(ROW1.send);
+export const SPEED_BUTTON = center(ROW1.speed);
+export const GROW_BUTTON = center(ROW3.grow);
+export const SELL_BUTTON = center(ROW3.sell);
 
 /**
- * A point in the HUD that is not any control: the status/preview text
- * rows, between the kind buttons (which end at `HUD_Y + 120`) and the
- * dinosaur panel (which starts at `HUD_Y + 180`). Text objects are not
- * interactive, so a tap here reaches the scene's own `pointerdown` — this
- * is the "tap away to cancel" gesture, and the only place on the canvas
- * that is neither a cell nor a button.
+ * A point in the HUD that is not any control: row 2, the migration line.
+ * Nothing in that row takes a pointer — it is information only, which is
+ * why §4 lets it sit under the hit floor — and Text objects are not
+ * interactive, so a tap here reaches the scene's own `pointerdown`. That is
+ * the "tap away to put the dinosaur back" half of cancel, and row 2 is now
+ * the only place on the canvas that is neither a cell nor a control: row 3
+ * is wall-to-wall tray.
  */
-export const HUD_BARE = { x: CANVAS_W / 2, y: HUD_Y + 158 };
-
-const PANEL_Y = HUD_Y + 180;
-export const GROW_BUTTON = { x: CANVAS_W - 336 + 190 / 2, y: PANEL_Y + 17 + 52 / 2 };
-export const SELL_BUTTON = { x: CANVAS_W - 136 + 120 / 2, y: PANEL_Y + 17 + 52 / 2 };
+export const HUD_BARE = { x: CANVAS_W / 2, y: ROW2.y + ROW2.h / 2 };
 
 /** The "Play again" button on the won/lost overlay (`showOverlay`). */
 export const PLAY_AGAIN_BUTTON = { x: CANVAS_W / 2, y: BOARD_H / 2 + 60 + 64 / 2 };
@@ -92,6 +94,17 @@ export async function waitAFrame(page: Page): Promise<void> {
 }
 
 /**
+ * Common tail of a (re)load: wait for the canvas, wait for the board scene
+ * to be mounted inside it, then wait a frame so the first real draw has
+ * happened before anything reads state off it.
+ */
+async function waitForBoardMounted(page: Page): Promise<void> {
+  await page.waitForSelector("canvas");
+  await page.waitForFunction(() => window.mazeosaur?.phaser.scene.keys["board"] !== undefined);
+  await waitAFrame(page);
+}
+
+/**
  * Loads the game pinned to a seed and waits for the first real frame.
  *
  * Two things this has to wait for that a `?seed=` page load does not give
@@ -117,13 +130,39 @@ export async function openGame(page: Page, seed: number): Promise<void> {
     };
   });
   await page.goto(`/?seed=${seed}`);
-  await page.waitForSelector("canvas");
-  await page.waitForFunction(() => window.mazeosaur?.phaser.scene.keys["board"] !== undefined);
+  await waitForBoardMounted(page);
   const actualSeed = await page.evaluate(() => window.mazeosaurBoard!().sim.seed);
   if (actualSeed !== seed) {
     throw new Error(`asked for seed ${seed} but the client is running ${actualSeed}: a stored save resumed instead of a fresh run`);
   }
-  await waitAFrame(page);
+}
+
+/**
+ * Reloads the page the way a player's browser does on a real navigation,
+ * and waits for the board scene to remount. `page.addInitScript` re-runs on
+ * every navigation of the same page, so `window.mazeosaurBoard` is back
+ * without re-installing it.
+ *
+ * Deliberately does not check the seed the way `openGame` does: the point
+ * of this helper is a *resumed* run, which keeps the seed the stored save
+ * was written with regardless of the URL.
+ */
+export async function reloadAndWaitForBoard(page: Page): Promise<void> {
+  await page.reload();
+  await waitForBoardMounted(page);
+}
+
+/**
+ * Calls the same `flush()` that `autosave()` and `GameHandle.suspend()`
+ * call, and awaits its promise. A real reload races `pagehide`'s
+ * fire-and-forget write against the navigation tearing the page down, which
+ * is the right thing for the shell to do but the wrong thing for a
+ * deterministic test to depend on: this flushes the current run
+ * synchronously first, so the reload that follows is a clean test of load
+ * and resume rather than of that race.
+ */
+export async function flushSave(page: Page): Promise<void> {
+  await page.evaluate(() => window.mazeosaurBoard!().flush());
 }
 
 /**
@@ -147,6 +186,15 @@ export function simSnapshot(page: Page): Promise<{ meat: number; eggs: number; d
  */
 export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; dinoId: number | null; preview: { x: number; y: number } | null }> {
   return page.evaluate(() => window.mazeosaurBoard!().selection);
+}
+
+/**
+ * Every HUD control's geometry as the renderer built it
+ * (`BoardScene.hudTargets`), which is the only thing that can tell a
+ * layout constant from the box actually on screen.
+ */
+export function hudTargets(page: Page): Promise<{ name: string; x: number; y: number; w: number; h: number }[]> {
+  return page.evaluate(() => window.mazeosaurBoard!().hudTargets);
 }
 
 /**
@@ -195,9 +243,59 @@ export async function waitForTickAdvance(page: Page, fromTick: number, timeoutMs
   await page.waitForFunction((t) => window.mazeosaurBoard!().sim.state.tick > t, fromTick, { timeout: timeoutMs });
 }
 
-/** Waits for an egg to be lost, i.e. for an invader to reach the nest. */
-export async function waitForEggsBelow(page: Page, eggs: number, timeoutMs = 45_000): Promise<void> {
-  await page.waitForFunction((n) => window.mazeosaurBoard!().sim.state.eggs < n, eggs, { timeout: timeoutMs });
+/**
+ * Drives `BoardScene.advanceTicks(1)` in a tight loop, at CPU speed,
+ * instead of waiting for `update()`'s real-time accumulator
+ * (`this.acc += delta * this.speed`) to deliver enough animation frames to
+ * cover the same ground. That accumulator paces ticks to the browser's
+ * actual frame rate — even at the 3x the "Speed" button offers — so an
+ * invader's walk down the full lane took real wall-clock seconds that grew
+ * or shrank with whatever else was loading the CI runner. That was
+ * ARB-242: the same full-run spec timed out at the 60s Playwright limit on
+ * one run and passed in 53.5s on another, with no gameplay difference
+ * between them.
+ *
+ * `advanceTicks` runs the same per-tick pipeline the update loop runs —
+ * sim tick, then `handleEvents` on whatever drained — so the leak, the
+ * loss and the overlay `handleEvents` raises on it all still come from the
+ * real code path, just not paced by frame delivery. One tick per call
+ * (rather than handing `advanceTicks` the whole `maxTicks` budget up
+ * front) stops as soon as the condition is met instead of running the
+ * rest of the migration for free.
+ */
+async function fastForwardUntil(page: Page, until: "eggsBelow" | "runOver", arg: number, maxTicks: number): Promise<boolean> {
+  return page.evaluate(
+    ({ until, arg, maxTicks }) => {
+      const board = window.mazeosaurBoard!();
+      const reached = () => (until === "eggsBelow" ? board.sim.state.eggs < arg : board.sim.state.phase === "won" || board.sim.state.phase === "lost");
+      let n = 0;
+      while (!reached() && n < maxTicks) {
+        board.advanceTicks(1);
+        n++;
+      }
+      return reached();
+    },
+    { until, arg, maxTicks },
+  );
+}
+
+/**
+ * Fast-forwards until an egg is lost, i.e. until an invader reaches the
+ * nest. See `fastForwardUntil` for why this drives the sim directly
+ * instead of waiting on real time.
+ */
+export async function fastForwardUntilEggsBelow(page: Page, eggs: number, maxTicks = 20_000): Promise<void> {
+  const reached = await fastForwardUntil(page, "eggsBelow", eggs, maxTicks);
+  if (!reached) throw new Error(`eggs did not drop below ${eggs} within ${maxTicks} ticks`);
+}
+
+/**
+ * Fast-forwards until the run ends, won or lost. See `fastForwardUntil`
+ * for why this drives the sim directly instead of waiting on real time.
+ */
+export async function fastForwardUntilRunOver(page: Page, maxTicks = 20_000): Promise<void> {
+  const reached = await fastForwardUntil(page, "runOver", 0, maxTicks);
+  if (!reached) throw new Error(`run did not end within ${maxTicks} ticks`);
 }
 
 /**
@@ -214,6 +312,38 @@ export async function waitForEggsBelow(page: Page, eggs: number, timeoutMs = 45_
 export async function loseOnNextLeak(page: Page): Promise<void> {
   await page.evaluate(() => {
     window.mazeosaurBoard!().sim.state.eggs = 1;
+  });
+}
+
+/**
+ * Points the sim at the last real migration, so the next "Send" follows the
+ * game's only path to `won`: `clearMigration()`, called from inside
+ * `tick()` once a migration's spawn queue and invaders are both empty
+ * (`packages/sim/src/game.ts`). That path matters because it is the one
+ * `BoardScene.update()` actually drains events on — `update()` only calls
+ * `drainEvents()` while `phase` is `"build"` or `"migration"`
+ * (`packages/game/src/BoardScene.ts`), so a `won` set any other way (e.g.
+ * `startMigration` finding no next migration, which real play can never
+ * reach because `clearMigration` already wins first) sets the sim's phase
+ * but leaves the event undrained and the overlay never shows — a trap this
+ * test fell into once. Pair with `clearActiveMigration` after sending,
+ * rather than fighting fifty migrations' worth of real invaders to prove
+ * the win screen, the same way `loseOnNextLeak` doesn't drain all twenty
+ * eggs by hand.
+ */
+export async function winOnNextSend(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const board = window.mazeosaurBoard!();
+    board.sim.state.migration = board.sim.content.migrations.length - 1;
+  });
+}
+
+/** Empties the in-flight migration's spawns, so it clears on the next tick. */
+export async function clearActiveMigration(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const s = window.mazeosaurBoard!().sim.state;
+    s.spawnQueue.length = 0;
+    s.invaders.length = 0;
   });
 }
 

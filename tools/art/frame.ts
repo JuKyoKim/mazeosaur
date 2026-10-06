@@ -55,6 +55,11 @@ function roundRect(x: number, y: number, w: number, h: number, r: number): Shape
   );
 }
 
+/** `s` kept only where it lands inside `box`: `s` minus everything outside. */
+function clip(s: Shape, box: Shape): Shape {
+  return subtract(s, subtract(rect(-9e3, -9e3, 1.8e4, 1.8e4), box));
+}
+
 function ring(cx: number, cy: number, r: number, width: number): Shape {
   return {
     bbox: [cx - r - width, cy - r - width, cx + r + width, cy + r + width],
@@ -524,19 +529,42 @@ const cellTopLeft = (x: number, y: number) => ({ x: x * CELL_PX, y: GRID_TOP + y
 const cellCentre = (x: number, y: number) => ({ x: x * CELL_PX + CELL_PX / 2, y: GRID_TOP + y * CELL_PX + CELL_PX / 2 });
 
 /**
- * A blocked placement. Red is the loud channel and the diagonal hatching is
- * the second one, so the refusal still reads to an eye that cannot see the
- * red at all. The border is a stroke — an expanded shape minus the original
- * — not a fill, or the cell goes solid and hides what is underneath.
+ * §4's refused cell, drawn where the client draws it and with the client's
+ * numbers: `refusal` at 0.45 in the cell inset 3px at radius 6, and over it
+ * 3px stripes of `ink` at alpha 1 on lines of slope -1 stepped 8 across that
+ * square. `BoardScene.hatchCell` is the thing this mirrors.
+ *
+ * **The stripes are `ink`, not `refusal`, and the frame is the place that
+ * matters most.** One hue at two alphas is not a second channel: the bright
+ * spawn, checkpoint and nest markers lift the fill to the stripe's own
+ * luminance and erase the hatching, and those four cells always refuse. §4
+ * carries the measurement. A frame that kept the red-on-red version would
+ * be evidence for a specification nobody shipped — and the frames are what
+ * a reviewer reads to decide whether the spec works.
+ *
+ * **The alpha is not the frame's to choose either.** tools/art/layout.ts
+ * re-exports the client's 36px cell precisely so this plate and the scene
+ * cannot disagree, so a softer stripe here would be the same kind of lie in
+ * a quieter register. There is no border stroke: the client draws none, and
+ * a third red mark is exactly what makes a red-on-red cell look fine.
  */
-function drawBlocked(r: Raster, x: number, y: number): void {
-  const b = cellCentre(x, y);
-  const inner = roundRect(b.x - 16, b.y - 16, 32, 32, 5);
-  r.fill(inner, BOARD.refusal, 0.32);
-  for (let i = -18; i <= 18; i += 7) {
-    r.fill(subtract(taper(b.x + i, b.y - 17, b.x + i + 17, b.y, 1.1), subtract(rect(-9e3, -9e3, 1.8e4, 1.8e4), inner)), BOARD.refusal, 0.85);
+function drawRefusedCell(r: Raster, x0: number, y0: number): void {
+  const size = CELL_PX - 6;
+  const square = rect(x0 + 3, y0 + 3, size, size);
+  r.fill(roundRect(x0 + 3, y0 + 3, size, size, 6), BOARD.refusal, 0.45);
+  // x + y = k, k stepped by 8, each end clamped into the square — the same
+  // walk `hatchCell` does. 3px of stroke is a radius of 1.5 either side, and
+  // the stripes clip to the square the client hands the routine.
+  for (let k = 8; k < size * 2; k += 8) {
+    const a = Math.max(0, k - size);
+    r.fill(clip(taper(x0 + 3 + a, y0 + 3 + k - a, x0 + 3 + k - a, y0 + 3 + a, 1.5), square), BOARD.ink, 1);
   }
-  r.fill(subtract(roundRect(b.x - 18, b.y - 18, 36, 36, 6), inner), BOARD.refusal, 0.95);
+}
+
+/** The refused cell on a live board frame, by cell coordinate. */
+function drawBlocked(r: Raster, x: number, y: number): void {
+  const p = cellTopLeft(x, y);
+  drawRefusedCell(r, p.x, p.y);
 }
 
 /**
@@ -641,11 +669,14 @@ export function effectsPlate(d: Direction): Raster {
         eggIcon(r, c.x - 10, c.y - 46, 20, 24, true);
         break;
       case "blocked":
-        // red is the loud channel; the hatching is the second one, so the
-        // refusal still reads with no colour vision at all
-        r.fill(roundRect(c.x - 17, c.y - 17, 34, 34, 5), BOARD.refusal, 0.4);
-        for (let k = -18; k <= 18; k += 7) r.fill(taper(c.x + k, c.y - 17, c.x + k + 17, c.y, 1.2), BOARD.refusal, 0.9);
-        r.fill(ring(c.x, c.y, 24, 2.5), BOARD.refusal, 0.92);
+        // What is on screen during a refusal, and nothing else: the 250ms
+        // `refusal` cell flash caught mid-fade — `t * 0.6` at t = 0.5 in
+        // BoardScene's `flash` case — under §4's refused-cell preview, which
+        // stays up for as long as the finger's cell stays hovered. No ring:
+        // the ring on a refusal is the tap ring, it is `selection` and it
+        // expands to 54px, so it belongs to no one cell.
+        r.fill(rect(x0 + CELL_PX, y0 + CELL_PX, CELL_PX, CELL_PX), BOARD.refusal, 0.3, 1);
+        drawRefusedCell(r, x0 + CELL_PX, y0 + CELL_PX);
         break;
       case "slow": {
         blitScaled(r, sheet.dino("longneck", 3), c.x, c.y, CELL_PX + 4);

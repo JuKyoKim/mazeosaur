@@ -57,7 +57,7 @@ describe("freshSave", () => {
 });
 
 describe("replay", () => {
-  it("reaches the same hash as the live game it was saved from, mid-migration", () => {
+  it("reaches the same hash as the live game it was saved from, mid-migration [@baseline]", () => {
     const live = playIntoMigration();
     const run = runSaveFrom(live);
     const replayed = replay(fixture, run);
@@ -131,7 +131,7 @@ describe("loadSave", () => {
     }
   });
 
-  it("loads a document with a resumable run mid-migration, dropping nothing", () => {
+  it("loads a document with a resumable run mid-migration, dropping nothing [@baseline]", () => {
     const live = playIntoMigration();
     const doc: SaveDocument = { ...freshSave(BUILD), run: runSaveFrom(live) };
     const outcome = loadSave(JSON.parse(JSON.stringify(doc)), fixture, "node");
@@ -142,7 +142,7 @@ describe("loadSave", () => {
     }
   });
 
-  it("resumed is the replay's own object: same hash and tick as the run it was built from", () => {
+  it("resumed is the replay's own object: same hash and tick as the run it was built from [@baseline]", () => {
     const live = playIntoMigration();
     const doc: SaveDocument = { ...freshSave(BUILD), run: runSaveFrom(live) };
     const outcome = loadSave(JSON.parse(JSON.stringify(doc)), fixture, "node");

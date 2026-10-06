@@ -1,6 +1,7 @@
-import { mountGame, NULL_AUDIO_PORT, NULL_SAVE_STORE, type GameHandle, type PlatformServices } from "@mazeosaur/game";
+import { mountGame, NULL_SAVE_STORE, type GameHandle, type PlatformServices } from "@mazeosaur/game";
 import { content } from "@mazeosaur/content";
 import { freshSave, loadSave, type BuildStamp, type Game, type SaveDocument } from "@mazeosaur/sim";
+import { createWebAudio } from "./audio.js";
 import { IndexedDbSaveStore, moveAsideCorruptSave, readRawSave } from "./save-store.js";
 
 // Set by apps/web/vite.config.ts's `define`. "dev" for any build that
@@ -53,7 +54,10 @@ function startGame(save: SaveDocument, resumed: Game | null, saves: PlatformServ
     parent: "game",
     save,
     resumed,
-    services: { saves, audio: NULL_AUDIO_PORT },
+    // The sink is injected, never imported by the game package (rule 2):
+    // `createWebAudio` is oscillators only, so it fetches nothing, and a
+    // browser that refuses an AudioContext just plays the run silently.
+    services: { saves, audio: createWebAudio() },
     build,
     nextSeed,
   });

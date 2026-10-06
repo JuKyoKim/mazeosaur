@@ -12,7 +12,7 @@ describe("flow field", () => {
     expect(distanceAt(f, g, { x: 4, y: 1 })).toBe(DIAG_COST + 3 * STEP_COST);
   });
 
-  it("routes around a wall and marks sealed cells unreachable", () => {
+  it("routes around a wall and marks sealed cells unreachable [@baseline]", () => {
     const g = new Grid(5, 3);
     // wall down column 2, leaving a gap at the bottom
     g.setBlocked(2, 0, true);
@@ -60,7 +60,7 @@ describe("flow field", () => {
     expect(distanceAt(f, g, { x: 0, y: 0 })).toBe(UNREACHABLE);
   });
 
-  it("nextStep walks a creep to the target along non-increasing distances", () => {
+  it("nextStep walks a creep to the target along non-increasing distances [@baseline]", () => {
     const g = new Grid(8, 8);
     for (let y = 0; y < 7; y++) g.setBlocked(3, y, true); // wall with a gap at the bottom
     const target = { x: 7, y: 0 };

@@ -22,13 +22,19 @@
 		@immutable path /assets/*
 		header @immutable Cache-Control "public, max-age=31536000, immutable"
 
-		@noCache path /index.html /sw.js /manifest.webmanifest
-		header @noCache Cache-Control "no-cache"
-
 		@wasm path *.wasm
 		header @wasm Content-Type "application/wasm"
 
 		try_files {path} /index.html
+
+		# AFTER try_files, on purpose. `path` matches the REQUEST path, and
+		# `route` runs in written order -- so a matcher placed above the
+		# rewrite sees `/`, never `/index.html`, and the shell ships with no
+		# Cache-Control at all. Only the literal /index.html spelling, which
+		# nothing requests, was getting the header.
+		@noCache path /index.html /sw.js /manifest.webmanifest
+		header @noCache Cache-Control "no-cache"
+
 		file_server
 	}
 }

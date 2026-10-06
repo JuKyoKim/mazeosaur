@@ -16,17 +16,28 @@ import {
   CANVAS_H,
   CANVAS_W,
   CELL_PX,
+  CONTENT_W,
+  GUTTER,
   HUD_H,
   HUD_Y,
+  ROW1,
+  ROW1_WRAP,
+  ROW2,
+  ROW2_TEXT_WRAP,
+  ROW3,
   SELECT_BORDER,
   SELECT_LIFT,
   SHEET_COL_W,
+  TOAST,
+  TYPE,
   colAt,
   gridTop,
+  kindButtonX,
   rowAt,
 } from "./layout.js";
 import { sheetLines } from "./sheet.js";
-import { COLORS, KIND_COLOR, text } from "./theme.js";
+import { COLORS, KIND_COLOR, text, wrapped } from "./theme.js";
+import { SfxBus } from "./audio.js";
 import { services } from "./platform.js";
 import { runFinished, runStarted } from "./profile.js";
 import { gameForRun } from "./resume.js";
@@ -59,6 +70,28 @@ const GRID_TOP = gridTop(content.valley.height);
 const TAP_RING_R = 54;
 /** Long enough to be seen leaving, short enough not to trail the finger. */
 const TAP_RING_MS = 120;
+
+/**
+ * The egg count that gets its own warning, per §6 of
+ * `docs/01-art-hud-and-audio.md`. A presentation threshold and not a rule:
+ * nothing in the sim knows it, and changing it changes no outcome.
+ */
+const WARN_EGGS_AT = 3;
+
+/**
+ * What an invader looked like at the top of the current tick. The position is
+ * the interpolation's `from`; `boss` is here because §6 of
+ * `docs/01-art-hud-and-audio.md` gives a boss its own `kill` and `leak`
+ * sound, and by the time the event is drained the sim has already removed
+ * the invader from `state.invaders`, so its archetype is no longer
+ * reachable. Snapshotting it with the position costs nothing: this object is
+ * allocated per invader per tick either way.
+ */
+interface PrevInvader {
+  x: number;
+  y: number;
+  boss: boolean;
+}
 
 /** Distance between the air route's lights along the line, in logical px. */
 const AIR_ROUTE_SPACING = 48;
@@ -97,6 +130,33 @@ interface Button {
   label: Phaser.GameObjects.Text;
 }
 
+/**
+ * Anything a tray card is made of. All three have `setY` and `setVisible`,
+ * which is all a lift and a tray swap need.
+ */
+type CardPart = Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics | Phaser.GameObjects.Text;
+
+/**
+ * One kind's card in the shop tray: the box, the silhouette, the kind name
+ * and the cost. `parts`/`restY` are parallel, and the lift is applied to the
+ * rest position rather than to wherever the part is now — reading the
+ * current y back would make the lift cumulative across frames.
+ */
+interface TrayCard {
+  def: DinoDef;
+  bg: Phaser.GameObjects.Rectangle;
+  art: Phaser.GameObjects.Graphics;
+  cost: Phaser.GameObjects.Text;
+  parts: CardPart[];
+  restY: number[];
+}
+
+/** How long a toast stays, and the fade it leaves on. §4 of the art spec. */
+const TOAST_MS = 1600;
+const TOAST_FADE_MS = 200;
+/** The toast panel's opacity, per §4: the board stays readable behind it. */
+const TOAST_ALPHA = 0.78;
+
 const REFUSAL_TEXT: Record<Refusal, string> = {
   "out-of-bounds": "Off the valley",
   occupied: "Something is already there",
@@ -124,8 +184,19 @@ export class BoardScene extends Phaser.Scene {
   private game_!: Game;
   private acc!: number;
   private speed!: number;
-  private prevPos!: Map<number, { x: number; y: number }>;
+  private prevInvaders!: Map<number, PrevInvader>;
   private effects!: Effect[];
+
+  /**
+   * Section 6's sound table and its limiter. Built fresh here rather than
+   * reset, so a `scene.restart()` cannot inherit a closed limiter and
+   * swallow the next run's first hit — see `audio.ts`. The port comes from
+   * the registry, so on a shell with no audio this is `NULL_AUDIO_PORT` and
+   * every call below is still made and still free.
+   */
+  private sfx!: SfxBus;
+  /** `warn-eggs` is "once" per §6, so the crossing is latched. */
+  private warnedEggs!: boolean;
 
   // Persistence. `doc` is the save as loaded, minus `run`, which is
   // rebuilt from `game_` on every autosave; see `flush()`.
@@ -163,21 +234,25 @@ export class BoardScene extends Phaser.Scene {
   private cardFlashDefId!: string | null;
   private cardFlashUntil!: number;
 
+  /** Row 1. The build timer is a bar and not digits — see `buildRow1`. */
+  private hudGfx!: Phaser.GameObjects.Graphics;
+  private timerBar!: Phaser.GameObjects.Rectangle;
   private meatText!: Phaser.GameObjects.Text;
   private eggsText!: Phaser.GameObjects.Text;
-  private waveText!: Phaser.GameObjects.Text;
-  private timerText!: Phaser.GameObjects.Text;
-  private statusText!: Phaser.GameObjects.Text;
-  private statusUntil!: number;
-  private previewText!: Phaser.GameObjects.Text;
-  /**
-   * `restY` is the card's unselected y. The selected card lifts, so the
-   * rest position has to be remembered rather than read back off the
-   * rectangle — reading it would make the lift cumulative across frames.
-   */
-  private paletteButtons!: { def: DinoDef; button: Button; restY: number }[];
+  private migrationValue!: Phaser.GameObjects.Text;
   private sendButton!: Button;
   private speedButton!: Button;
+
+  /** Row 2, the one line that says what is coming. */
+  private previewChip!: Phaser.GameObjects.Rectangle;
+  private previewText!: Phaser.GameObjects.Text;
+  private previewMeta!: Phaser.GameObjects.Text;
+  /** What row 2 is already showing, so `refreshPreview` can do nothing. */
+  private previewKey!: string;
+
+  /** Row 3's two trays. Exactly one of them is on screen at a time. */
+  private trayCards!: TrayCard[];
+  private sheetPanel!: Phaser.GameObjects.Rectangle;
   /**
    * The sheet's four lines, one Text each. Four and not one string: see
    * `sheet.ts`. A single line is what ran under Grow and Sell for every
@@ -189,6 +264,13 @@ export class BoardScene extends Phaser.Scene {
   private panelExtras!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
+
+  /** The toast, over the board rather than in a HUD row. */
+  private toastPanel!: Phaser.GameObjects.Rectangle;
+  private toastBar!: Phaser.GameObjects.Rectangle;
+  private toastText!: Phaser.GameObjects.Text;
+  private toastUntil!: number;
+
   private overlay!: Phaser.GameObjects.Container | null;
 
   // Set once in the constructor, not per-run: whether a later create() is
@@ -271,17 +353,26 @@ export class BoardScene extends Phaser.Scene {
     this.sessionStartMs = this.time.now;
     this.acc = 0;
     this.speed = 1;
-    this.prevPos = new Map();
+    this.prevInvaders = new Map();
     this.effects = [];
+    // A fresh bus per run, which is the whole of the restart hazard for
+    // audio: no field here holds a display object, but the limiter's
+    // timestamps are per-run state and `this.time.now` does not restart
+    // with the scene.
+    this.sfx = new SfxBus(services(this).audio, () => this.time.now);
+    this.warnedEggs = false;
     this.towersDirty = true;
     this.selectedDef = null;
     this.selectedDino = null;
     this.hoverCell = null;
     this.cardFlashDefId = null;
     this.cardFlashUntil = 0;
-    this.paletteButtons = [];
+    this.trayCards = [];
     this.overlay = null;
-    this.statusUntil = 0;
+    this.toastUntil = 0;
+    // "" is not any migration's key, so the first `refreshPreview` of a
+    // run always rebuilds row 2 rather than trusting the previous run's.
+    this.previewKey = "";
     this.cameras.main.setBackgroundColor(COLORS.bg);
 
     this.staticGfx = this.add.graphics();
@@ -301,13 +392,17 @@ export class BoardScene extends Phaser.Scene {
       this.acc += delta * this.speed;
       let ticks = 0;
       while (this.acc >= TICK_MS && ticks < 20) {
-        this.snapshotPositions();
-        g.tick();
-        this.handleEvents(g.drainEvents());
+        this.tickOnce();
         this.acc -= TICK_MS;
         ticks++;
       }
     }
+    // §6: the two layers cross-fade on phase over 1.2s rather than cut, so
+    // the scene states the phase every frame and `SfxBus` ignores a repeat.
+    // Tracking the transition here instead would mean a second place that
+    // has to agree with `game_.state.phase`.
+    this.sfx.music(g.state.phase === "build" ? "build" : g.state.phase === "migration" ? "migration" : "none");
+
     const alpha = Math.min(1, this.acc / TICK_MS);
     for (const e of this.effects) e.life -= delta;
     this.effects = this.effects.filter((e) => e.life > 0);
@@ -318,10 +413,56 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private snapshotPositions(): void {
-    this.prevPos.clear();
-    for (const inv of this.game_.state.invaders) this.prevPos.set(inv.id, { x: inv.px, y: inv.py });
+    this.prevInvaders.clear();
+    for (const inv of this.game_.state.invaders) {
+      this.prevInvaders.set(inv.id, {
+        x: inv.px,
+        y: inv.py,
+        boss: this.game_.invaderDef(inv).archetype === "boss",
+      });
+    }
   }
 
+  /** One sim tick plus the bookkeeping `update()` runs around it, shared below. */
+  private tickOnce(): void {
+    this.snapshotPositions();
+    this.game_.tick();
+    this.handleEvents(this.game_.drainEvents());
+  }
+
+  /**
+   * Runs exactly `n` ticks through the real per-tick pipeline — the same
+   * `tickOnce()` the update loop calls, so a leak, a loss and the overlay
+   * it raises all still come from the real code path — without waiting on
+   * `update()`'s real-time accumulator to deliver them. That accumulator
+   * paces ticks to the browser's actual frame rate, which is what made the
+   * client-smoke full-run spec's wall-clock budget hostage to CI frame
+   * delivery (ARB-242: the same spec timed out at Playwright's 60s limit on
+   * one run and passed in 53.5s on another, no gameplay difference between
+   * them). For tests and debugging from the console, like `sim` below;
+   * reachable only through `window.mazeosaurBoard`, which the Playwright
+   * harness installs in `openGame` via `addInitScript`, built on top of
+   * `window.mazeosaur`, which the dev build installs and a production
+   * build never does.
+   */
+  advanceTicks(n: number): void {
+    for (let i = 0; i < n && (this.game_.state.phase === "build" || this.game_.state.phase === "migration"); i++) {
+      this.tickOnce();
+    }
+  }
+
+  /**
+   * Draws and sounds what the tick did. §6's table names the event each
+   * sound fires on, and every one of them is taken from the sim's own event
+   * rather than from the command that caused it: the sim decides whether a
+   * placement happened, whether a kill was a boss and whether a send was
+   * early, so reading the answer here keeps the sound honest even when the
+   * command was refused.
+   *
+   * Nothing here branches on whether audio is available. Every sound has a
+   * visual partner in §5.4, so a silent build is the same scene minus the
+   * noise, and `NULL_AUDIO_PORT` makes each of these calls free.
+   */
   private handleEvents(events: GameEvent[]): void {
     const g = this.game_;
     for (const e of events) {
@@ -332,42 +473,82 @@ export class BoardScene extends Phaser.Scene {
           if (!d) break;
           const from = this.cellCenter(d.x, d.y);
           const to = inv ? this.worldFromMilli(inv.px, inv.py) : from;
-          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: KIND_COLOR[g.dinoDef(d).kind], ttl: 120, life: 120 });
+          const hue = KIND_COLOR[g.dinoDef(d).kind];
+          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: hue, ttl: 120, life: 120 });
+          // §6 fires `hit` on *damage dealt*, and a shield eats the whole
+          // attack for `damage: 0` — the ring that draws it is the feedback
+          // there, and a tick that did no damage has no tick to make. This
+          // is the one sound the board can produce hundreds of times a
+          // second, which is what the limiter in `SfxBus` is for.
+          if (e.damage > 0) this.sfx.play("hit", hue);
           break;
         }
         case "killed": {
           const p = this.worldFromMilli(e.at.x, e.at.y);
           this.effects.push({ kind: "kill", x: p.x, y: p.y, color: 0xf39c12, ttl: 300, life: 300 });
+          // The invader is already out of `state.invaders` by now, so the
+          // archetype comes from this tick's snapshot. An invader that both
+          // spawned and died inside one tick is not in it and reads as
+          // ordinary, which no boss can be: a boss has thousands of HP.
+          this.sfx.play(this.prevInvaders.get(e.invaderId)?.boss === true ? "kill-boss" : "kill");
           break;
         }
         case "leaked": {
           const n = this.cellCenter(content.valley.lane.exit.x, content.valley.lane.exit.y);
           this.effects.push({ kind: "leak", x: n.x, y: n.y, color: COLORS.refusal, ttl: 500, life: 500 });
-          this.status(`An invader reached the nest: -${e.eggs} egg${e.eggs > 1 ? "s" : ""}`);
+          this.toast(`An invader reached the nest: -${e.eggs} egg${e.eggs > 1 ? "s" : ""}`, false);
+          this.sfx.play(this.prevInvaders.get(e.invaderId)?.boss === true ? "leak-boss" : "leak");
           break;
         }
         case "migration-started":
-          this.status(e.bonus > 0 ? `Sent early: +${e.bonus} meat` : "The migration begins");
+          // The text is `announceMigration`'s, which names the migration and
+          // folds the early-send bonus into that one line rather than
+          // spending a second message on it. The bonus still decides the
+          // horn: it is the sim's own test for "early", so the sound cannot
+          // disagree with the meat the player was just paid.
+          this.announceMigration(e.bonus);
+          // Both, when the player sent early: the horn is the answer to
+          // their button and the herd call is the migration arriving.
+          if (e.bonus > 0) this.sfx.play("send-early");
+          this.sfx.play("migration-start");
           this.autosave();
           break;
         case "migration-cleared":
-          this.status(`Migration cleared: +${e.bonus} meat`);
+          this.toast(`Migration cleared: +${e.bonus} meat`, false);
+          this.sfx.play("migration-clear");
           this.autosave();
           break;
         case "won":
           this.showOverlay("The nest is safe", `All ${content.migrations.length} migrations turned back with ${g.state.eggs} eggs left.`);
+          this.sfx.play("victory");
           this.autosave();
           break;
         case "lost":
           this.showOverlay("The nest is lost", `Fell on migration ${g.state.migration + 1} of ${content.migrations.length}.`);
+          this.sfx.play("defeat");
           this.autosave();
           break;
         case "placed":
-        case "sold":
+          this.towersDirty = true;
+          this.sfx.play("place", KIND_COLOR[g.dinoDef(e.dino).kind]);
+          break;
         case "grown":
           this.towersDirty = true;
+          this.sfx.play("grow", KIND_COLOR[g.dinoDef(e.dino).kind]);
+          break;
+        case "sold":
+          this.towersDirty = true;
+          this.sfx.play("sell");
           break;
       }
+    }
+    // §6: "eggs drop to 3", once. Checked after the batch rather than inside
+    // the `leaked` case because a boss leak can take the count from 5 to 2
+    // and never pass through 3 — the threshold is the warning, not the
+    // exact number.
+    if (!this.warnedEggs && g.state.eggs <= WARN_EGGS_AT && g.state.phase !== "lost") {
+      this.warnedEggs = true;
+      this.sfx.play("warn-eggs");
     }
   }
 
@@ -599,7 +780,7 @@ export class BoardScene extends Phaser.Scene {
 
     // invaders
     for (const inv of g.state.invaders) {
-      const prev = this.prevPos.get(inv.id);
+      const prev = this.prevInvaders.get(inv.id);
       const px = prev ? prev.x + (inv.px - prev.x) * alpha : inv.px;
       const py = prev ? prev.y + (inv.py - prev.y) * alpha : inv.py;
       const p = this.worldFromMilli(px, py);
@@ -665,62 +846,50 @@ export class BoardScene extends Phaser.Scene {
 
   // ----------------------------------------------------------------- HUD
 
-  private button(x: number, y: number, w: number, h: number, label: string, onClick: () => void, size = 20): Button {
-    const bg = this.add.rectangle(x, y, w, h, COLORS.button).setOrigin(0, 0).setInteractive({ useHandCursor: true });
-    const t = this.add.text(x + w / 2, y + h / 2, label, text(size)).setOrigin(0.5);
-    bg.on("pointerdown", (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+  /**
+   * A tap on a HUD control. `stopPropagation` is what keeps the scene's own
+   * `pointerdown` — the "tap away to cancel" gesture — from also firing, so
+   * every interactive thing in the HUD has to go through here.
+   */
+  private onTap(obj: Phaser.GameObjects.GameObject, onClick: () => void): void {
+    obj.setInteractive({ useHandCursor: true });
+    obj.on("pointerdown", (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
       onClick();
       p.event.preventDefault?.();
     });
+  }
+
+  private button(x: number, y: number, w: number, h: number, label: string, onClick: () => void, size = 20): Button {
+    const bg = this.add.rectangle(x, y, w, h, COLORS.button).setOrigin(0, 0);
+    const t = this.add.text(x + w / 2, y + h / 2, label, text(size)).setOrigin(0.5);
+    this.onTap(bg, onClick);
     return { bg, label: t };
   }
 
+  /**
+   * The HUD is `layout.ts`'s three rows, and every number it draws comes
+   * from there. It used to be four bands of literals in this function, and
+   * all five of its controls were under the 44pt hit floor both platforms
+   * publish — Send and the speed toggle at 22.8pt, the kind cards at
+   * 33.6pt, Grow and Sell at 28.2pt. That was not fixable by nudging the
+   * old layout: the shop (128px) and the sheet (107px) stacked are 235px
+   * into the 136px row 3 has, so **the tray swaps instead of stacking**,
+   * and once it does, the rest of the HUD has to be where `layout.ts` says
+   * it is for the row to be free. The status line left the HUD for the
+   * toast and the timer digits became a bar for the same reason: both were
+   * sitting in space row 2 and row 3 need.
+   */
   private buildHud(): void {
-    const y0 = HUD_Y;
-    this.add.rectangle(0, y0, CANVAS_W, HUD_H, COLORS.hud).setOrigin(0, 0);
+    this.add.rectangle(0, HUD_Y, CANVAS_W, HUD_H, COLORS.hud).setOrigin(0, 0);
+    this.hudGfx = this.add.graphics();
 
-    // row 1: numbers, then send and speed at the right
-    this.meatText = this.add.text(16, y0 + 16, "", text(22, COLORS.meat));
-    this.eggsText = this.add.text(150, y0 + 16, "", text(22, COLORS.eggs));
-    this.waveText = this.add.text(272, y0 + 16, "", text(22));
-    this.timerText = this.add.text(420, y0 + 16, "", text(22, COLORS.textDim));
-    this.sendButton = this.button(496, y0 + 8, 144, 42, "Send", () => this.send(), 19);
-    this.speedButton = this.button(648, y0 + 8, 56, 42, "1x", () => this.cycleSpeed(), 19);
+    this.buildRow1();
+    this.buildRow2();
+    this.buildRow3();
+    this.buildToast();
 
-    // row 2: one button per kind
-    const py = y0 + 58;
-    const bw = Math.floor((CANVAS_W - 32 - (hatchlings.length - 1) * 4) / hatchlings.length);
-    hatchlings.forEach((def, i) => {
-      const b = this.button(16 + i * (bw + 4), py, bw, 62, "", () => this.selectDef(def), 14);
-      b.bg.setFillStyle(KIND_COLOR[def.kind], 0.25);
-      b.label.setText(`${def.name}\n${def.cost} meat`).setAlign("center");
-      this.paletteButtons.push({ def, button: b, restY: py });
-    });
-
-    // row 3: status + next migration
-    this.statusText = this.add.text(16, y0 + 126, "", text(18, COLORS.textDim));
-    this.previewText = this.add.text(16, y0 + 152, "", text(18));
-
-    // Row 4, the selected dinosaur's sheet. Four text lines, so the panel
-    // is 86px rather than the 68 two lines needed and starts 16px higher;
-    // the status and preview rows above moved up by 6 to pay for it. The
-    // panel still ends inside the HUD: y0 + 180 + 86 = y0 + 266 < HUD_H.
-    const panelY = y0 + 180;
-    this.add.rectangle(8, panelY, CANVAS_W - 16, 86, COLORS.hudPanel).setOrigin(0, 0);
-    // `SHEET_COL_W` on every line, as a hard wrap rather than as a hope:
-    // a content edit that lengthens a line wraps it instead of running it
-    // under the buttons. `tests/client/dino-sheet.spec.ts` asserts no def
-    // in the shipped content actually reaches the wrap.
-    const col = { wordWrap: { width: SHEET_COL_W } };
-    this.panelName = this.add.text(20, panelY + 4, "", { ...text(20), ...col });
-    this.panelKind = this.add.text(20, panelY + 28, "", { ...text(15, COLORS.textDim), ...col });
-    this.panelStats = this.add.text(20, panelY + 46, "", { ...text(15), ...col });
-    this.panelExtras = this.add.text(20, panelY + 64, "", { ...text(15, COLORS.textDim), ...col });
-    this.growButton = this.button(CANVAS_W - 336, panelY + 17, 190, 52, "Grow", () => this.grow(), 17);
-    this.sellButton = this.button(CANVAS_W - 136, panelY + 17, 120, 52, "Sell", () => this.sell(), 17);
-    this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
-    this.setPanelVisible(false);
+    this.showSheet(false);
     // Nothing is armed at the start of a run, and that is a change from
     // the drag era, where `selectDef(hatchlings[0])` ran here. Under a
     // drag an armed tray was harmless: you had to press and move to
@@ -730,7 +899,146 @@ export class BoardScene extends Phaser.Scene {
     // a toggle, so the tray reads as a card that cannot be selected.
   }
 
-  private setPanelVisible(v: boolean): void {
+  /**
+   * Row 1: the build timer as a draining bar along the seam, then meat,
+   * eggs, which migration, Send and the speed toggle.
+   *
+   * **The timer shows no digits.** A full-width bar on the boundary between
+   * board and HUD is legible without being read, which is the point — in a
+   * build phase the player is looking at the grid. It is also the early-send
+   * affordance: what is left of the bar *is* the bonus. And the arithmetic
+   * agrees with the design (§4): the band between the migration readout at
+   * 320 and Send at 444 is 124px, of which `MIGRATION` takes 108, so a digit
+   * field does not fit there at any value.
+   */
+  private buildRow1(): void {
+    const bar = ROW1.timerBar;
+    this.add.rectangle(bar.x, bar.y, bar.w, bar.h, COLORS.hudPanel).setOrigin(0, 0);
+    this.timerBar = this.add.rectangle(bar.x, bar.y, bar.w, bar.h, COLORS.buttonActive).setOrigin(0, 0);
+
+    // Meat and eggs are an icon and a count rather than a labelled field:
+    // 214 and 14 are read as shapes. Flat placeholders until the atlas
+    // lands — the sprite drops into the same box.
+    const meat = ROW1.meatIcon;
+    const egg = ROW1.eggIcon;
+    this.hudGfx.fillStyle(COLORS.meatFill, 1);
+    this.hudGfx.fillRoundedRect(meat.x, meat.y, meat.w, meat.h, 8);
+    this.hudGfx.fillStyle(COLORS.eggsFill, 1);
+    this.hudGfx.fillEllipse(egg.x + egg.w / 2, egg.y + egg.h / 2, egg.w, egg.h);
+
+    this.meatText = this.add.text(ROW1.meatValue.x, ROW1.meatValue.y, "", wrapped(TYPE.vital, ROW1_WRAP.meat, COLORS.meat));
+    this.eggsText = this.add.text(ROW1.eggValue.x, ROW1.eggValue.y, "", wrapped(TYPE.vital, ROW1_WRAP.eggs, COLORS.eggs));
+
+    // `label` over `body` at one x, and not one line: `MIGRATION 49 / 50`
+    // on one line runs 61px into Send. Stacking it is why row 1 is 96 tall
+    // rather than the 82 the hit floor alone asks for.
+    this.add.text(ROW1.migrationLabel.x, ROW1.migrationLabel.y, "MIGRATION", text(TYPE.label, COLORS.textDim));
+    this.migrationValue = this.add.text(
+      ROW1.migrationValue.x,
+      ROW1.migrationValue.y,
+      "",
+      wrapped(TYPE.body, ROW1_WRAP.migration),
+    );
+
+    this.sendButton = this.button(ROW1.send.x, ROW1.send.y, ROW1.send.w, ROW1.send.h, "Send", () => this.send(), TYPE.body);
+    this.speedButton = this.button(ROW1.speed.x, ROW1.speed.y, ROW1.speed.w, ROW1.speed.h, "1x", () => this.cycleSpeed(), TYPE.body);
+  }
+
+  /**
+   * Row 2: the one line that says what is coming. A kind chip carries the
+   * hue, then the count and genus, then the archetype and kind dim and
+   * right-aligned. Information only — nothing in this row takes a pointer,
+   * which is the whole reason 40px is allowed to sit under the hit floor.
+   */
+  private buildRow2(): void {
+    this.previewChip = this.add
+      .rectangle(ROW2.chip.x, ROW2.chip.y, ROW2.chip.w, ROW2.chip.h, COLORS.hudPanel)
+      .setOrigin(0, 0);
+    this.previewText = this.add.text(ROW2.text.x, ROW2.text.y, "", wrapped(TYPE.body, ROW2_TEXT_WRAP));
+    // Anchored to the content edge, which is what `setOrigin(1, 0)` buys:
+    // the string is variable and its right edge is not.
+    this.previewMeta = this.add
+      .text(ROW2.meta.right, ROW2.meta.y, "", wrapped(TYPE.label, ROW2.meta.w, COLORS.textDim))
+      .setOrigin(1, 0);
+  }
+
+  /**
+   * Row 3, both trays, built once and swapped by `showSheet`. The shop is
+   * six kind cards; the sheet is four text lines plus Grow and Sell. They
+   * share the 136px row because only one of them is ever on screen, and
+   * that swap is the onboarding too (§8): tapping a dinosaur and watching
+   * the shop become a sheet with a Grow button on it is how a player
+   * discovers growing without being told.
+   */
+  private buildRow3(): void {
+    const kb = ROW3.kindButton;
+    hatchlings.forEach((def, i) => {
+      const x = kindButtonX(i);
+      const cx = x + kb.w / 2;
+      const hue = KIND_COLOR[def.kind];
+
+      const bg = this.add.rectangle(x, kb.y, kb.w, kb.h, hue, 0.22).setOrigin(0, 0);
+      this.onTap(bg, () => this.selectDef(def));
+
+      // The silhouette, as a flat shape in the kind's hue until the atlas
+      // lands. Drawn centred on its own origin so the selected card can
+      // grow it with `setScale` — §4's third selection channel is 56px to
+      // 60px, and a Graphics cannot be resized without being redrawn.
+      const art = this.add.graphics({ x: cx, y: kb.y + ROW3.kindArt.dy + ROW3.kindArt.h / 2 });
+      art.fillStyle(hue, 1);
+      art.fillRoundedRect(-ROW3.kindArt.w / 2, -ROW3.kindArt.h / 2, ROW3.kindArt.w, ROW3.kindArt.h, 10);
+
+      const name = this.add.text(cx, kb.y + ROW3.kindName.dy, def.kind, text(TYPE.label)).setOrigin(0.5, 0);
+
+      // The cost is a meat pip and a number, placed as one object so the
+      // pair reads as a price rather than as two marks.
+      const pip = this.add.graphics({ x: cx - ROW3.kindCost.pipGap - ROW3.kindCost.pipR, y: kb.y + ROW3.kindCost.dy + TYPE.label / 2 });
+      pip.fillStyle(COLORS.meatFill, 1);
+      pip.fillCircle(0, 0, ROW3.kindCost.pipR);
+      const cost = this.add
+        .text(cx + ROW3.kindCost.pipGap, kb.y + ROW3.kindCost.dy, `${def.cost}`, text(TYPE.label, COLORS.meat))
+        .setOrigin(0.5, 0);
+
+      const parts: CardPart[] = [bg, art, name, pip, cost];
+      this.trayCards.push({ def, bg, art, cost, parts, restY: parts.map((p) => p.y) });
+    });
+
+    this.sheetPanel = this.add.rectangle(GUTTER, kb.y, CONTENT_W, kb.h, COLORS.hudPanel).setOrigin(0, 0);
+    // `SHEET_COL_W` on every line, as a hard wrap rather than as a hope:
+    // a content edit that lengthens a line wraps it instead of running it
+    // under the buttons. `tests/client/dino-sheet.spec.ts` asserts no def
+    // in the shipped content actually reaches the wrap.
+    this.panelName = this.add.text(ROW3.sheetName.x, ROW3.sheetName.y, "", wrapped(TYPE.title, SHEET_COL_W));
+    this.panelKind = this.add.text(ROW3.sheetKind.x, ROW3.sheetKind.y, "", wrapped(TYPE.label, SHEET_COL_W, COLORS.textDim));
+    this.panelStats = this.add.text(ROW3.sheetStats.x, ROW3.sheetStats.y, "", wrapped(TYPE.body, SHEET_COL_W));
+    this.panelExtras = this.add.text(ROW3.sheetExtras.x, ROW3.sheetExtras.y, "", wrapped(TYPE.label, SHEET_COL_W, COLORS.textDim));
+    this.growButton = this.button(ROW3.grow.x, ROW3.grow.y, ROW3.grow.w, ROW3.grow.h, "Grow", () => this.grow(), TYPE.label);
+    this.sellButton = this.button(ROW3.sell.x, ROW3.sell.y, ROW3.sell.w, ROW3.sell.h, "Sell", () => this.sell(), TYPE.label);
+    this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
+  }
+
+  /**
+   * The toast sits over the bottom of the board and not in a HUD row: it
+   * costs no layout height and it puts the message where the eye and the
+   * thumb already are. A refusal gets a bar down its left edge; an event
+   * does not.
+   */
+  private buildToast(): void {
+    this.toastPanel = this.add.rectangle(TOAST.x, TOAST.y, TOAST.w, TOAST.h, COLORS.hud).setOrigin(0, 0);
+    this.toastBar = this.add.rectangle(TOAST.x, TOAST.y, TOAST.barW, TOAST.h, COLORS.refusal).setOrigin(0, 0);
+    this.toastText = this.add
+      .text(TOAST.x + TOAST.pad, TOAST.y + TOAST.h / 2, "", wrapped(TYPE.body, TOAST.w - TOAST.pad * 2))
+      .setOrigin(0, 0.5);
+    this.hideToast();
+  }
+
+  /**
+   * Swap the tray. The shop and the sheet are never both on screen — that
+   * is what pays for row 3's hit targets, and it is why this is one call
+   * and not two visibility flags that could disagree.
+   */
+  private showSheet(v: boolean): void {
+    this.sheetPanel.setVisible(v);
     this.panelName.setVisible(v);
     this.panelKind.setVisible(v);
     this.panelStats.setVisible(v);
@@ -739,68 +1047,64 @@ export class BoardScene extends Phaser.Scene {
     this.growButton.label.setVisible(v);
     this.sellButton.bg.setVisible(v);
     this.sellButton.label.setVisible(v);
+    for (const card of this.trayCards) for (const p of card.parts) p.setVisible(!v);
+  }
+
+  private hideToast(): void {
+    this.toastPanel.setVisible(false);
+    this.toastBar.setVisible(false);
+    this.toastText.setVisible(false);
   }
 
   private refreshHud(): void {
     const g = this.game_;
     const s = g.state;
-    this.meatText.setText(`Meat ${s.meat}`);
-    this.eggsText.setText(`Eggs ${s.eggs}`);
+    this.meatText.setText(`${s.meat}`);
+    this.eggsText.setText(`${s.eggs}`);
     const total = content.migrations.length;
-    const shown = Math.min(s.migration + 1, total);
-    this.waveText.setText(`Migration ${shown}/${total}`);
+    this.migrationValue.setText(`${Math.min(s.migration + 1, total)} / ${total}`);
+
+    // The bar drains across the build phase and is the early-send
+    // affordance at the same time: what is left of it *is* the bonus.
+    // `displayWidth` and not a redraw — this runs every frame.
     if (s.phase === "build") {
-      this.timerText.setText(`${Math.ceil(s.buildTimer / TICKS_PER_SECOND)}s`);
+      const frac = Math.max(0, Math.min(1, s.buildTimer / content.rules.buildPhaseTicks));
+      this.timerBar.setVisible(true);
+      this.timerBar.displayWidth = ROW1.timerBar.w * frac;
       const bonus = g.earlySendBonus();
       this.sendButton.label.setText(bonus > 0 ? `Send  +${bonus}` : "Send");
       this.sendButton.bg.setFillStyle(COLORS.buttonActive);
     } else {
-      this.timerText.setText(s.phase === "migration" ? `${s.invaders.length + s.spawnQueue.length} left` : "");
+      this.timerBar.setVisible(false);
       this.sendButton.label.setText("Send");
       this.sendButton.bg.setFillStyle(COLORS.button);
     }
 
-    const m = g.currentMigration();
-    if (m) {
-      const desc = m.groups
-        .map((gr) => {
-          const inv = content.invaders[gr.invader];
-          return inv ? `${gr.count}× ${inv.name} · ${inv.archetype} ${inv.kind}` : gr.invader;
-        })
-        .join(", ");
-      this.previewText.setText(`${s.phase === "migration" ? "Now" : "Next"}: ${m.name} — ${desc}`);
-    } else {
-      this.previewText.setText("");
-    }
-
-    if (this.time.now > this.statusUntil) this.statusText.setText("");
+    this.refreshPreview();
+    this.refreshToast();
 
     // The lit card is the only thing on screen that says what a tap on the
     // board will do. §4 of docs/01-art-hud-and-audio.md specifies three
     // channels and none of them is hue: a SELECT_LIFT px lift, a
-    // SELECT_BORDER px `selection` border, and a larger silhouette. The
-    // card's interior does not change at all, which is deliberate — every
-    // text-on-panel contrast pair in §3's table stays as measured.
-    //
-    // The silhouette channel is the frame generator's; these cards carry a
-    // text label rather than a sprite, so the lift and the border are the
-    // two this scene can draw. Named in `selection-channels` below.
+    // SELECT_BORDER px `selection` border, and a silhouette drawn 1.08
+    // larger. The card's interior colour does not change at all, which is
+    // deliberate — every text-on-panel contrast pair in §3's table stays
+    // as measured.
     //
     // `selectDef` toggles on exactly this condition — see the note there.
-    for (const { def, button, restY } of this.paletteButtons) {
-      const active = this.selectedDef?.id === def.id && this.selectedDino === null;
-      const y = active ? restY - SELECT_LIFT : restY;
-      button.bg.setStrokeStyle(active ? SELECT_BORDER : 0, COLORS.selection);
-      button.bg.setY(y);
-      button.label.setY(y + button.bg.height / 2);
-      button.bg.setFillStyle(KIND_COLOR[def.kind], 0.25);
-      // The cost's own colour says whether this kind is affordable. On a
-      // `no-meat` refusal it flashes `refusal` instead, because that is
-      // where the cause is — see `flashCardCost`.
-      const flashing = this.cardFlashDefId === def.id && this.time.now < this.cardFlashUntil;
-      button.label.setColor(
-        flashing ? COLORS.refusalText : s.meat >= def.cost ? COLORS.text : COLORS.textDim,
-      );
+    for (const card of this.trayCards) {
+      const active = this.selectedDef?.id === card.def.id && this.selectedDino === null;
+      const dy = active ? -SELECT_LIFT : 0;
+      for (let i = 0; i < card.parts.length; i++) card.parts[i]!.setY(card.restY[i]! + dy);
+      card.bg.setStrokeStyle(active ? SELECT_BORDER : 0, COLORS.selection);
+      card.art.setScale(active ? ROW3.kindArt.selectedW / ROW3.kindArt.w : 1);
+      // The cost's own colour says whether this kind is affordable, and the
+      // silhouette stays at full strength either way (§4): an unaffordable
+      // card is still a label, just not yet a purchase. On a `no-meat`
+      // refusal the cost flashes `refusal`, because that is where the cause
+      // is — see `flashCardCost`.
+      const flashing = this.cardFlashDefId === card.def.id && this.time.now < this.cardFlashUntil;
+      card.cost.setColor(flashing ? COLORS.refusalText : s.meat >= card.def.cost ? COLORS.meat : COLORS.textDim);
     }
 
     if (this.selectedDino !== null) {
@@ -820,9 +1124,79 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  private status(msg: string): void {
-    this.statusText.setText(msg);
-    this.statusUntil = this.time.now + 2000;
+  /**
+   * Row 2's line. Rebuilt only when the migration or the phase changes, not
+   * every frame: this runs inside `refreshHud` on the draw path, and the
+   * three strings it would otherwise allocate sixty times a second never
+   * differ between two frames of the same migration.
+   *
+   * The *headline* group and not every group. Row 2 is one 40px line and a
+   * migration can carry several groups, so it names the largest one — the
+   * thing the player has to answer — and counts the rest. The migration's
+   * own name moved to the toast it is announced in, where there is room for
+   * it.
+   */
+  private refreshPreview(): void {
+    const s = this.game_.state;
+    const m = this.game_.currentMigration();
+    const key = m ? `${s.phase}|${s.migration}` : "";
+    if (key === this.previewKey) return;
+    this.previewKey = key;
+    if (!m) {
+      this.previewChip.setVisible(false);
+      this.previewText.setText("");
+      this.previewMeta.setText("");
+      return;
+    }
+    const head = m.groups.reduce((a, b) => (b.count > a.count ? b : a));
+    const inv = content.invaders[head.invader];
+    const rest = m.groups.length - 1;
+    this.previewChip.setVisible(true);
+    this.previewChip.setFillStyle(inv ? KIND_COLOR[inv.kind] : COLORS.hudPanel);
+    this.previewText.setText(
+      `${s.phase === "migration" ? "NOW" : "NEXT"}  ${head.count}× ${inv ? inv.name : head.invader}${rest > 0 ? `  +${rest}` : ""}`,
+    );
+    this.previewMeta.setText(inv ? `${inv.archetype} · ${inv.kind}` : "");
+  }
+
+  /**
+   * The migration-started toast, which carries the migration's name.
+   *
+   * Row 2 gave the name up when it became one line of count-and-genus per
+   * §4, and this is where it belongs instead: the name is flavour, the
+   * toast is the one surface with room for a sentence, and the moment a
+   * migration starts is the moment the sentence is about.
+   */
+  private announceMigration(bonus: number): void {
+    const m = this.game_.currentMigration();
+    const name = m ? m.name : "The migration";
+    this.toast(bonus > 0 ? `${name} — sent early, +${bonus} meat` : name, false);
+  }
+
+  /**
+   * A message over the bottom of the board: 1.6s, then a 200ms fade (§4).
+   * `refusal` is the bar down the left edge, which is the one thing that
+   * separates "you cannot do that" from "this happened".
+   */
+  private toast(msg: string, refusal: boolean): void {
+    this.toastText.setText(msg);
+    this.toastUntil = this.time.now + TOAST_MS + TOAST_FADE_MS;
+    this.toastPanel.setVisible(true);
+    this.toastBar.setVisible(refusal);
+    this.toastText.setVisible(true);
+  }
+
+  /** The fade, driven off the clock rather than a tween, so a restart cannot leave one running. */
+  private refreshToast(): void {
+    const left = this.toastUntil - this.time.now;
+    if (left <= 0) {
+      this.hideToast();
+      return;
+    }
+    const a = Math.min(1, left / TOAST_FADE_MS);
+    this.toastPanel.setAlpha(TOAST_ALPHA * a);
+    this.toastBar.setAlpha(a);
+    this.toastText.setAlpha(a);
   }
 
   private showOverlay(title: string, sub: string): void {
@@ -856,13 +1230,22 @@ export class BoardScene extends Phaser.Scene {
       const cell = this.cellAt(p);
       if (!cell) {
         // Off the board: bare HUD, or off-canvas. A tray card, Send, the
-        // speed toggle, Grow and Sell all stop propagation in `button()`,
+        // speed toggle, Grow and Sell all stop propagation in `onTap`,
         // so this only ever fires for HUD chrome — which makes it the
         // "tap away to put the dinosaur back" half of cancel. It cannot
         // be an empty *cell* instead: an empty cell is always a placement
         // target, which is what the armed card is for.
+        //
+        // It clears *both* selections, and that matters more since row 3
+        // became a swapping tray: an open sheet now hides the shop, so a
+        // gesture that cancelled the card and left the sheet up would be a
+        // cancel that cannot reach the thing the player wants back.
+        // Tapping an empty cell closes the sheet too (§4) — this is the
+        // same idea on the one part of the canvas that is not a cell.
         this.selectedDef = null;
+        this.selectedDino = null;
         this.hoverCell = null;
+        this.showSheet(false);
         return;
       }
       // Every tap on a cell leaves the ring, drawn here — before the sim is
@@ -880,7 +1263,20 @@ export class BoardScene extends Phaser.Scene {
         this.selectedDino = dino.id;
         this.selectedDef = null;
         this.hoverCell = null;
-        this.setPanelVisible(true);
+        // The sheet *is* the tray now, so this call swaps the shop out
+        // rather than revealing a panel beside it.
+        this.showSheet(true);
+        // §6's `select` fires on "a dinosaur is tapped", which is this tap
+        // and not a tray card: the card's own feedback is the lift and the
+        // border, and arming a kind is not yet a thing that happened on the
+        // valley.
+        //
+        // No hue: §6 gives `select` "a short soft tick", and names the kind
+        // only for `place`, `grow` and `hit`. The sink pitches whatever hue
+        // it is handed, so passing one here would pitch a sound the spec
+        // does not pitch. If §6 is amended to want a pitched tick, pass
+        // `KIND_COLOR[this.game_.dinoDef(dino).kind]` and it comes back.
+        this.sfx.play("select");
         return;
       }
       // Drawing the preview under the finger before placing is what makes
@@ -893,7 +1289,7 @@ export class BoardScene extends Phaser.Scene {
         // which is the mutual exclusion above, and is why the old
         // fall-through is gone rather than merely unused.
         this.selectedDino = null;
-        this.setPanelVisible(false);
+        this.showSheet(false);
         return;
       }
       if (this.selectedDef) this.tryPlace(cell.x, cell.y);
@@ -965,8 +1361,13 @@ export class BoardScene extends Phaser.Scene {
     if (r) {
       const c = this.cellCenter(x, y);
       this.effects.push({ kind: "flash", x: c.x, y: c.y, color: COLORS.refusal, ttl: 250, life: 250 });
-      this.status(REFUSAL_TEXT[r]);
+      this.toast(REFUSAL_TEXT[r], true);
       if (r === "no-meat") this.flashCardCost(this.selectedDef.id);
+      // Every refusal, and only a refusal: §6 gives `blocked` "a dry wooden
+      // click, no tone" precisely so it cannot be mistaken for a placement.
+      // `place` is not fired here — it comes from the sim's `placed` event
+      // below, so a sound can never claim a dinosaur the sim refused.
+      this.sfx.play("blocked");
       return;
     }
     // Placed. Spend the selection — the same two fields `selectDef` clears
@@ -1004,12 +1405,12 @@ export class BoardScene extends Phaser.Scene {
     }
     this.selectedDef = def;
     this.selectedDino = null;
-    this.setPanelVisible(false);
+    this.showSheet(false);
   }
 
   private send(): void {
     const r = this.game_.apply({ type: "send" });
-    if (r) this.status(REFUSAL_TEXT[r]);
+    if (r) this.toast(REFUSAL_TEXT[r], true);
   }
 
   private cycleSpeed(): void {
@@ -1020,16 +1421,16 @@ export class BoardScene extends Phaser.Scene {
   private grow(): void {
     if (this.selectedDino === null) return;
     const r = this.game_.apply({ type: "grow", dinoId: this.selectedDino });
-    if (r) this.status(REFUSAL_TEXT[r]);
+    if (r) this.toast(REFUSAL_TEXT[r], true);
   }
 
   private sell(): void {
     if (this.selectedDino === null) return;
     const r = this.game_.apply({ type: "sell", dinoId: this.selectedDino });
-    if (r) this.status(REFUSAL_TEXT[r]);
+    if (r) this.toast(REFUSAL_TEXT[r], true);
     else {
       this.selectedDino = null;
-      this.setPanelVisible(false);
+      this.showSheet(false);
     }
   }
 
@@ -1110,6 +1511,17 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
+   * How many sounds §6's cap threw away this run, for a drive from the
+   * console. The limiter's own behaviour is asserted in
+   * `test/audio.test.ts` against an injected clock; what a browser adds is
+   * the ratio under a real migration, which is the number that says whether
+   * the cap is doing anything at all on this content. Nothing reads it.
+   */
+  get sfxDropped(): number {
+    return this.sfx.dropped;
+  }
+
+  /**
    * The sheet's four lines as the renderer actually laid them out: the
    * width each one came to, and how many lines the wrap broke it into.
    *
@@ -1129,6 +1541,41 @@ export class BoardScene extends Phaser.Scene {
       extras: this.panelExtras.width,
       lines: rows.reduce((n, t) => n + t.getWrappedText(t.text).length, 0),
     };
+  }
+
+  /**
+   * Every control a finger is supposed to be able to hit, as the renderer
+   * actually built it: the live rectangle's position and size, read off the
+   * display object rather than off `layout.ts`.
+   *
+   * The point is the gap between those two things.
+   * `packages/game/test/layout.test.ts` already proves the *constants*
+   * clear the 44pt floor, and they did while every control on screen was
+   * under it — because `buildHud` was writing its own numbers and nothing
+   * compared the two. That is the defect ARB-186 fixed, and this is what
+   * makes it unable to come back quietly:
+   * `tests/client/hud-hit-targets.spec.ts` reads this out of a running
+   * client and measures it.
+   *
+   * Both trays are reported, whichever is on screen: a hidden control still
+   * has its geometry, and the alternative is a test that silently measures
+   * five of the seven.
+   */
+  get hudTargets(): { name: string; x: number; y: number; w: number; h: number }[] {
+    const box = (name: string, r: Phaser.GameObjects.Rectangle) => ({
+      name,
+      x: r.x,
+      y: r.y,
+      w: r.displayWidth,
+      h: r.displayHeight,
+    });
+    return [
+      box("Send", this.sendButton.bg),
+      box("speed toggle", this.speedButton.bg),
+      ...this.trayCards.map((c, i) => box(`kind card ${i}`, c.bg)),
+      box("Grow", this.growButton.bg),
+      box("Sell", this.sellButton.bg),
+    ];
   }
 
   /**
