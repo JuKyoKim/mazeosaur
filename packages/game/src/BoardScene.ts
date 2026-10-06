@@ -1326,9 +1326,9 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Hand a run that is over to `results` (§5.3's `board ──won / lost──▶
-   * results`). Replaces the in-board "Play again" overlay this scene used
-   * to raise for itself.
+   * Hand a run that is over to `results` (§5.3's
+   * `board ──won / lost / abandoned──▶ results`). Replaces the in-board
+   * "Play again" overlay this scene used to raise for itself.
    *
    * All three of §5.4's outcomes come through here, including the player's
    * own `abandoned`. They differ in what the screen says and in what the

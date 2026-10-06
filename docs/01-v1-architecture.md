@@ -444,6 +444,9 @@ transitions are the natural save points, and the shell decides when to
 - end of a build phase (the migration is about to start)
 - a migration cleared
 - a run won or lost (writes `profile.best`, sets `run` to null)
+- a run the player ends or restarts (sets `run` to null and *not*
+  `profile.best`: section 5.4's `abandoned` is unresumable without being
+  finished, so it earns nothing)
 - a settings change
 - `GameHandle.suspend()` — see section 2
 
@@ -811,14 +814,24 @@ Until then that half is a review item.
 ### 5.3 Transitions
 
 ```
-title ──start / resume──▶ board ──won / lost──▶ results ──▶ title
-                            ▲                                 │
-                            └──────── again (same seed) ──────┘
+title ──start / resume──▶ board ──won / lost / abandoned──▶ results ──▶ title
+                            ▲                                             │
+                            └────────────── again (same seed) ────────────┘
 ```
 
 `board` asks `nextSeed()` for a fresh run and takes the seed from
 `save.run` for a resume. Nothing holds a reference to a scene it is not
 currently in.
+
+**One edge, three outcomes.** The `board ──▶ results` arrow carries every
+one of section 5.4's `outcome` values, the player's own `abandoned`
+included: a run that is over goes to the same screen however it ended, and
+`showResults()` is the only place that transition is written. They differ
+in what the headline says and in what the run was paid, never in where the
+player lands — a second end-of-run shape is a second thing to keep in step
+with the first, and the in-board overlay that used to hold the quit path
+had already grown its own geometry, its own button and a reset contract
+only it depended on.
 
 **Every way into `board` says which way it is.** There are three — a fresh
 run from `title`, a resume from `title`, and *again* from `results` — and
