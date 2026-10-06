@@ -39,6 +39,13 @@ ports themselves are section 2 of
   generates [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md)
   cannot disagree with what the client draws. Imports nothing, so it reads
   from Node with no Phaser.
+- `src/audio.ts` — section 6's sound table (`SOUNDS`: `ms`, `ducks`,
+  `minGapMs`) and `SfxBus`, the policy between a scene and `AudioPort`:
+  the `hit`/`kill` cap, the round-robin across hues, and phase-to-music.
+  Pure and Phaser-free, with the clock injected, so the limiter is unit
+  tested without a browser and without waiting in real time. It names
+  sounds and never fetches one; the thing that makes a noise is the
+  shell's, injected as `AudioPort`.
 - `src/sheet.ts` — what the dinosaur sheet says, as four strings: the
   genus, the family and stage, the comparable numbers, the modifiers. Pure
   and Phaser-free, exported through the package's `./sheet` subpath, so the
@@ -79,14 +86,17 @@ the transitions between them — is section 5 of
 
 `test/profile.test.ts` covers the pure accounting in `src/profile.ts`,
 `test/resume.test.ts` covers the resume-vs-replay decision in
-`src/resume.ts`, and `test/layout.test.ts` covers the HUD's *constants*.
-Everything else here is Phaser: it is checked either by driving it
-(`npm run dev`, then port 5173) or by a browser spec under `tests/client`,
-which is the only thing that can see what the renderer actually built —
-`hud-hit-targets.spec.ts` exists because `test/layout.test.ts` was green
-for the whole period in which every control on screen was under the 44pt
-floor, and nothing compared the two. Three things have produced false
-conclusions:
+`src/resume.ts`, `test/audio.test.ts` covers the `hit`/`kill` cap in
+`src/audio.ts` — a cap that silently stopped working would fail no other
+test and would not look wrong in a screenshot, so it is asserted rather
+than listened to — and `test/layout.test.ts` covers the HUD's
+*constants*. Everything else here is Phaser: it is checked either by
+driving it (`npm run dev`, then port 5173) or by a browser spec under
+`tests/client`, which is the only thing that can see what the renderer
+actually built — `hud-hit-targets.spec.ts` exists because
+`test/layout.test.ts` was green for the whole period in which every
+control on screen was under the 44pt floor, and nothing compared the two.
+Three things have produced false conclusions:
 
 - **Tap a tray card and check it did not also cancel.** Placement is two
   taps, and a tap on bare HUD clears the selection. The only thing

@@ -32,7 +32,8 @@ apps/web/           Vite site + web-only network client
 apps/mobile/        Capacitor shell for iOS and Android
 apps/server/        web-only API: saves, leaderboards, replay verification
 tests/client/       Playwright specs that drive the real client in a browser
-docs/               proposals and decisions, numbered
+docs/               proposals and design documents, numbered
+docs/decisions/     one decision per file, NNNN-slug.md
 ```
 
 ## Working on it

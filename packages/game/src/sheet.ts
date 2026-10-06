@@ -6,9 +6,12 @@
 // The *shape* is the design decision and it is load-bearing, so it is
 // written down here rather than inferred from the call site.
 //
-// 1. `name` is the genus alone. It is the collectible, it is the one string
-//    that must never truncate, and `ROW3.sheetName` is 272px because
-//    Argentinosaurus and Rhamphorhynchus are both 15 characters.
+// 1. `name` is the genus alone. It is the collectible and the one string
+//    that must never truncate — Argentinosaurus and Rhamphorhynchus are
+//    both 15 characters, which is why the genus gets a line to itself
+//    rather than sharing one. The column it is given is `SHEET_COL_W`,
+//    which is sized off the modifier line and not off the genus; that
+//    constant says why.
 // 2. `kind` is the family and the growth stage: the six facts the player
 //    learns in one run, and which third of the line they are looking at.
 // 3. `stats` is the two numbers you compare one dinosaur to another with:

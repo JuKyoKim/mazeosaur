@@ -51,3 +51,16 @@ export {
   type PlatformServices,
   type SaveStore,
 } from "./platform.js";
+// Section 6's sound table, for the shell's sink. The table is the game
+// package's because every target must get the same lengths and the same
+// ducking rules out of it; the thing that turns a name into a noise is the
+// shell's, and it is injected (rule 2).
+export {
+  MUSIC_CROSSFADE_MS,
+  SOUNDS,
+  SfxBus,
+  type Ducks,
+  type MusicLayer,
+  type SoundId,
+  type SoundSpec,
+} from "./audio.js";
