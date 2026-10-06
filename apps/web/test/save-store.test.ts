@@ -26,7 +26,7 @@ describe("readRawSave", () => {
 });
 
 describe("IndexedDbSaveStore", () => {
-  it("round-trips a document through put and readRawSave", async () => {
+  it("round-trips a document through put and readRawSave [@baseline]", async () => {
     const store = new IndexedDbSaveStore();
     const doc = freshSave(BUILD);
     await store.put(doc);
@@ -63,7 +63,7 @@ describe("IndexedDbSaveStore", () => {
 });
 
 describe("flushNow", () => {
-  it("writes a coalesced document immediately instead of waiting out COALESCE_MS", async () => {
+  it("writes a coalesced document immediately instead of waiting out COALESCE_MS [@baseline]", async () => {
     const store = new IndexedDbSaveStore();
     const first = freshSave(BUILD);
     await store.put(first);
