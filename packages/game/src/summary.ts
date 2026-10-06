@@ -10,20 +10,6 @@ import type { Content, Dino, DinoDef, Kind } from "@mazeosaur/sim";
  * describes it. Building it here, outside the scene, is what keeps it
  * unit-testable without Phaser.
  */
-/**
- * How a run ended. `abandoned` is the player's own "End run" from the
- * pause menu, and it is a third value rather than a flag beside `outcome`
- * or a reuse of `lost`: quitting is a distinct terminal event, and a save
- * or a replay should be able to tell a run that was beaten from one that
- * was walked out of.
- *
- * It is **not** a *finished* run. `BoardScene.flush()` tests only the
- * `won` and `lost` phases before paying the fossil award, so an abandoned
- * run earns 0 and leaves `profile.runsFinished` alone — otherwise "End
- * run" would be the optimal way to farm fossils.
- */
-export type Outcome = "won" | "lost" | "abandoned";
-
 export interface RunSummary {
   readonly outcome: Outcome;
   /**
@@ -46,6 +32,20 @@ export interface RunSummary {
   readonly seed: number;
   readonly pack: readonly PackEntry[];
 }
+
+/**
+ * How a run ended. `abandoned` is the player's own "End run" from the
+ * pause menu, and it is a third value rather than a flag beside `outcome`
+ * or a reuse of `lost`: quitting is a distinct terminal event, and a save
+ * or a replay should be able to tell a run that was beaten from one that
+ * was walked out of.
+ *
+ * It is **not** a *finished* run. `BoardScene.flush()` tests only the
+ * `won` and `lost` phases before paying the fossil award, so an abandoned
+ * run earns 0 and leaves `profile.runsFinished` alone — otherwise "End
+ * run" would be the optimal way to farm fossils.
+ */
+export type Outcome = "won" | "lost" | "abandoned";
 
 /**
  * One genus in the pack row, with how many of it the player grew.
