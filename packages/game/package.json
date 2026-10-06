@@ -10,7 +10,8 @@
     ".": "./src/index.ts",
     "./layout": "./src/layout.ts",
     "./row1": "./src/row1.ts",
-    "./sheet": "./src/sheet.ts"
+    "./sheet": "./src/sheet.ts",
+    "./theme": "./src/theme.ts"
   },
   "dependencies": {
     "@mazeosaur/content": "*",

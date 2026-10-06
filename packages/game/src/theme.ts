@@ -77,6 +77,16 @@ export function text(size: number, color: string = COLORS.text): Phaser.Types.Ga
 }
 
 /**
+ * `COLORS` holds hues as numbers, which is what the renderer wants for a
+ * shape; `Text` wants `#rrggbb`. This is the one conversion between the
+ * two, and it lives here rather than beside a scene so that a spec checking
+ * "§9's checkpoint yellow" asks the same question the scene answered.
+ */
+export function hexCss(hue: number): string {
+  return `#${hue.toString(16).padStart(6, "0")}`;
+}
+
+/**
  * `text()` with a hard wrap at `width`.
  *
  * Every variable-length string in the HUD gets one, and the width is always

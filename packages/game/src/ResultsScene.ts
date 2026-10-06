@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { CANVAS_H, CANVAS_W, GUTTER, HUD_H, HUD_Y, RESULTS, TYPE } from "./layout.js";
-import { COLORS, KIND_COLOR, text } from "./theme.js";
+import { COLORS, KIND_COLOR, hexCss, text } from "./theme.js";
 import type { RunSummary } from "./summary.js";
 
 /**
@@ -64,10 +64,35 @@ export class ResultsScene extends Phaser.Scene {
     this.add.text(CANVAS_W / 2 - GUTTER, RESULTS.eggsKept.y, `${s.eggsKept} eggs kept`, text(TYPE.body, COLORS.eggs)).setOrigin(1, 0);
     this.add.text(CANVAS_W / 2 + GUTTER, RESULTS.meatUnspent.y, `${s.meatUnspent} meat unspent`, text(TYPE.body, COLORS.meat)).setOrigin(0, 0);
 
-    // `vital` in checkpoint yellow (§9). `theme.ts` holds the hue as a
-    // number for the renderer; Text wants the CSS form.
+    // A paid run's award is `vital` in checkpoint yellow (§9) — the one
+    // reward on the screen, and the loudest thing under the headline.
+    // `theme.ts` holds the hue as a number for the renderer; Text wants the
+    // CSS form.
+    //
+    // A run that paid nothing drops to `body` in `textDim` instead, per
+    // §9's "the award line when the award is zero": checkpoint yellow at
+    // `vital` is this screen's reward signal, and spending it on a zero
+    // makes the loudest element on the screen the thing the player did not
+    // get. The line is not omitted, because an ended run paying nothing is
+    // a rule and this is the only place the game states it.
+    //
+    // Keyed on the *number* and not on the outcome, also per §9:
+    // `fossilAward` pays per egg kept, per migration cleared and per meat
+    // unspent, so a loss on migration 1 with nothing banked pays zero too —
+    // the all-zeros case `packages/content/test/content.test.ts` already
+    // pins. Only the wording is keyed on the outcome, and it has to be: on
+    // an abandoned run the zero is a rule, and on a lost one it is
+    // arithmetic.
+    const paid = s.fossilsAwarded > 0;
     this.add
-      .text(CANVAS_W / 2, RESULTS.fossils.y, `+${s.fossilsAwarded} fossils`, text(TYPE.vital, hexCss(COLORS.checkpoint)))
+      .text(
+        CANVAS_W / 2,
+        RESULTS.fossils.y,
+        paid ? `+${s.fossilsAwarded} fossils` : NO_AWARD[s.outcome],
+        paid ? text(TYPE.vital, hexCss(COLORS.checkpoint)) : text(TYPE.body, COLORS.textDim),
+      )
+      // Both variants, so the line shrinks about its own centre and the
+      // pack row under it does not move (§9).
       .setOrigin(0.5);
 
     this.drawPack();
@@ -181,24 +206,40 @@ export class ResultsScene extends Phaser.Scene {
  * that the valley had fallen. A total record makes the next outcome a type
  * error at this line instead.
  *
- * "The nest holds" and "The valley is quiet" are maze-design's, from §9.
- * `abandoned`'s is not theirs yet: this is the wording the in-board
- * end-run overlay already showed, carried over so the behaviour change
- * ships without inventing a headline on design's behalf. maze-design owns
- * the final string, and the `+0 fossils` line below is the same call.
+ * All three strings are maze-design's, from §9's headline table (ARB-322).
+ * `abandoned` is "The pack withdraws" and not a defeat line: nobody beat
+ * the player, so "The valley is quiet" would tell someone who walked away
+ * that the nest had fallen. It is also the pack row's own noun, which is
+ * what sits directly under it.
  */
 const HEADLINE: Record<RunSummary["outcome"], string> = {
   won: "The nest holds",
   lost: "The valley is quiet",
-  abandoned: "The run is over",
+  abandoned: "The pack withdraws",
+};
+
+/**
+ * What the award line says when the award is zero — §9's second table.
+ *
+ * A record for the same reason `HEADLINE` is one, and the wording is the
+ * only part of the zero case that looks at the outcome at all: "No fossils
+ * for an ended run" names **End run**, the button the player just pressed,
+ * which is the whole of the teaching. Telling a player who lost migration 1
+ * with nothing banked the same thing would teach them a rule that does not
+ * exist, so that case gets the arithmetic line instead.
+ *
+ * `won` is unreachable in practice — clearing every migration pays — but it
+ * is spelled rather than narrowed, because `Record<Outcome, string>` is what
+ * makes the next outcome a type error here instead of `undefined` drawn on
+ * the screen.
+ */
+const NO_AWARD: Record<RunSummary["outcome"], string> = {
+  won: "No fossils earned",
+  lost: "No fossils earned",
+  abandoned: "No fossils for an ended run",
 };
 
 /** The pack blocks stop growing here; a two-genus run is not a mural. */
 const PACK_CELL_MAX = 96;
 /** Breathing room between pack columns, so two labels never touch. */
 const PACK_COL_PAD = 12;
-
-/** `COLORS` holds hues as numbers for the renderer; `Text` wants `#rrggbb`. */
-function hexCss(hue: number): string {
-  return `#${hue.toString(16).padStart(6, "0")}`;
-}

@@ -457,6 +457,50 @@ export function resultsSummary(page: Page): Promise<RunSummary> {
   return page.evaluate(() => window.mazeosaurResults!().runSummary);
 }
 
+/** One line of text on the results screen, as a spec reads it back. */
+export interface ResultsLine {
+  readonly text: string;
+  readonly y: number;
+  readonly width: number;
+  readonly fontSize: string;
+  readonly color: string;
+}
+
+/**
+ * Every line the results screen is drawing, keyed by nothing: §9 gives each
+ * element a string, a type size and a colour, and all three are read off the
+ * scene here rather than guessed from pixels.
+ *
+ * Colour and size are the point, not decoration. §9's zero-award rule is
+ * about *emphasis* — the same y, the same origin, a smaller type and a dim
+ * colour — so a change that kept the wording and dropped the de-emphasis
+ * would pass a text-only assertion while putting the reward signal back on
+ * the thing the player did not get.
+ */
+export function resultsLines(page: Page): Promise<ResultsLine[]> {
+  return page.evaluate(() => {
+    const scene = window.mazeosaurResults!() as unknown as Phaser.Scene;
+    type T = Phaser.GameObjects.Text;
+    return (scene.children.list as unknown[])
+      .filter((o): o is T => typeof (o as T).text === "string" && typeof (o as T).width === "number")
+      .map((t) => ({
+        text: t.text,
+        y: Math.round(t.y),
+        width: Math.round(t.width),
+        fontSize: String(t.style.fontSize),
+        // Phaser types this as a gradient or a pattern too, which nothing
+        // on this screen uses: `text()` in `theme.ts` only ever sets a CSS
+        // string, so stringifying is the narrowing and not a cast.
+        color: String(t.style.color),
+      }));
+  });
+}
+
+/** The one results line at `y`, which §9's element table makes unique. */
+export async function resultsLineAt(page: Page, y: number): Promise<ResultsLine | undefined> {
+  return (await resultsLines(page)).find((l) => l.y === y);
+}
+
 /** Resolves once the board has handed off and `results` is up. */
 export async function waitForResults(page: Page): Promise<void> {
   await page.waitForFunction(() => window.mazeosaurResults?.().scene.isActive() === true);

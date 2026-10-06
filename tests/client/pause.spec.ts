@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { CONTENT_W, RESULTS, TYPE } from "@mazeosaur/game/layout";
+import { COLORS } from "@mazeosaur/game/theme";
 import {
   AGAIN_BUTTON,
   END_RUN_BUTTON,
@@ -16,6 +18,7 @@ import {
   openGame,
   paletteButtonCenter,
   replaySnapshot,
+  resultsLineAt,
   resultsShown,
   resultsSummary,
   setMigration,
@@ -191,6 +194,30 @@ test("ending the run lands on results as `abandoned`, and leaves nothing to resu
   // way to farm fossils — a balance hole dressed as a kindness.
   expect(summary.fossilsAwarded).toBe(0);
   expect(await bankedProfile(page)).toEqual(banked);
+
+  // And what the player is told it was, which is the other half of the same
+  // rule. §9 (ARB-322) gives this outcome its own headline: a quit is not a
+  // defeat, so "The valley is quiet" here would tell someone who walked away
+  // that the nest had fallen — the exact wrong string the `Record<Outcome,
+  // string>` in `ResultsScene` exists to make unreachable.
+  const headline = await resultsLineAt(page, RESULTS.headline.y);
+  expect(headline?.text).toBe("The pack withdraws");
+  // Centred and never wrapped, so a headline wider than the content column
+  // is clipped at the canvas edge rather than reflowed. §9's bound, not its
+  // measured px: the face is whatever this machine resolves `system-ui` to.
+  expect(headline?.width).toBeLessThanOrEqual(CONTENT_W);
+
+  // The zero award says why, quietly: `body` in `textDim` and not `vital` in
+  // checkpoint yellow, because yellow at `vital` is this screen's reward
+  // signal and a zero is not a prize (§9). The size and the colour are the
+  // assertion as much as the words are — keeping the string and dropping the
+  // de-emphasis is the regression this is here for.
+  const award = await resultsLineAt(page, RESULTS.fossils.y);
+  expect(award).toMatchObject({
+    text: "No fossils for an ended run",
+    fontSize: `${TYPE.body}px`,
+    color: COLORS.textDim,
+  });
 
   // An ended run's phase is still `build`, so unlike a win or a loss there
   // is nothing but the stopped clock to keep the board from ticking on
