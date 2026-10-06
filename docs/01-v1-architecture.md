@@ -467,7 +467,8 @@ export interface SaveStore {
 export interface AudioPort {
   /** False when the device or the player has audio off; scenes branch on this, never on platform. */
   readonly available: boolean;
-  play(id: string, volume?: number): void;
+  /** `hue` is the kind's colour, and advisory: section 6 of the art spec pitches `place` and `hit` by kind, and a sink that cannot pitch ignores it. */
+  play(id: string, volume?: number, hue?: number): void;
   /** null stops the current track. */
   music(id: string | null): void;
   volumes(music: number, sfx: number): void;

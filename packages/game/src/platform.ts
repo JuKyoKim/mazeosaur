@@ -22,7 +22,14 @@ export interface SaveStore {
  */
 export interface AudioPort {
   readonly available: boolean;
-  play(id: string, volume?: number): void;
+  /**
+   * `hue` is the kind's colour, and it is **advisory**: section 6 of
+   * `docs/01-art-hud-and-audio.md` pitches `place` and `hit` by the
+   * dinosaur's kind, and the hue is the only kind identity the renderer
+   * already has to hand. A sink that cannot pitch ignores it, which is why
+   * it is optional and why nothing reads a result back.
+   */
+  play(id: string, volume?: number, hue?: number): void;
   /** null stops the current track. */
   music(id: string | null): void;
   volumes(music: number, sfx: number): void;

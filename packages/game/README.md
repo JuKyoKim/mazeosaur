@@ -39,6 +39,13 @@ ports themselves are section 2 of
   generates [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md)
   cannot disagree with what the client draws. Imports nothing, so it reads
   from Node with no Phaser.
+- `src/audio.ts` — section 6's sound table (`SOUNDS`: `ms`, `ducks`,
+  `minGapMs`) and `SfxBus`, the policy between a scene and `AudioPort`:
+  the `hit`/`kill` cap, the round-robin across hues, and phase-to-music.
+  Pure and Phaser-free, with the clock injected, so the limiter is unit
+  tested without a browser and without waiting in real time. It names
+  sounds and never fetches one; the thing that makes a noise is the
+  shell's, injected as `AudioPort`.
 - `src/theme.ts` — colours and text styles, and nothing geometric.
 
 `mountGame` starts `BoardScene` with the save the shell already loaded
@@ -70,9 +77,12 @@ the transitions between them — is section 5 of
 
 ## Verifying a change
 
-`test/profile.test.ts` covers the pure accounting in `src/profile.ts`, and
+`test/profile.test.ts` covers the pure accounting in `src/profile.ts`,
 `test/resume.test.ts` covers the resume-vs-replay decision in
-`src/resume.ts`. Everything else here is Phaser and has no tests; it is
+`src/resume.ts`, and `test/audio.test.ts` covers the `hit`/`kill` cap in
+`src/audio.ts` — a cap that silently stopped working would fail no other
+test and would not look wrong in a screenshot, so it is asserted rather
+than listened to. Everything else here is Phaser and has no tests; it is
 checked by driving it (`npm run dev`, then port 5173). Three things have
 produced false conclusions:
 
