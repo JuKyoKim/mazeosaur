@@ -187,6 +187,40 @@ export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; 
 }
 
 /**
+ * Whether the fliers' air route is drawn, at which of its two strengths,
+ * and the segment it runs along (`BoardScene.airRoute`).
+ */
+export function airRouteSnapshot(page: Page): Promise<{ shown: boolean; subdued: boolean; from: { x: number; y: number }; to: { x: number; y: number } }> {
+  return page.evaluate(() => window.mazeosaurBoard!().airRoute);
+}
+
+/**
+ * The index of the first migration that contains a flier, read out of the
+ * running content rather than written down here. Rule 4: which migration
+ * the fliers arrive on is a content edit, and a test that hardcodes it
+ * fails on the edit instead of following it.
+ */
+export function firstFlierMigration(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const c = window.mazeosaurBoard!().sim.content;
+    return c.migrations.findIndex((m) => m.groups.some((g) => c.invaders[g.invader]?.flying));
+  });
+}
+
+/**
+ * Points the sim at a given migration, so a test can reach a late one
+ * without fighting every migration before it — the same shortcut
+ * `winOnNextSend` takes, which is this with the last index. `currentMigration()`
+ * reads `state.migration` directly, so the HUD's preview row and anything
+ * derived from it (the air route) see the new migration on the next frame.
+ */
+export async function setMigration(page: Page, index: number): Promise<void> {
+  await page.evaluate((i) => {
+    window.mazeosaurBoard!().sim.state.migration = i;
+  }, index);
+}
+
+/**
  * Phaser picks WebGL via `type: Phaser.AUTO` and the game is created without
  * `preserveDrawingBuffer`, so `canvas.toDataURL()` cannot be trusted to show
  * what was last drawn — sampling it is not a liveness check, WebGL or not.
