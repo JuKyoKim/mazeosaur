@@ -30,16 +30,16 @@ export const SPEED_BUTTON = { x: 648 + 56 / 2, y: HUD_Y + 8 + 42 / 2 };
 /**
  * A point in the HUD that is not any control: the status/preview text
  * rows, between the kind buttons (which end at `HUD_Y + 120`) and the
- * dinosaur panel (which starts at `HUD_Y + 196`). Text objects are not
+ * dinosaur panel (which starts at `HUD_Y + 180`). Text objects are not
  * interactive, so a tap here reaches the scene's own `pointerdown` — this
  * is the "tap away to cancel" gesture, and the only place on the canvas
  * that is neither a cell nor a button.
  */
 export const HUD_BARE = { x: CANVAS_W / 2, y: HUD_Y + 158 };
 
-const PANEL_Y = HUD_Y + 196;
-export const GROW_BUTTON = { x: CANVAS_W - 336 + 190 / 2, y: PANEL_Y + 8 + 52 / 2 };
-export const SELL_BUTTON = { x: CANVAS_W - 136 + 120 / 2, y: PANEL_Y + 8 + 52 / 2 };
+const PANEL_Y = HUD_Y + 180;
+export const GROW_BUTTON = { x: CANVAS_W - 336 + 190 / 2, y: PANEL_Y + 17 + 52 / 2 };
+export const SELL_BUTTON = { x: CANVAS_W - 136 + 120 / 2, y: PANEL_Y + 17 + 52 / 2 };
 
 /** The "Play again" button on the won/lost overlay (`showOverlay`). */
 export const PLAY_AGAIN_BUTTON = { x: CANVAS_W / 2, y: BOARD_H / 2 + 60 + 64 / 2 };

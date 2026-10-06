@@ -5,19 +5,21 @@
 // makes the "What is in here" list of every package and app a checked
 // claim instead of a sentence somebody has to remember to update.
 //
-// It checks exactly two things, and deliberately not more:
+// It checks exactly four things, and deliberately not more:
 //
 //   1. Every `src/…` or `test/…` path in the bullet list directly under
 //      `## What is in here` resolves to a real file in that package.
 //   2. Every file in that package's `src/` is named somewhere in the list.
+//   3. Every relative markdown link resolves.
+//   4. No markdown prose cites a source location as `file.ext:line`.
 //
 // Only the bullets immediately following the heading are read. Prose after
 // the list is free to name a file that is specified and not yet written,
 // which is the one honest way to describe a contract before it lands — and
-// which is why `docs/` is not checked at all. A design doc's job is to
+// which is why `docs/` is not checked by 1 and 2. A design doc's job is to
 // name files that do not exist yet; a README's job is to describe what is
-// there. Relative markdown links are checked everywhere, docs included,
-// because a dead link is wrong in either kind of file.
+// there. Checks 3 and 4 run everywhere, docs included, because a dead link
+// and a rotted citation are wrong in either kind of file.
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -96,10 +98,43 @@ for (const doc of docs) {
   }
 }
 
+// 4: `file:line` citations, in every markdown file. A line number reads as
+// precise, passes review because it once was, and rots on the next unrelated
+// edit to the file — and the rot is invisible, because the reader who checks
+// it lands a line or two away inside the same object literal and believes it.
+// Three fixes in a row here were that, including one whose file had been a
+// re-export for two milestones. Name the symbol and the drift cannot hide.
+//
+// Fenced blocks are exempt: a quoted grep transcript or a command is allowed
+// to carry the line numbers it actually printed, and that is also the escape
+// hatch for a doc describing this very check. The line number in the message
+// below is not a violation — a linter's location is computed on the run that
+// prints it, which is exactly what a citation in a doc is not.
+for (const doc of docs) {
+  const lines = readFileSync(doc, "utf8").split("\n");
+  let fenced = false;
+  for (const [i, line] of lines.entries()) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    for (const m of line.matchAll(/[\w./-]+\.(?:ts|tsx|js|mjs|json|md|yml|yaml):\d+/g)) {
+      problems.push(
+        `${relative(root, doc)} line ${i + 1}: cites \`${m[0]}\` — name the symbol, not the line`,
+      );
+    }
+  }
+}
+
 if (problems.length > 0) {
   process.stderr.write(`README drift (${problems.length}):\n`);
   for (const p of problems) process.stderr.write(`  ${p}\n`);
-  process.stderr.write("\nEither the file moved or the list did not. Fix whichever is wrong.\n");
+  process.stderr.write(
+    "\nEither the file moved or the list did not. Fix whichever is wrong.\n" +
+      "For a citation: name the exported symbol, the function or the field, so\n" +
+      "the reference survives an unrelated edit above it.\n",
+  );
   process.exit(1);
 }
 process.stdout.write(`readmes: ${docs.length} markdown files, no drift\n`);

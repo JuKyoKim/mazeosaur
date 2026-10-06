@@ -53,8 +53,12 @@ hatchling, juvenile, adult; upgrading is **growing**). Creeps are
   same server for the in-app browser preview.
 - This repo deploys separately from arbor. Nothing here touches the fleet
   until `apps/web` and `apps/server` exist (M1 and M4).
-- Decisions go in `docs/00-proposal.md` section 10 with a date, or in a
-  new numbered doc when they outgrow a line.
+- **A decision goes in its own file**, `docs/decisions/NNNN-slug.md`; the
+  convention is [docs/decisions/README.md](docs/decisions/README.md). Do not
+  append to section 10 of `docs/00-proposal.md` — that list is closed, and
+  appending to it conflicted every concurrent decision PR by construction,
+  which dropped them out of CI silently. A decision that outgrows a file is
+  still a new numbered doc in `docs/`.
 - **Session history does not live here.** After-action reports and
   findings go to the Obsidian vault (`ai/aar/`). This repo keeps only
   what is durably true, as a comment beside the code it explains or a

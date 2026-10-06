@@ -307,7 +307,8 @@ exit criteria.
 
 ```
 mazeosaur/
-  docs/               proposals and design decisions, numbered
+  docs/               proposals and design documents, numbered
+  docs/decisions/     one decision per file, NNNN-slug.md
   packages/sim/       the deterministic simulation (started, tested)
   packages/content/   game data + schemas
   packages/game/      Phaser client
@@ -349,6 +350,15 @@ we find out.
    the store setup and the no-network rule on mobile.
 
 ## 10. Decisions taken so far
+
+**This list is closed. A new decision is a new file in
+[decisions/](decisions/README.md).** The entries below are the history and are
+left exactly as they were taken; nothing here is reworded. Appending meant
+every decision pull request editing the same last line of the same file, so
+any two of them conflicted by construction — and a conflicting pull request
+gets no merge ref, so GitHub builds it not at all and says nothing. The
+reasoning is
+[decisions/0001-decisions-live-in-their-own-files.md](decisions/0001-decisions-live-in-their-own-files.md).
 
 - 2026-09-20: separate repo from arbor; deploys on its own path.
 - 2026-09-20: TypeScript monorepo, npm workspaces (pnpm is a one-line
@@ -652,3 +662,19 @@ we find out.
   by one cell when they do. Sealing stays impossible by the same exact test
   rather than a new rule: no targets left means no reachable cells, which is
   what `laneIsOpen` already reads as closed.
+- 2026-10-05: **the docs cite symbols, never a line number.** A line number
+  reads as precise, passes review because it once was, and rots on the next
+  unrelated edit to the file — and it rots invisibly, because the reader who
+  checks it lands a line or two away inside the same object literal and
+  believes it. Three fixes in a row were that, one of them pointing into a
+  file that had been a bare re-export since the canvas and HUD geometry moved
+  into the client package. Name the exported symbol, the
+  function or the field instead. The shape to copy is already in section 4 of
+  [01-art-hud-and-audio.md](01-art-hud-and-audio.md): the no-pre-selection
+  paragraph names `buildHud` and `selectDef`, and the selected-card table
+  names `ROW3.kindButton.y` for the rest position. Both have survived every
+  edit that rotted a neighbouring line number, because a grep finds a symbol
+  wherever it moved to. `npm run check:readmes` now rejects a
+  citation of the form path-dot-extension-colon-digits in any markdown prose,
+  with fenced blocks exempt so a quoted transcript may keep the numbers it
+  actually printed.

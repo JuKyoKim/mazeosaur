@@ -4,7 +4,9 @@
 than one branch of v1 work needs. [docs/00-proposal.md](00-proposal.md) is
 still the design of record for what the game is; this is how the pieces
 are shaped so they fit. Where the two disagree, this one is newer and
-wins, and section 10 of the proposal records the change.*
+wins, and the change is recorded as a decision — in
+[decisions/](decisions/README.md) from 2026-10-06, and in section 10 of the
+proposal for the entries taken before that.*
 
 The four things decided here are the four that two or more teams would
 otherwise each invent: the save format, the ports the app shells inject,
@@ -467,7 +469,8 @@ export interface SaveStore {
 export interface AudioPort {
   /** False when the device or the player has audio off; scenes branch on this, never on platform. */
   readonly available: boolean;
-  play(id: string, volume?: number): void;
+  /** `hue` is the kind's colour, and advisory: section 6 of the art spec pitches `place` and `hit` by kind, and a sink that cannot pitch ignores it. */
+  play(id: string, volume?: number, hue?: number): void;
   /** null stops the current track. */
   music(id: string | null): void;
   volumes(music: number, sfx: number): void;
