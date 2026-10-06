@@ -334,8 +334,9 @@ stay at 444, and the row ends at the content edge — so 260px carry three
 hit-floor squares and two 7px gaps with nothing over. Send paid for Pause
 because it was the only control here with anything to give: it was 164
 wide against a floor of 82, where everything else in the row is either at
-the floor already or a text field whose measured clearance is the 8 or 16px
-in the table below. What it cost is Send's bonus label, which is now two
+the floor already or a text field, and the only text field on this band is
+the migration readout with the 16px of clearance in the table below. What
+it cost is Send's bonus label, which is now two
 lines — `Send` over `+25` — exactly as Grow and Sell already are. A fourth
 control does not fit in this row at any width, and adding one means taking
 the space from somewhere `packages/game/test/layout.test.ts` can see.
@@ -361,6 +362,26 @@ font at the sizes above:
 | meat | `9999` at `vital` | 88 | 148 | 192, the egg icon |
 | eggs | `20` at `vital` | 44 | 274 | 320 |
 | migration | `MIGRATION` at `label` | 108 | 428 | 444, **Send** |
+
+**Not from the plates.** Those three widths are what a running client
+renders, and `tests/client/hud-row1-widths.spec.ts` re-takes all three on
+every run — each field driven to its widest value, the rendered extent read
+back off the scene — because the type is the platform's and nothing in the
+layout constants knows how wide a string comes out.
+`tools/art/test/doc-table.test.ts` checks the rest of the table without a
+font: that each row ends where its own origin plus its own width puts it,
+and that the neighbour it names is where `layout.ts` puts that neighbour.
+
+The board plates in `docs/art/` cannot answer this and must not be measured
+for it. They are drawn by `tools/art/font.ts`, a fixed-pitch 5x7 bitmap
+font standing in for type Node cannot rasterise, and on a digit run it is
+about 1.6x wider: `49 / 50` is 123px there against 77 here, so in a plate
+the counter arrives 1px short of Send and looks like it touches. Worse for
+anyone reading one, the order of the readout's two lines *reverses* —
+`MIGRATION` is the wider line in a proportional font and the narrower one
+in the mock. The mock is deliberately pessimistic about crowding, which is
+what makes it useful for judging a frame; it is not a measurement of this
+table, and ARB-307 is what reading it as one costs.
 
 The migration readout is `label` over `body` — two lines at one x — and not
 one line, and that is what buys the 16px it clears Send by: on one line
