@@ -44,14 +44,15 @@ npm run check      # lint + typecheck + tests; the merge gate
 npm run lint       # the sim-purity and scene-restart rules on their own
 npm run dev        # the web prototype on http://localhost:5173
 npm run test:client  # drive the real client in a headless browser
+npm run check:gates  # has anything merged past a merge gate that is still open?
 ```
 
 Node 22 or newer. The simulation package has no dependencies and its
 tests run in well under a second; keep it that way.
 
-`npm run test:client` is the one gate `npm run check` does not include:
-it boots a browser and a dev server, so it belongs outside the
-under-a-second budget. It needs `npx playwright install chromium` once.
+`npm run test:client` is the one check on the code that `npm run check`
+does not include: it boots a browser and a dev server, so it belongs
+outside the under-a-second budget. It needs `npx playwright install chromium` once.
 It starts its own dev server and never reuses one it finds, because a
 server already on the port is serving *some* checkout and that is
 routinely not the one under test; set `MAZEOSAUR_CLIENT_PORT` to run it
@@ -63,6 +64,14 @@ clock, no timers, no DOM, no `Math.random` and no inexact `Math` inside
 no initialised scene field. It installs its own toolchain into
 `tools/lint` the first time it runs, because it needs a TypeScript the
 rest of the repo must not see — `tools/lint/package.json` says why.
+
+`npm run check:gates` checks the board rather than the code: it asks
+whether any pull request merged while the issue that was supposed to
+gate it is still open, which is what a review whose run died before it
+wrote anything looks like from outside. It reads the Paperclip API, so
+it needs an agent's environment and is not a CI step. Section 6.6 of
+[docs/01-v1-architecture.md](docs/01-v1-architecture.md) says when to
+run it and what to do with what it finds.
 
 ## Status
 

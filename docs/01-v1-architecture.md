@@ -951,6 +951,11 @@ survives three rounds goes to Odin.
    stays true.
 5. An explicit note if it touches `.github/workflows`, the save format, or
    anything in the proposal's section 9.
+6. **The gate issue, once the review is delegated to one.** Its identifier,
+   in the body, edited in when the gate is opened if it did not exist when
+   the pull request did. A gate issue already names its pull request in its
+   title; this is the other half of that link, and 6.6 is why one direction
+   is not enough.
 
 ### 6.3 The bar
 
@@ -1058,6 +1063,69 @@ GitHub level and nothing will before the v1 baseline, by
 [decisions/0002](decisions/0002-nothing-blocks-main-until-v1-baseline.md) — the
 merge gate is the only thing between a stale green and a red `main`, so the
 gate's method is load-bearing.
+
+### 6.6 When a gate run dies without writing
+
+6.5 ends on the gate's method being load-bearing. This is what happens when
+the gate itself does not run.
+
+A gate is an issue, and an issue is worked by a run. A run can die — a limit
+failure, a cancelled adapter, a workspace it never got — before it writes a
+comment or moves a status. What that leaves behind is a gate issue sitting
+`in_progress`, with an assignee and a live pull request, which is precisely
+what a gate still reading the diff looks like. No field differs between the
+two. So nothing raises it: the pull request merges on somebody's good faith,
+and every issue blocked behind the gate waits on a run that is not coming.
+The accident that surfaces it is somebody branching off `main` and noticing a
+commit they never reviewed.
+
+The costs are not symmetric, and that settles the policy. A gate that runs
+twice costs tokens. A gate that never runs puts unreviewed code on `main`
+*and* strands its dependents, with no signal in either direction. Prefer the
+duplicate.
+
+**Silence is not an approval.** A gate issue carrying no verdict has not been
+through 6.3, whatever its status reads. Write the verdict on the issue before
+merging, not after, so that the review's existence stops depending on the run
+that produced it surviving to the end.
+
+**The merge point has to be able to see the gate.** A gate issue names its
+pull request; until 6.2.6 the pull request named nothing back, so from the
+merge point the gate was invisible and the merger could not have known a
+review was owed. One direction of the link is not enough, because the two
+ends are looked up by different people at different times.
+
+**Do not merge while a named gate is open.** That is addressed to whoever is
+merging — by 6.0 usually the architect, sometimes Odin acting in their place.
+A gate that has been quiet long enough to look dead gets re-run or reassigned;
+the quiet is not consent, and it is not information at all.
+
+**A merged pull request does not retire its gate.** Merges will happen without
+the review, because nothing at the GitHub level stops them before the v1
+baseline — [decisions/0002](decisions/0002-nothing-blocks-main-until-v1-baseline.md).
+The gate is still owed, and it converts into a **post-hoc review read against
+the bar on `main`**. It does not convert into a revert: the commit is already
+an ancestor of other branches, and reviewing it in place costs less than
+unwinding it. What the review finds becomes a follow-up pull request. The one
+exception is a change that leaves `main` red or breaks the save format — those
+are reverted first and re-reviewed afterwards, because they cost other
+people's runs rather than only this one's.
+
+**The gate closes when the review has been read, not when it comes back
+clean.** Its dependents are blocked on the review happening. A finding is a
+new issue; it is not a reason to keep somebody else's work waiting for it.
+
+**The sweep.** `npm run check:gates` — `scripts/check-merge-gates.mjs` — asks
+the one question the two failures compose into: *is any pull request merged
+while the issue naming it is still open?* It walks the link that already
+exists, the pull request number in the gate issue's title, matches it against
+this repo's pull requests, and reports every open issue whose pull request has
+merged or closed. Run it before merging anything and when sweeping the board;
+it is not part of `npm run check` and not a CI step, because it reads the
+Paperclip control plane, which CI has no key for and should not acquire one.
+Every missing input — no `gh`, no key, a truncated list — is a hard stop
+rather than a clean run, because a sweep that could not see is not the same
+answer as a sweep that saw nothing.
 
 ## 7. What v1 does not include
 
