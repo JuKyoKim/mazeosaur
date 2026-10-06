@@ -747,7 +747,7 @@ Three, keyed `title`, `board`, `results`.
 | --- | --- | --- |
 | `title` | the menu, Resume, settings, seed entry on web | any `Game` |
 | `board` | **the** `Game` instance, the grid, input, the HUD, the autosave policy | any rule; it asks the `Game` and draws the answer |
-| `results` | the end-of-run summary and the fossil award | the `Game`; it receives plain data through `init()` |
+| `results` | the end-of-run summary, and showing the fossil award | the `Game`; computing or persisting that award — `board` did that at the won/lost save (section 5.4) |
 
 `board` draws its own HUD rather than running a fourth `hud` scene. A
 separate scene buys a second camera v1 has no use for and costs a
@@ -819,6 +819,65 @@ title ──start / resume──▶ board ──won / lost──▶ results ─�
 `board` asks `nextSeed()` for a fresh run and takes the seed from
 `save.run` for a resume. Nothing holds a reference to a scene it is not
 currently in.
+
+**Every way into `board` says which way it is.** There are three — a fresh
+run from `title`, a resume from `title`, and *again* from `results` — and
+what separates them is only where the seed comes from. Phaser hands
+`init(data)` whatever `scene.start("board", data)` passed, so the entry
+intent is **data on the transition, not state on the scene**: `board`
+takes `{ mode: "fresh" | "resume" | "again" }` and `create()` reads the
+seed from the mode. `BoardScene` infers it today from `hasStarted`, an
+instance field assigned in the constructor, and that is sound only while
+`scene.restart()` is the single way back in. The second entry point splits
+"this is not my first `create()`" from "keep the seed", which is the same
+mistake as section 5.2's in a different field, and `hasStarted` answers
+the wrong one of the two. Whichever of `title` and `results` lands first
+converts it, and the one that lands second is then only a new caller.
+
+### 5.4 The run is paid for in `board`, before `results` is reached
+
+`results` shows the fossil award. `BoardScene.flush()` computes and
+persists it, at the won/lost save point section 1.7 already defines, and
+that does not move even though the award is most of what `results` exists
+to display. Three reasons:
+
+- **One write, not two.** Section 1.7 makes the terminal flush a single
+  atomic document: `run: null` and the new `profile.best` in the same
+  transaction. An award written by `results` is a second write from a
+  second scene, and a tab closed between the two leaves a run that is over
+  next to an award that never happened.
+- **One latch, not two.** `finishedAccounted` is per-run state on `board`,
+  reset in `create()` per section 5.2, and it exists because `won` and
+  `lost` are terminal: `GameHandle.suspend()` keeps calling `flush()` for
+  as long as the terminal phase is up, which now includes the whole time
+  `results` is on screen. Moving the award does not move that `flush()` —
+  it adds a second idempotence problem, on a second singleton scene, while
+  leaving the first one exactly where it was.
+- **Accounting must not depend on navigation.** If `results` awards, a
+  player who closes the tab on the win screen keeps nothing. The run ended
+  in `board`; that is where it is paid.
+
+So the summary carries the award rather than the ingredients for it:
+
+```ts
+export interface RunSummary {
+  readonly outcome: "won" | "lost";
+  readonly migrationsCleared: number;
+  readonly eggsKept: number;
+  readonly meatUnspent: number;
+  /** Reproduces the run: `?seed=` on web. */
+  readonly seed: number;
+  /** What this run earned. Computed once, where it was awarded. */
+  readonly fossilsAwarded: number;
+}
+```
+
+`fossilsAwarded` is the same number the `fossilAward` call inside
+`runFinished` already produced — returned out of it, or computed once by
+the caller and handed to both. Not a second `fossilAward` call on the
+summary's own numbers: two call sites on the same inputs are two things to
+keep in step for no gain. And not read back out of `profile.best`, which
+is the wrong source because a run that was not a best never appears there.
 
 ## 6. The review protocol
 
