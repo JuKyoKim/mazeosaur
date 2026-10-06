@@ -69,7 +69,7 @@ export class ResultsScene extends Phaser.Scene {
     // `vital` in checkpoint yellow (§9). `theme.ts` holds the hue as a
     // number for the renderer; Text wants the CSS form.
     this.add
-      .text(CANVAS_W / 2, RESULTS.fossils.y, `+${s.fossilsEarned} fossils`, text(TYPE.vital, hexCss(COLORS.checkpoint)))
+      .text(CANVAS_W / 2, RESULTS.fossils.y, `+${s.fossilsAwarded} fossils`, text(TYPE.vital, hexCss(COLORS.checkpoint)))
       .setOrigin(0.5);
 
     this.drawPack();

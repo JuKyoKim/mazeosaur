@@ -4,6 +4,7 @@ import {
   SEND_BUTTON,
   SPEED_BUTTON,
   cellCenter,
+  fastForwardUntilEggsBelow,
   loseOnNextLeak,
   openGame,
   paletteButtonCenter,
@@ -12,7 +13,6 @@ import {
   simSnapshot,
   trackPageErrors,
   waitAFrame,
-  waitForEggsBelow,
   waitForResults,
   waitForRunOver,
   waitForTickAdvance,
@@ -58,7 +58,7 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
   await waitAFrame(page);
   await page.mouse.click(SPEED_BUTTON.x, SPEED_BUTTON.y);
   await page.mouse.click(SPEED_BUTTON.x, SPEED_BUTTON.y);
-  await waitForEggsBelow(page, 20);
+  await fastForwardUntilEggsBelow(page, 20);
 
   await loseOnNextLeak(page);
   await waitForRunOver(page);
@@ -84,7 +84,7 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
   // One hatchling placed and never grown, so the pack is empty: it is what
   // the player grew to adult, not what they placed.
   expect(summary.pack).toEqual([]);
-  expect(summary.fossilsEarned).toBeGreaterThanOrEqual(0);
+  expect(summary.fossilsAwarded).toBeGreaterThanOrEqual(0);
 
   // Again: back through `board`, which is the only scene that builds a
   // `Game`. §5.3 is "again (same seed)", so the seed is kept and

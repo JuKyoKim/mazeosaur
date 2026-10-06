@@ -8,6 +8,8 @@ import {
   SPEED_BUTTON,
   airRouteSnapshot,
   cellCenter,
+  fastForwardUntilEggsBelow,
+  fastForwardUntilRunOver,
   firstFlierMigration,
   loseOnNextLeak,
   openGame,
@@ -17,9 +19,7 @@ import {
   simSnapshot,
   trackPageErrors,
   waitAFrame,
-  waitForEggsBelow,
   waitForResults,
-  waitForRunOver,
   waitForTickAdvance,
 } from "./helpers.js";
 
@@ -51,6 +51,16 @@ const LANE_CELL = { x: 0, y: 0 };
 const HATCHLING_COST = 10;
 
 test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again [@baseline]", async ({ page }) => {
+  // ARB-242: this used to wait out a real invader's walk down the full
+  // lane in wall-clock time, which made the test's duration hostage to
+  // whatever else was loading the CI runner — a 53.5s pass next to a 60s
+  // timeout on unrelated diffs. `fastForwardUntilEggsBelow` and
+  // `fastForwardUntilRunOver` below drive the sim directly instead, so
+  // this test now finishes in about a second. The config's 60s default
+  // timeout stands: page load plus the click/`waitAFrame` round trips
+  // this spec still does is paced by CI worker contention, not by this
+  // fix, and a tighter override has already gone red on a 2-core runner.
+
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 
@@ -140,12 +150,14 @@ test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again 
   await waitAFrame(page);
   expect((await simSnapshot(page)).phase).toBe("migration");
 
-  // Run at 3x so a real invader walk doesn't make this test slow.
+  // Exercises the speed toggle itself (1x -> 2x -> 3x); the leak below no
+  // longer waits on real time, so this no longer buys the test speed, only
+  // coverage that the button cycles `BoardScene`'s speed state.
   await page.mouse.click(SPEED_BUTTON.x, SPEED_BUTTON.y);
   await page.mouse.click(SPEED_BUTTON.x, SPEED_BUTTON.y);
 
   // Nothing is in the invaders' way, so a leak is a certainty, not a race.
-  await waitForEggsBelow(page, 20);
+  await fastForwardUntilEggsBelow(page, 20);
 
   // End the run and start the next one the way a player does: the next
   // leak loses the nest, the board hands off to `results`, and the test
@@ -158,7 +170,7 @@ test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again 
   // the only way back into `board` is through a screen that cannot appear
   // until the won/lost `flush()` has written `run: null`.
   await loseOnNextLeak(page);
-  await waitForRunOver(page);
+  await fastForwardUntilRunOver(page);
   await waitAFrame(page);
   expect((await simSnapshot(page)).phase).toBe("lost");
 

@@ -24,15 +24,28 @@ describe("runFinished", () => {
 
   it("awards fossils from the weight table and bumps runsFinished", () => {
     const p = profile();
-    const next = runFinished(p, WEIGHTS, outcome);
+    const next = runFinished(p, WEIGHTS, outcome).profile;
     // 15*2 + 10*20 + 25*1 = 255
     expect(next.fossilsEarned).toBe(255);
     expect(next.runsFinished).toBe(1);
   });
 
+  /**
+   * §5.4: the award is returned so `results` can show the figure that was
+   * banked rather than computing a second one. It is *this run's* award and
+   * not the profile's running total — a distinction that only shows up on a
+   * profile which already has fossils, which is why this asserts on one.
+   */
+  it("returns this run's award, not the lifetime total", () => {
+    const p = profile({ fossilsEarned: 1_000 });
+    const finish = runFinished(p, WEIGHTS, outcome);
+    expect(finish.fossilsAwarded).toBe(255);
+    expect(finish.profile.fossilsEarned).toBe(1_255);
+  });
+
   it("records a first result as best for that valley", () => {
     const p = profile();
-    const next = runFinished(p, WEIGHTS, outcome);
+    const next = runFinished(p, WEIGHTS, outcome).profile;
     expect(next.best["nesting-grounds"]).toEqual({
       migrationsCleared: 10,
       eggsLeft: 15,
@@ -44,21 +57,21 @@ describe("runFinished", () => {
 
   it("replaces best when more migrations are cleared", () => {
     const p = profile({ best: { "nesting-grounds": { migrationsCleared: 5, eggsLeft: 1, fossils: 9, seed: 1, contentVersion: "m1.0" } } });
-    const next = runFinished(p, WEIGHTS, outcome);
+    const next = runFinished(p, WEIGHTS, outcome).profile;
     expect(next.best["nesting-grounds"]!.migrationsCleared).toBe(10);
   });
 
   it("keeps the existing best when the new run clears fewer migrations", () => {
     const existing = { migrationsCleared: 20, eggsLeft: 1, fossils: 999, seed: 1, contentVersion: "m1.0" };
     const p = profile({ best: { "nesting-grounds": existing } });
-    const next = runFinished(p, WEIGHTS, outcome);
+    const next = runFinished(p, WEIGHTS, outcome).profile;
     expect(next.best["nesting-grounds"]).toEqual(existing);
   });
 
   it("leaves other valleys' best untouched", () => {
     const other = { migrationsCleared: 2, eggsLeft: 0, fossils: 40, seed: 1, contentVersion: "m1.0" };
     const p = profile({ best: { "other-valley": other } });
-    const next = runFinished(p, WEIGHTS, outcome);
+    const next = runFinished(p, WEIGHTS, outcome).profile;
     expect(next.best["other-valley"]).toEqual(other);
     expect(next.best["nesting-grounds"]).toBeDefined();
   });

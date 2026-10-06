@@ -535,9 +535,37 @@ the frame generator. Matching the board's selection ring — the outline
 `drawDynamic` strokes around the selected dinosaur's cell — is deliberate: a
 player should learn one selection convention, not two. The card's interior
 does not change at all, which is also deliberate — every text-on-panel pair in
-section 3's contrast table stays exactly as measured.
-Under `prefers-reduced-motion` the lift is a static offset and not an
-animation: it is state, not feedback (section 7).
+section 3's contrast table stays exactly as measured. Under
+`prefers-reduced-motion` the lift is a static offset and not an animation: it
+is state, not feedback (section 7).
+
+**One selection colour, and it is `#ecf0f1`.** Everything that marks a
+selection or a tap takes `COLORS.selection` — the selected dinosaur's range
+ring and its 3px cell outline, the valid cell's preview range ring, the tray
+card's 3px border, and the tap ring. There is no second near-white for marks
+on the board.
+
+It is decided on cost, not on appearance, because the difference is real to a
+colour picker and useless to a player. `#ffffff` and `#ecf0f1` are ΔE76 **5.7**
+apart (L\* 100 against 94.5), which clears the ~2.3 that two large patches need
+to be told apart — but only when they are large and adjacent, and these never
+are. One is a 3px stroke on a 36px cell in the grid, the other a 3px border
+around a card 500px below it; they never appear at the same size in the same
+glance, so no player can read the step as a signal. A difference only a
+measurement can see cannot teach a convention. It can only drift, and the next
+person to add a ring picks whichever literal they land on.
+
+Contrast does not decide it either. The dinosaur's outline is inset 1px and the
+kind fill starts at 3px, so the stroke rides the gutter and is measured against
+`boardBg` `#213127`: **13.7:1** at `#ffffff` against **11.9:1** at `#ecf0f1`.
+Both are far past anything that matters for a stroke. And selection is carried
+by weight and geometry — 3px, a range ring, a 5px lift — not by hue, which is
+section 3's rule applied to a state, so nothing is lost by giving up the
+brighter value.
+
+`ghost` `#ffffff` is what the board's rings used to be. Nothing reads it today
+— the rings that still look white hold the literal, not the token — so it
+should go rather than sit in `theme.ts` as the obvious thing to reach for.
 
 **The selection does not survive the placement.** Settled by the owner on
 2026-10-05: **one-shot, the PvZ-exact behaviour.** A successful place returns
@@ -591,9 +619,9 @@ the cell would refuse and why.
 
 | state | what is drawn |
 | --- | --- |
-| valid cell | the kind's hue at 0.45 in a rounded rect inset 3px, radius 6, plus a 1px `#ffffff` range ring at 0.35 |
+| valid cell | the kind's hue at 0.45 in a rounded rect inset 3px, radius 6, plus a 1px `selection` range ring at 0.35 |
 | invalid cell | `refusal` at 0.45 in the same rect, **plus diagonal hatching: 3px stripes of `ink` at alpha 1, stepped 8px**, and no range ring |
-| any tap, the instant it lands | a 2px `#ecf0f1` ring at 0.6 from the cell centre out to a **54px radius**, 120ms, then gone — drawn on `pointerdown` before the sim is called |
+| any tap, the instant it lands | a 2px `selection` ring at 0.6 from the cell centre out to a **54px radius**, 120ms, then gone — drawn on `pointerdown` before the sim is called |
 
 The hatching is not decoration: it is the second channel for a *state*, which
 section 3's rule covers as much as it covers kinds, and section 8 step 5
@@ -951,7 +979,7 @@ is noise.
 | hit | a 2px tapered line from the dinosaur to the target, in the dinosaur's hue | 1–3 cells | 80ms |
 | kill | a 24px expanding ring in the kind hue, plus a meat pip that rises 18px and fades | 1 cell | 260ms |
 | leak | a 40px ring in `refusal` around the nest, egg count flashes | 1 cell | 420ms |
-| blocked | the refused cell fills with 45° `refusal` hatching, no movement | 1 cell | 200ms |
+| blocked | the refused cell fills with 45° `ink` hatching, no movement — §4's preview table is the specification and this row restates it | 1 cell | 200ms |
 | slow | a `#74b9ff` ring around the slowed invader, held while the debuff lasts | 1 cell | held |
 
 A kill is small and constant. A leak is sharp and the egg count is the

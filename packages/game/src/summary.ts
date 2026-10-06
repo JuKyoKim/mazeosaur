@@ -1,4 +1,3 @@
-import { fossilAward } from "@mazeosaur/content";
 import type { Content, Dino, DinoDef, Kind } from "@mazeosaur/sim";
 
 /**
@@ -23,8 +22,11 @@ export interface RunSummary {
   readonly migrationsTotal: number;
   readonly eggsKept: number;
   readonly meatUnspent: number;
-  /** This run's award only, not the profile's running total. */
-  readonly fossilsEarned: number;
+  /**
+   * What this run earned. Computed once, where it was awarded — §5.4. This
+   * run's award only, not `profile.fossilsEarned`'s running total.
+   */
+  readonly fossilsAwarded: number;
   /** So the run can be reproduced with `?seed=`. */
   readonly seed: number;
   readonly pack: readonly PackEntry[];
@@ -71,11 +73,13 @@ export function packFrom(dinos: readonly Dino[], dinoDef: (d: Dino) => DinoDef):
 /**
  * Build the summary for a run that has just ended.
  *
- * The fossil figure comes from `fossilAward` with `content.rules.
- * fossilWeights` — the same pure function on the same numbers that
- * `runFinished` uses when `flush()` accounts the finish, so the number on
- * screen cannot disagree with the number banked. It is not recomputed from
- * a formula here; rule 4 keeps the weights in content.
+ * `fossilsAwarded` is passed in rather than computed here, and that is the
+ * point of §5.4: the run is paid for in `board`, by the `fossilAward` call
+ * inside `runFinished` that `flush()` makes at the terminal save. This
+ * function hands that number to the screen; it never produces one. A
+ * second `fossilAward` call on these same numbers would be a figure to
+ * keep in step with the banked one for no gain — and the two drifting is
+ * invisible to the player, who sees only one of them.
  */
 export function runSummary(
   outcome: "won" | "lost",
@@ -83,19 +87,15 @@ export function runSummary(
   dinoDef: (d: Dino) => DinoDef,
   seed: number,
   content: Content,
+  fossilsAwarded: number,
 ): RunSummary {
-  const migrationsCleared = state.migration;
   return {
     outcome,
-    migrationsCleared,
+    migrationsCleared: state.migration,
     migrationsTotal: content.migrations.length,
     eggsKept: state.eggs,
     meatUnspent: state.meat,
-    fossilsEarned: fossilAward(content.rules.fossilWeights, {
-      eggsLeft: state.eggs,
-      migrationsCleared,
-      meatUnspent: state.meat,
-    }),
+    fossilsAwarded,
     seed,
     pack: packFrom(state.dinos, dinoDef),
   };

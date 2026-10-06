@@ -56,25 +56,30 @@ describe("runSummary", () => {
   const state = { migration: 12, eggs: 15, meat: 25, dinos: [dino(1, adultA.id)] };
 
   it("reports migrations cleared as the index, so a loss on the first is 0", () => {
-    const first = runSummary("lost", { ...state, migration: 0 }, defOf, 7, content);
+    const first = runSummary("lost", { ...state, migration: 0 }, defOf, 7, content, 0);
     expect(first.migrationsCleared).toBe(0);
     expect(first.migrationsTotal).toBe(content.migrations.length);
   });
 
   it("carries the seed so the run can be reproduced", () => {
-    expect(runSummary("lost", state, defOf, 4242, content).seed).toBe(4242);
+    expect(runSummary("lost", state, defOf, 4242, content, 0).seed).toBe(4242);
   });
 
   /**
-   * The screen's number and the banked number come from the same pure
-   * function on the same inputs. Asserted rather than assumed because a
-   * player who is shown one figure and credited another has no way to tell
-   * which is wrong, and nothing else in the suite compares the two.
+   * §5.4: the screen shows the figure the board banked, and this is the
+   * seam that carries it. A player shown one number and credited another
+   * has no way to tell which of the two is wrong, so the summary is handed
+   * the award rather than deriving one — `runSummary` has no access to
+   * `fossilWeights` any more, which makes a second derivation a type error
+   * rather than a thing to remember not to write.
+   *
+   * Composed against the real `runFinished` rather than an invented number,
+   * because the claim is about the two agreeing and not about either on its
+   * own.
    */
-  it("shows exactly the fossils flush() banks for the same run", () => {
-    const s = runSummary("won", state, defOf, 7, content);
+  it("carries exactly the award flush() banked for the same run", () => {
     const before = freshSave(BUILD).profile;
-    const after = runFinished(before, content.rules.fossilWeights, {
+    const finish = runFinished(before, content.rules.fossilWeights, {
       valleyId: content.valley.id,
       seed: 7,
       contentVersion: content.version,
@@ -82,11 +87,15 @@ describe("runSummary", () => {
       eggsLeft: state.eggs,
       meatUnspent: state.meat,
     });
-    expect(s.fossilsEarned).toBe(after.fossilsEarned - before.fossilsEarned);
+    const s = runSummary("won", state, defOf, 7, content, finish.fossilsAwarded);
+    expect(s.fossilsAwarded).toBe(finish.profile.fossilsEarned - before.fossilsEarned);
+    // Non-zero, or the equality above would hold for a summary that simply
+    // dropped the award on the floor.
+    expect(s.fossilsAwarded).toBeGreaterThan(0);
   });
 
   it("passes the outcome through, which is the only thing the headline reads", () => {
-    expect(runSummary("won", state, defOf, 1, content).outcome).toBe("won");
-    expect(runSummary("lost", state, defOf, 1, content).outcome).toBe("lost");
+    expect(runSummary("won", state, defOf, 1, content, 0).outcome).toBe("won");
+    expect(runSummary("lost", state, defOf, 1, content, 0).outcome).toBe("lost");
   });
 });

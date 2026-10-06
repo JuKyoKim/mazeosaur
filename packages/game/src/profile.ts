@@ -30,6 +30,23 @@ function isBetter(candidate: BestRunSave, existing: BestRunSave | undefined): bo
 }
 
 /**
+ * The result of accounting a finished run: the next profile, and what that
+ * run earned.
+ *
+ * The award is returned rather than left inside because `results` has to
+ * show the same figure that was banked. Section 5.4 of
+ * `docs/01-v1-architecture.md` rules out the obvious alternative — a second
+ * `fossilAward` call on the summary's own numbers — since two call sites on
+ * the same inputs are two things to keep in step, and a player shown one
+ * figure and credited another cannot tell which of the two is wrong.
+ */
+export interface RunFinish {
+  readonly profile: ProfileSave;
+  /** This run's award alone, not `profile.fossilsEarned`'s lifetime total. */
+  readonly fossilsAwarded: number;
+}
+
+/**
  * A run ended won or lost: §1.2's `runsFinished`, the fossil award (read
  * from `weights`, never a constant here), and `profile.best` for the
  * valley the run was played in.
@@ -39,7 +56,7 @@ function isBetter(candidate: BestRunSave, existing: BestRunSave | undefined): bo
  * negative balance here means the award or the save itself is wrong, not
  * that there is a sensible fallback value.
  */
-export function runFinished(profile: ProfileSave, weights: FossilWeights, outcome: RunOutcome): ProfileSave {
+export function runFinished(profile: ProfileSave, weights: FossilWeights, outcome: RunOutcome): RunFinish {
   const award = fossilAward(weights, {
     eggsLeft: outcome.eggsLeft,
     migrationsCleared: outcome.migrationsCleared,
@@ -57,5 +74,8 @@ export function runFinished(profile: ProfileSave, weights: FossilWeights, outcom
     contentVersion: outcome.contentVersion,
   };
   const best = isBetter(candidate, profile.best[outcome.valleyId]) ? { ...profile.best, [outcome.valleyId]: candidate } : profile.best;
-  return { ...profile, fossilsEarned, runsFinished: profile.runsFinished + 1, best };
+  return {
+    profile: { ...profile, fossilsEarned, runsFinished: profile.runsFinished + 1, best },
+    fossilsAwarded: award,
+  };
 }
