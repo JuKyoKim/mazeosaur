@@ -1361,9 +1361,19 @@ deterministic and costs nothing.
 writes three APNGs to `docs/art/anim/`: the six adults idling, the six
 attacking, and the whole board at 390x693 breathing. They are deliberately
 outside `art:verify`, which compares one raster per file and has nothing to
-say about a file with five. The gap is small: every pixel in them comes from
-the same `clipFrames` as the committed `<id>-animation.png`, which **is**
-verified, so a drift in the clips fails the gate on the still plate first.
+say about a file with five. The gap is small for the *clips*: every pixel of
+the two sprite strips comes from the same `clipFrames` as the committed
+`<id>-animation.png`, which **is** verified, so a drift in the clips fails
+the gate on the still plate first.
+
+**It is not small for the board strip, and that one has already gone stale
+once.** `<id>-board-phone.png` is a whole `renderBoardFrame` — HUD, maze,
+invaders — so anything that changes how the board draws changes it, and
+nothing in `art:frames` or `art:verify` writes or reads it. A change that
+regenerates `<id>-board.png` and `<id>-board-phone.png` leaves the breathing
+one on the older board, silently, and the two plates then disagree about the
+same scene. Until that is gated, **`npm run art:anim <id>` belongs in the
+same commit as any change that moves the still board plates.**
 
 ---
 
