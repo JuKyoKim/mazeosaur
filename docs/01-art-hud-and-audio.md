@@ -1261,18 +1261,51 @@ partner in section 5.4. Phones are played silently.
 | `migration-start` | a migration begins | a distant herd call that arrives from the spawn side | 900 | no |
 | `migration-clear` | a migration is cleared | a two-note resolve, up | 700 | no |
 | `warn-eggs` | eggs drop to 3 | a low two-pulse heartbeat, once | 800 | ducks music |
-| `select` | a dinosaur is tapped | a short soft tick | 50 | no |
+| `select` | a dinosaur is tapped | a short soft tick, the same for every kind | 50 | no |
 | `defeat` | eggs reach 0 | the drone collapses to silence over 2s | 2000 | ducks all |
 | `victory` | migration 50 cleared | the build-phase theme, full, resolved | 4000 | ducks all |
+
+**The kind's pitch is for the moments the eye cannot resolve.** Three
+sounds carry it and the other thirteen do not, and the division is not
+arbitrary. `place` confirms a commit while the player is looking at the
+grid and not at the tray, so the pitch is what says *which* kind just went
+down. `grow` is a stage change, and the kind's call dropping a fifth is the
+change itself. `hit` is the strongest case: under a working maze nothing on
+screen tells you which of six dinosaurs is firing, so the pitch,
+round-robined across the hues, is the only channel reporting that the whole
+maze is engaged.
+
+Everything else stays flat, and `select` is the one worth stating outright
+because it looks like an omission. It fires on a tap that opens the dinosaur
+sheet — a panel naming that one dinosaur's kind, stage and stats, with its
+hue on it. There is no eyes-free version of that interaction, so a pitched
+tick would be a fourth copy of a fact already on screen, and at 50ms it is
+the quietest sound in the table precisely because it is chrome. A tap tone
+that moves teaches the player to hear the interface as an instrument. `kill`
+is flat for the neighbouring reason: the kill belongs to the invader, several
+dinosaurs may have paid for it, and the player's eye is already on the ring.
 
 **`hit` is the one that needs a limiter.** Sixty invaders under six adult
 dinosaurs is hundreds of hits a second. Cap it: at most one `hit` per 60ms
 across the whole board, round-robin across the hues so it still sounds
 distributed, and drop rather than queue. The same cap on `kill` at 90ms.
 
-Fifteen SFX at 48kHz mono, trimmed, as OGG plus M4A for Safari, is under
-400 kB. Two music layers at 90 seconds each, looped, is about 1 MB. Total
-under 1.5 MB, which is the budget line.
+The table's sixteen rows add up to 12.8 seconds of audio, which is the
+number the budget is actually made of — the count on its own buys nothing.
+At 48kHz mono, trimmed, shipped as OGG plus M4A for Safari, 64 kbps per
+format is about 205 kB of payload plus roughly 80 kB of headers, because
+sixteen small files pay for sixteen Vorbis codebooks and sixteen MP4
+containers. That is ~285 kB. The 400 kB line holds to about 80 kbps and is
+gone by 96, so the bitrate is the constraint here and not the row count:
+anything above 80 kbps mono needs an audio sprite — one file per format with
+an offset table — rather than a bigger budget.
+
+Where the headroom is, if it is ever needed: `defeat` and `victory` are 6 of
+those 12.8 seconds, and both are musical stings rather than effects. Played
+on the music layer instead of shipped as clips, the SFX bill roughly halves.
+
+Two music layers at 90 seconds each, looped, is about 1 MB. Total under
+1.5 MB, which is the budget line.
 
 ---
 
