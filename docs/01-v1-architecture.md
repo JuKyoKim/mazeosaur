@@ -861,7 +861,7 @@ So the summary carries the award rather than the ingredients for it:
 
 ```ts
 export interface RunSummary {
-  readonly outcome: "won" | "lost";
+  readonly outcome: "won" | "lost" | "abandoned";
   readonly migrationsCleared: number;
   readonly eggsKept: number;
   readonly meatUnspent: number;
@@ -878,6 +878,20 @@ the caller and handed to both. Not a second `fossilAward` call on the
 summary's own numbers: two call sites on the same inputs are two things to
 keep in step for no gain. And not read back out of `profile.best`, which
 is the wrong source because a run that was not a best never appears there.
+
+**`abandoned` is the player's own "End run"**, from the pause menu. It is a
+third outcome rather than a flag beside `outcome` or a reuse of `lost`,
+because a quit is a distinct terminal event and a save or a replay should
+be able to tell a run that was beaten from one that was walked out of.
+
+It reaches the same `results` scene the other two do — one end-of-run
+shape, so a second one cannot drift away from it — and it carries the run's
+own true figures, because the player wants to see how far they got. What it
+does **not** carry is an award. `flush()`'s `accountFinish` tests the `won`
+and `lost` phases only, so an abandoned run arrives with `fossilsAwarded`
+at 0 and leaves `profile.runsFinished` and `profile.best` alone. Section
+1.2's accounting belongs to a run that reached a terminal phase; paying for
+a quit would make "End run" the cheapest way to farm fossils.
 
 ## 6. The review protocol
 

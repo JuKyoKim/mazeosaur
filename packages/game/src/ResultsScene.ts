@@ -49,9 +49,7 @@ export class ResultsScene extends Phaser.Scene {
     this.add.rectangle(0, HUD_Y, CANVAS_W, HUD_H, COLORS.hud, 1).setOrigin(0, 0);
 
     // `title` at 2x, per §9's type column.
-    this.add
-      .text(CANVAS_W / 2, RESULTS.headline.y, s.outcome === "won" ? "The nest holds" : "The valley is quiet", text(TYPE.title * 2))
-      .setOrigin(0.5);
+    this.add.text(CANVAS_W / 2, RESULTS.headline.y, HEADLINE[s.outcome], text(TYPE.title * 2)).setOrigin(0.5);
 
     // The number first and big, which is what §9 asks for: the count is
     // the headline statistic and "of 50" is the context for it.
@@ -83,8 +81,9 @@ export class ResultsScene extends Phaser.Scene {
       // scene's to hold and not this screen's to pass.
       //
       // `start` and not `resume`: the board is *paused* behind this screen
-      // (see `BoardScene.endRun`), and resuming it would hand the player
-      // back the run they just finished. `start` re-runs its `create()`,
+      // (see `BoardScene.showResults`), and resuming it would hand the
+      // player back the run they just finished — or, on the `abandoned`
+      // path, the one they chose to walk out of. `start` re-runs its `create()`,
       // which is the fresh run — and stops this scene on the way out.
       this.scene.start("board");
     });
@@ -174,6 +173,25 @@ export class ResultsScene extends Phaser.Scene {
     return this.summary;
   }
 }
+
+/**
+ * The headline per outcome. A `Record<Outcome, string>` and not a ternary:
+ * `outcome === "won" ? … : …` sent every value that was not `won` to the
+ * *loss* headline, so adding `abandoned` would have told a player who quit
+ * that the valley had fallen. A total record makes the next outcome a type
+ * error at this line instead.
+ *
+ * "The nest holds" and "The valley is quiet" are maze-design's, from §9.
+ * `abandoned`'s is not theirs yet: this is the wording the in-board
+ * end-run overlay already showed, carried over so the behaviour change
+ * ships without inventing a headline on design's behalf. maze-design owns
+ * the final string, and the `+0 fossils` line below is the same call.
+ */
+const HEADLINE: Record<RunSummary["outcome"], string> = {
+  won: "The nest holds",
+  lost: "The valley is quiet",
+  abandoned: "The run is over",
+};
 
 /** The pack blocks stop growing here; a two-genus run is not a mural. */
 const PACK_CELL_MAX = 96;
