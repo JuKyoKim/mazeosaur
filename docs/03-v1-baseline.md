@@ -126,11 +126,6 @@ $ npm run test:baseline
 
 > vitest run -t "@baseline" && playwright test --config tests/client/playwright.config.ts --grep "@baseline"
 
- Test Files  7 passed | 9 skipped (16)
-      Tests  14 passed | 117 skipped (131)
-
-Running 4 tests using 1 worker
-
   ✓  restart-regression.spec.ts … scene.restart() leaves the canvas rendering with no renderer errors [@baseline]
   ✓  win-screen.spec.ts … win screen: clearing the last migration shows it, and Play again starts a fresh run [@baseline]
   ✓  resume.spec.ts … save and resume: a reload picks the stored run back up, not a fresh one [@baseline]
