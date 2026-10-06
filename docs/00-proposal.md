@@ -656,11 +656,14 @@ we find out.
   release; the baseline that does matter is named and tested.** The eight
   MVP features and playability lines, the test proving each one, and
   `npm run test:baseline` are in
-  [03-v1-baseline.md](03-v1-baseline.md). One line — idle and attack
-  animations — is still open: it is named in the baseline but not
-  specified for v1 anywhere else (section 10 item 3 of
-  `docs/01-art-hud-and-audio.md` defers animation explicitly), so it has
-  no test yet and is flagged there rather than resolved by inventing one.
+  [03-v1-baseline.md](03-v1-baseline.md). One line — the owner's "idle
+  and attack animations" — splits rather than stays open. The attack
+  strike **is** in v1 and is specified (`docs/01-art-hud-and-audio.md`
+  §5.4.1, shipped as `packages/game/assets/toy-box/strikes.{png,json}`);
+  only the client wiring is outstanding (ARB-223), so `test:baseline`
+  covers the mechanical half today by sequencing, not by scope. Idle
+  breath and walk are not in v1 and stay unspecified, because nobody has
+  said what a Toy Box dinosaur does standing still.
   `check` and `client-smoke` stay as `docs/02-ci.md` has them until then;
   only at the v1 release does the owner get asked to make
   `test:baseline` itself a required check, per the open ARB-171 question.
