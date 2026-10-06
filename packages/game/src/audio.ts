@@ -138,7 +138,14 @@ export class SfxBus {
       }
     }
     this.lastPlayedAt.set(id, t);
-    const h = spec.minGapMs > 0 ? this.nextHue(hue) : hue;
+    // The rotation is board-wide, not per-sound, so a caller that passes no
+    // hue must stay out of it entirely: `hit` and `kill` are both capped,
+    // and a `kill` that consulted the rotation would come back carrying
+    // some dinosaur's hue — which the sink then detunes by — and would also
+    // spend a slot `hit` is owed. §6 gives `kill` the cap at 90ms and
+    // nothing else; it is not pitched by kind. The drop path above guards
+    // `remember()` the same way, so the two agree.
+    const h = spec.minGapMs > 0 && hue !== undefined ? this.nextHue(hue) : hue;
     // Volume is left to the sink: §6 specifies character and length, and
     // per-sound mixing is the sink's own business. `volumes()` is the
     // player's control over it and nothing here touches that either.

@@ -133,10 +133,43 @@ describe("the hit limiter", () => {
     }
     bus.play("hit", hues[0]);
     const used = r.played.filter((p) => p.id === "hit").map((p) => p.hue);
-    // More than one hue reached the sink, which is the whole point: a cap
-    // that always picked the first would make a three-kind board sound
-    // like a one-kind board.
-    expect(new Set(used).size).toBeGreaterThan(1);
+    // Every kind that asked reached the sink, which is the whole point: a
+    // cap that always picked the first would make a three-kind board sound
+    // like a one-kind board. Asserting the exact set rather than "more than
+    // one" is deliberate — a rotation that loses a kind still passes the
+    // weaker assertion, and that is how a hue leak once went unnoticed.
+    expect(new Set(used)).toEqual(new Set(hues));
+  });
+
+  it("lets a kill through a hit burst without taking a hue or a rotation slot", () => {
+    const r = recorder();
+    const c = clock();
+    const bus = new SfxBus(r.port, c.now);
+    const [amber, rust, sky] = [0xf4a82a, 0xbd2b1d, 0x3ab1ea];
+
+    // Three kinds land hits inside one cap window: the first is audible and
+    // the other two hues are held back for the rotation to spend later.
+    expect(bus.play("hit", amber)).toBe(true);
+    expect(bus.play("hit", rust)).toBe(false);
+    expect(bus.play("hit", sky)).toBe(false);
+
+    // Then an invader dies. §6 gives `kill` "a wet snap plus a meat chime"
+    // and the cap at 90ms — the cap, not the hue rotation. It is not pitched
+    // by kind, and the scene passes no hue for it. The sink applies
+    // `semitones(hue)` to whatever it is handed, so handing it a hue here
+    // would detune the kill by whichever dinosaur was capped a moment ago.
+    expect(bus.play("kill")).toBe(true);
+    expect(r.played.filter((p) => p.id === "kill")).toEqual([{ id: "kill" }]);
+
+    // And the kill must not have *consumed* a slot either: the rotation
+    // still owes rust and sky, so the next two windows pay them out.
+    c.advance(60);
+    bus.play("hit", amber);
+    c.advance(60);
+    bus.play("hit", amber);
+
+    const used = r.played.filter((p) => p.id === "hit").map((p) => p.hue);
+    expect(new Set(used)).toEqual(new Set([amber, rust, sky]));
   });
 });
 
