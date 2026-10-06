@@ -947,6 +947,10 @@ were actually checked:
   goes false with nothing editing it. State the rule the code has to
   satisfy, or a number the named file derives, and name the symbol rather
   than the line so a grep can still find it later.
+- The green you are trusting is tied to the current `main`: `main` is an
+  ancestor of the head commit the run is attached to. A run that is merely
+  newer than `main`'s last commit proves nothing — 6.5 says why, and what to
+  do when it is not an ancestor.
 - The verification in the PR body is of the kind described in 6.2.3.
 
 Request changes with the specific line and the specific rule. "Looks fine"
@@ -969,6 +973,64 @@ none of it lands on an architect's approval, however clean the diff is.
 
 Game feel, art direction and balance taste are the designer's. The
 architect reviews them for determinism and schema fit, not for taste.
+
+### 6.5 Tying a green to the current `main`
+
+A green check run says a tree compiled. It does not say *which* tree, and in
+this repo the sha it is recorded against is not the sha it compiled. Before
+trusting a green, require that **`main` is an ancestor of the head commit the
+run is attached to**:
+
+```bash
+gh api repos/JuKyoKim/mazeosaur/compare/<main-head>...<pr-head-sha> --jq .behind_by  # must be 0
+git merge-base --is-ancestor origin/main <pr-head-sha>                               # exit 0
+```
+
+If it is zero, the green necessarily compiled a tree containing the current
+`main`. If it is not, the green is not evidence about the current `main`: merge
+`main` into the branch, or have the author do it, and wait for the re-run.
+
+**The mechanism, because the instruction is droppable without it.** `check`
+triggers `on: pull_request` and checks out with a bare `actions/checkout@v4`,
+whose default for that event is `refs/pull/N/merge` — so the tree it compiles
+is the branch head merged with whatever `main` was when the runner started.
+But every check run in this repo — `check`, `client-smoke`, `publish` — is
+attached to the branch **head** sha, because that is the sha GitHub opens the
+check suite on for a `pull_request` event. No check run lands on a merge ref at
+all: query `commits/<merge-ref-sha>/check-runs` for any open pull request, or
+for a merge commit the ref has since moved off, and the count is zero.
+
+Two consequences, and they are the whole reason the obvious shortcuts fail:
+
+- **A timestamp is not an ancestry test.** "The run is newer than `main`'s last
+  commit" is false reassurance, because the runner resolved the merge ref at an
+  instant the API no longer tells you about.
+- **Reading `refs/pull/N/merge` now is necessary but not sufficient.** That ref
+  is mutable and GitHub recomputes it lazily. A `false` correctly condemns the
+  green. A `true` can still be wrong, if the ref caught up *after* the recorded
+  run had already finished against an older value.
+
+The head sha has neither hole, because it is immutable and is the exact object
+the green is attached to, and any merge derived from a head containing `main`
+contains `main` however late it was computed.
+
+This is sufficient, not exclusive. A branch behind `main` may well have been
+tested against a current merge ref, and there is one exact way to find out: the
+`check` job's "Checking out the ref" group logs `HEAD is now at <sha> Merge
+<head> into <main>`, and that merge commit stays fetchable by sha afterwards
+even once the ref has moved off it. That is the only surviving record of which
+tree a green compiled, it dies with the job log's retention, and it costs a log
+download per pull request. Ancestry of the head is the version a merge gate can
+check cheaply and will not forget to check, which is why it is the one in the
+bar.
+
+The cost is real: branches carry a merge of `main` rather than leaning on
+GitHub's merge ref, so a long-lived branch is re-merged repeatedly. That is the
+price of a gate that can prove what it approved. Nothing enforces this at the
+GitHub level and nothing will before the v1 baseline, by
+[decisions/0002](decisions/0002-nothing-blocks-main-until-v1-baseline.md) — the
+merge gate is the only thing between a stale green and a red `main`, so the
+gate's method is load-bearing.
 
 ## 7. What v1 does not include
 
