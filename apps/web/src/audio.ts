@@ -97,9 +97,13 @@ function noiseBuffer(ctx: AudioContext): AudioBuffer {
 
 /**
  * The kind's hue as a pitch offset, in semitones across a tritone. Section 6
- * pitches `place` and `hit` by kind; the hue is what the client already has
- * to hand, and deriving the offset from it means a new kind gets a voice
- * without anybody choosing a number.
+ * pitches `place`, `grow` and `hit` by kind and nothing else, because those
+ * are the three moments the player cannot see which kind acted; the hue is
+ * what the client already has to hand, and deriving the offset from it means
+ * a new kind gets a voice without anybody choosing a number.
+ *
+ * This is applied to whatever hue it is handed, so the decision about which
+ * sounds are pitched lives at the call sites, not here.
  */
 function semitones(hue: number | undefined): number {
   if (hue === undefined) return 0;

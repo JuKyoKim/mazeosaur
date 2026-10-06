@@ -37,6 +37,7 @@ import {
   kindButtonX,
   rowAt,
 } from "./layout.js";
+import { MIGRATION_LABEL, migrationCounter } from "./row1.js";
 import { sheetLines } from "./sheet.js";
 import { COLORS, KIND_COLOR, text, wrapped } from "./theme.js";
 import { SfxBus } from "./audio.js";
@@ -1041,7 +1042,7 @@ export class BoardScene extends Phaser.Scene {
     // `label` over `body` at one x, and not one line: `MIGRATION 49 / 50`
     // on one line runs 61px into Send. Stacking it is why row 1 is 96 tall
     // rather than the 82 the hit floor alone asks for.
-    this.add.text(ROW1.migrationLabel.x, ROW1.migrationLabel.y, "MIGRATION", text(TYPE.label, COLORS.textDim));
+    this.add.text(ROW1.migrationLabel.x, ROW1.migrationLabel.y, MIGRATION_LABEL, text(TYPE.label, COLORS.textDim));
     this.migrationValue = this.add.text(
       ROW1.migrationValue.x,
       ROW1.migrationValue.y,
@@ -1175,7 +1176,7 @@ export class BoardScene extends Phaser.Scene {
     this.meatText.setText(`${s.meat}`);
     this.eggsText.setText(`${s.eggs}`);
     const total = content.migrations.length;
-    this.migrationValue.setText(`${Math.min(s.migration + 1, total)} / ${total}`);
+    this.migrationValue.setText(migrationCounter(s.migration, total));
 
     // The bar drains across the build phase and is the early-send
     // affordance at the same time: what is left of it *is* the bonus.

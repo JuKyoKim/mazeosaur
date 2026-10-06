@@ -7,7 +7,8 @@
 
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { codeSpec, describeProblem, docSpec, geometryDrift, readDoc } from "../doc-table.js";
+import { codeSpec, describeProblem, docSpec, geometryDrift, readDoc, widthDrift, widthSpec } from "../doc-table.js";
+import { ROW1 } from "../layout.js";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
 
@@ -31,5 +32,28 @@ describe("docs/01 §4 against layout.ts", () => {
     // than a real comparison, which this pins against going unnoticed.
     const code = codeSpec();
     for (const row of spec.keys()) expect(code.has(row), `codeSpec is missing "${row}"`).toBe(true);
+  });
+});
+
+describe("docs/01 §4's row-1 width table", () => {
+  it("ends each field where its own width puts it, beside the neighbour layout.ts puts there", () => {
+    const problems = widthDrift(readDoc(ROOT));
+    expect(problems.map(describeProblem).join("\n")).toBe("");
+  });
+
+  it("is checked at all, which is the part that was missing", () => {
+    // ARB-307 read the migration row as saying the readout clears Send by
+    // 1px rather than 16 — measured off a board plate, which is drawn in a
+    // fixed-pitch mock font and not the one the HUD uses. The table was
+    // right; nothing in the repo could say so. Three fields, and the
+    // migration row — the one every downstream number in the band depends
+    // on — must be among them or this guard is not reaching it.
+    const spec = widthSpec(readDoc(ROOT));
+    expect(spec.size).toBe(3);
+    expect(spec.get("migration")).toEqual({ width: 108, endsAt: 428, nextOrigin: ROW1.send.x });
+    // The clearance §4's prose argues from, stated once here so a table edit
+    // that quietly spends it has to come past this line.
+    const migration = spec.get("migration")!;
+    expect(ROW1.send.x - migration.endsAt).toBe(16);
   });
 });

@@ -13,6 +13,7 @@
 
 import { CELL, Game, type Dino, type Invader } from "@mazeosaur/sim";
 import { content } from "@mazeosaur/content";
+import { MIGRATION_LABEL, migrationCounter } from "@mazeosaur/game/row1";
 import { sheetLines } from "@mazeosaur/game/sheet";
 import { clipFrames, type Clip } from "./animate.js";
 import { ARCHETYPE_SILHOUETTE, type Archetype } from "./bestiary.js";
@@ -791,8 +792,15 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
   drawText(r, ROW1.meatValue.x, ROW1.meatValue.y + 6, String(s.meat), TYPE.vital, BOARD.meat);
   eggIcon(r, ROW1.eggIcon.x, ROW1.eggIcon.y, ROW1.eggIcon.w, ROW1.eggIcon.h);
   drawText(r, ROW1.eggValue.x, ROW1.eggValue.y + 6, String(s.eggs), TYPE.vital, BOARD.eggs);
-  drawText(r, ROW1.migrationLabel.x, ROW1.migrationLabel.y, "MIGRATION", TYPE.label, BOARD.textDim);
-  drawText(r, ROW1.migrationValue.x, ROW1.migrationValue.y, `${Math.min(s.migration + 1, content.migrations.length)} / ${content.migrations.length}`, TYPE.body, BOARD.text);
+  drawText(r, ROW1.migrationLabel.x, ROW1.migrationLabel.y, MIGRATION_LABEL, TYPE.label, BOARD.textDim);
+  drawText(
+    r,
+    ROW1.migrationValue.x,
+    ROW1.migrationValue.y,
+    migrationCounter(s.migration, content.migrations.length),
+    TYPE.body,
+    BOARD.text,
+  );
 
   if (s.phase === "build") {
     const bonus = g.earlySendBonus();

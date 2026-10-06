@@ -334,11 +334,12 @@ stay at 444, and the row ends at the content edge — so 260px carry three
 hit-floor squares and two 7px gaps with nothing over. Send paid for Pause
 because it was the only control here with anything to give: it was 164
 wide against a floor of 82, where everything else in the row is either at
-the floor already or a text field whose measured clearance is the 8 or 16px
-in the table below. What it cost is Send's bonus label, which is now two
-lines — `Send` over `+25` — exactly as Grow and Sell already are. A fourth
-control does not fit in this row at any width, and adding one means taking
-the space from somewhere `packages/game/test/layout.test.ts` can see.
+the floor already or a text field, and the only text field on this band is
+the migration readout with the 16px of clearance in the table below. What
+it cost is Send's bonus label, which is now two lines — `Send` over `+25` —
+exactly as Grow and Sell already are. A fourth control does not fit in this
+row at any width, and adding one means taking the space from somewhere
+`packages/game/test/layout.test.ts` can see.
 
 **The timer is a draining bar, not digits.** A full-width bar across the
 seam between board and HUD is legible without being read, which is the
@@ -361,6 +362,35 @@ font at the sizes above:
 | meat | `9999` at `vital` | 88 | 148 | 192, the egg icon |
 | eggs | `20` at `vital` | 44 | 274 | 320 |
 | migration | `MIGRATION` at `label` | 108 | 428 | 444, **Send** |
+
+Those three widths are what a running client rendered, measured the way the
+sheet column below is measured and carrying the same caveat: they are one
+machine's `system-ui` fallback rather than a property of the game, and a box
+that resolves a narrower face measures them smaller. **So they are the
+indicative half of this table, and three other things are the enforced
+half.** Each is a separate guard, because no one of them can see what the
+others do:
+
+| what | where | what it catches |
+| --- | --- | --- |
+| each field inside its band, on one line, and `MIGRATION` still the wider of the readout's two lines | `tests/client/hud-row1-widths.spec.ts`, in a running client | a face wide enough to push a field onto its neighbour, and the ordering flipping |
+| `MIGRATION` is 9 characters, `50 / 50` is 7 | `packages/game/test/layout.test.ts`, no font at all | the *string* growing — `MIGRATIONS` renders 120px, fits the 124px band, and would leave this table costing it at 108 |
+| each row ends at its own origin plus its own width, beside the neighbour it names | `tools/art/test/doc-table.test.ts` | this table drifting from `layout.ts`, or quietly stopping being parsed |
+
+What travels between machines is the ordering, the bands and the character
+counts. The pixels are what one of them came to.
+
+**Not from the plates.** The board plates in `docs/art/` cannot answer any
+of this and must not be measured for it. They are drawn by
+`tools/art/font.ts`, a fixed-pitch 5x7 bitmap font standing in for type
+Node cannot rasterise, and on a digit run it is about 1.6x wider: `49 / 50`
+is 123px there against 77 here, so in a plate the counter arrives 1px short
+of Send and looks like it touches. Worse for anyone reading one, the order
+of the readout's two lines *reverses* — `MIGRATION` is the wider line in a
+proportional font and the narrower one in the mock. The mock is
+deliberately pessimistic about crowding, which is what makes it useful for
+judging a frame; it is not a measurement of this table, and ARB-307 is what
+reading it as one costs.
 
 The migration readout is `label` over `body` — two lines at one x — and not
 one line, and that is what buys the 16px it clears Send by: on one line
@@ -1455,18 +1485,53 @@ partner in section 5.4. Phones are played silently.
 | `migration-start` | a migration begins | a distant herd call that arrives from the spawn side | 900 | no |
 | `migration-clear` | a migration is cleared | a two-note resolve, up | 700 | no |
 | `warn-eggs` | eggs drop to 3 | a low two-pulse heartbeat, once | 800 | ducks music |
-| `select` | a dinosaur is tapped | a short soft tick | 50 | no |
+| `select` | a dinosaur is tapped | a short soft tick, the same for every kind | 50 | no |
 | `defeat` | eggs reach 0 | the drone collapses to silence over 2s | 2000 | ducks all |
 | `victory` | migration 50 cleared | the build-phase theme, full, resolved | 4000 | ducks all |
+
+**The kind's pitch is for the moments the eye cannot resolve.** Three
+sounds carry it and the other thirteen do not, and the division is not
+arbitrary. `place` confirms a commit while the player is looking at the
+grid and not at the tray, so the pitch is what says *which* kind just went
+down. `grow` is a stage change, and the kind's call dropping a fifth is the
+change itself. `hit` is the strongest case: under a working maze nothing on
+screen tells you which of six dinosaurs is firing, so the pitch,
+round-robined across the hues, is the only channel reporting that the whole
+maze is engaged.
+
+Everything else stays flat, and `select` is the one worth stating outright
+because it looks like an omission. It fires on a tap that opens the dinosaur
+sheet — a panel naming that one dinosaur's kind, stage and stats, with its
+hue on it. There is no eyes-free version of that interaction, so a pitched
+tick would be a fourth copy of a fact already on screen — after the sprite
+on the board, the sheet's name and the sheet's hue. At 50ms it is meant to
+sit below notice: it is chrome, not feedback, and it should be mixed as the
+quietest thing the game makes. A tap tone that moves teaches the player to
+hear the interface as an instrument. `kill`
+is flat for the neighbouring reason: the kill belongs to the invader, several
+dinosaurs may have paid for it, and the player's eye is already on the ring.
 
 **`hit` is the one that needs a limiter.** Sixty invaders under six adult
 dinosaurs is hundreds of hits a second. Cap it: at most one `hit` per 60ms
 across the whole board, round-robin across the hues so it still sounds
 distributed, and drop rather than queue. The same cap on `kill` at 90ms.
 
-Fifteen SFX at 48kHz mono, trimmed, as OGG plus M4A for Safari, is under
-400 kB. Two music layers at 90 seconds each, looped, is about 1 MB. Total
-under 1.5 MB, which is the budget line.
+The table's sixteen rows add up to 12.8 seconds of audio, which is the
+number the budget is actually made of — the count on its own buys nothing.
+At 48kHz mono, trimmed, shipped as OGG plus M4A for Safari, 64 kbps per
+format is about 205 kB of payload plus roughly 80 kB of headers, because
+sixteen small files pay for sixteen Vorbis codebooks and sixteen MP4
+containers. That is ~285 kB. The 400 kB line holds to about 80 kbps and is
+gone by 96, so the bitrate is the constraint here and not the row count:
+anything above 80 kbps mono needs an audio sprite — one file per format with
+an offset table — rather than a bigger budget.
+
+Where the headroom is, if it is ever needed: `defeat` and `victory` are 6 of
+those 12.8 seconds, and both are musical stings rather than effects. Played
+on the music layer instead of shipped as clips, the SFX bill roughly halves.
+
+Two music layers at 90 seconds each, looped, is about 1 MB. Total under
+1.5 MB, which is the budget line.
 
 ---
 

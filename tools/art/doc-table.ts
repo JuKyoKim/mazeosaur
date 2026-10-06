@@ -157,3 +157,93 @@ export function describeProblem(p: Problem): string {
 export function readDoc(root: string): string {
   return readFileSync(join(root, "docs", "01-art-hud-and-audio.md"), "utf8");
 }
+
+// ------------------------------------------------------ §4's row-1 widths
+
+/**
+ * §4 prints a second table above the geometry one: the measured width of
+ * each row-1 field's widest value, where it therefore ends, and the origin
+ * of whatever sits to its right. Every x in row 1 is set from that table, so
+ * a stale row in it is a stale layout argument -- it is what says a timer
+ * digit field does not fit beside the migration readout, and what pinned
+ * Send's origin when ARB-218 took 82px out of Send to pay for Pause.
+ *
+ * Two of its three number columns are checkable without a font. `ends at` is
+ * the field's own origin plus its own width, and `next origin` is a `ROW1`
+ * constant the cell names. Whether the *width* is what the font really
+ * renders is a different question with a different answer: the type is the
+ * platform's, so it has to be measured in a running client, which
+ * `tests/client/hud-row1-widths.spec.ts` does. It cannot be answered from
+ * the board plates in `docs/art/` -- those are drawn in `font.ts`'s
+ * fixed-pitch 5x7 mock, which is around 1.6x wider on a digit run and
+ * reverses which of the readout's two lines is the wider one (ARB-307).
+ */
+const WIDTH_ROWS: Record<string, { origin: number; next: number; nextIs: string }> = {
+  meat: { origin: ROW1.meatValue.x, next: ROW1.eggIcon.x, nextIs: "ROW1.eggIcon.x" },
+  eggs: { origin: ROW1.eggValue.x, next: ROW1.migrationLabel.x, nextIs: "ROW1.migrationLabel.x" },
+  migration: { origin: ROW1.migrationLabel.x, next: ROW1.send.x, nextIs: "ROW1.send.x" },
+};
+
+/** The first integer in a cell, or null: `444, **Send**` is 444. */
+function leadingInt(s: string): number | null {
+  const m = /-?\d+/.exec(unbold(s));
+  return m ? Number(m[0]) : null;
+}
+
+export type WidthRow = { width: number; endsAt: number; nextOrigin: number };
+
+/** §4's row-1 width table, keyed by field, or empty if it is not there. */
+export function widthSpec(markdown: string): Map<string, WidthRow> {
+  const table = parseTables(markdown).find((t) => {
+    const h = t.header.map((c) => c.toLowerCase());
+    return h.includes("widest value") && h.includes("ends at") && h.includes("next origin");
+  });
+  const spec = new Map<string, WidthRow>();
+  if (!table) return spec;
+  const h = table.header.map((c) => c.toLowerCase());
+  const [w, e, n] = [h.indexOf("width"), h.indexOf("ends at"), h.indexOf("next origin")];
+  for (const row of table.rows) {
+    const field = unbold(row[0] ?? "").toLowerCase();
+    const width = leadingInt(row[w] ?? "");
+    const endsAt = leadingInt(row[e] ?? "");
+    const nextOrigin = leadingInt(row[n] ?? "");
+    if (field && width !== null && endsAt !== null && nextOrigin !== null) spec.set(field, { width, endsAt, nextOrigin });
+  }
+  return spec;
+}
+
+/**
+ * Where §4's row-1 width table disagrees with itself or with `ROW1`.
+ *
+ * Three things, none of them about the font: the row ends where its own
+ * origin plus its own width puts it, the neighbour it names sits where
+ * `layout.ts` puts that neighbour, and it does not end past that neighbour.
+ */
+export function widthDrift(docMarkdown: string): Problem[] {
+  const problems: Problem[] = [];
+  for (const [field, { width, endsAt, nextOrigin }] of widthSpec(docMarkdown)) {
+    const known = WIDTH_ROWS[field];
+    if (!known) {
+      problems.push({
+        row: `${field} (width)`,
+        doc: `${width} wide, ends at ${endsAt}`,
+        code: "(no entry in WIDTH_ROWS -- add one)",
+      });
+      continue;
+    }
+    if (known.origin + width !== endsAt) {
+      problems.push({
+        row: `${field} (ends at)`,
+        doc: `${endsAt}`,
+        code: `${known.origin} + ${width} = ${known.origin + width}`,
+      });
+    }
+    if (nextOrigin !== known.next) {
+      problems.push({ row: `${field} (next origin)`, doc: `${nextOrigin}`, code: `${known.next} (${known.nextIs})` });
+    }
+    if (endsAt > known.next) {
+      problems.push({ row: `${field} (clearance)`, doc: `ends at ${endsAt}`, code: `past ${known.next} (${known.nextIs})` });
+    }
+  }
+  return problems;
+}
