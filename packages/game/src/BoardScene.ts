@@ -271,9 +271,7 @@ export class BoardScene extends Phaser.Scene {
       this.acc += delta * this.speed;
       let ticks = 0;
       while (this.acc >= TICK_MS && ticks < 20) {
-        this.snapshotPositions();
-        g.tick();
-        this.handleEvents(g.drainEvents());
+        this.tickOnce();
         this.acc -= TICK_MS;
         ticks++;
       }
@@ -290,6 +288,32 @@ export class BoardScene extends Phaser.Scene {
   private snapshotPositions(): void {
     this.prevPos.clear();
     for (const inv of this.game_.state.invaders) this.prevPos.set(inv.id, { x: inv.px, y: inv.py });
+  }
+
+  /** One sim tick plus the bookkeeping `update()` runs around it, shared below. */
+  private tickOnce(): void {
+    this.snapshotPositions();
+    this.game_.tick();
+    this.handleEvents(this.game_.drainEvents());
+  }
+
+  /**
+   * Runs exactly `n` ticks through the real per-tick pipeline — the same
+   * `tickOnce()` the update loop calls, so a leak, a loss and the overlay
+   * it raises all still come from the real code path — without waiting on
+   * `update()`'s real-time accumulator to deliver them. That accumulator
+   * paces ticks to the browser's actual frame rate, which is what made the
+   * client-smoke full-run spec's wall-clock budget hostage to CI frame
+   * delivery (ARB-242: the same spec timed out at Playwright's 60s limit on
+   * one run and passed in 53.5s on another, no gameplay difference between
+   * them). For tests and debugging from the console, like `sim` below;
+   * reachable only through `window.mazeosaurBoard`, which the dev build
+   * installs and a production build never does.
+   */
+  advanceTicks(n: number): void {
+    for (let i = 0; i < n && (this.game_.state.phase === "build" || this.game_.state.phase === "migration"); i++) {
+      this.tickOnce();
+    }
   }
 
   private handleEvents(events: GameEvent[]): void {
