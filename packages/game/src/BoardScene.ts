@@ -60,6 +60,27 @@ const TAP_RING_R = 54;
 /** Long enough to be seen leaving, short enough not to trail the finger. */
 const TAP_RING_MS = 120;
 
+/** Distance between the air route's lights along the line, in logical px. */
+const AIR_ROUTE_SPACING = 48;
+/**
+ * How long one light takes to march into the next light's slot. The whole
+ * row shifts one slot per cycle and then wraps, so the march is seamless
+ * and the direction of travel — spawn to nest — is readable from it.
+ */
+const AIR_ROUTE_MARCH_MS = 900;
+/** One full dim-bright-dim of the lights. A second reads as a beacon. */
+const AIR_ROUTE_BLINK_MS = 1000;
+/**
+ * The route's two strengths. During a build phase the fliers are the thing
+ * the player is about to be unable to maze against, so the route is as
+ * loud as a HUD mark on the board gets. Once they are actually in the air
+ * the same line would compete with the invaders flying along it, so it
+ * drops to a trace: still there to be checked, never the brightest thing
+ * on the board.
+ */
+const AIR_ROUTE_LOUD = { line: 0.3, lightMin: 0.45, lightMax: 1, width: 3, radius: 5 };
+const AIR_ROUTE_SUBDUED = { line: 0.12, lightMin: 0.15, lightMax: 0.35, width: 2, radius: 3 };
+
 interface Effect {
   kind: "attack" | "kill" | "flash" | "leak" | "tap";
   x: number;
@@ -447,10 +468,90 @@ export class BoardScene extends Phaser.Scene {
     this.towersDirty = false;
   }
 
+  /**
+   * True when the migration the preview row is naming — the one in the air
+   * during a migration, the one coming during a build phase — contains a
+   * flier. `InvaderDef.flying` is the predicate and `currentMigration()` is
+   * the same source `refreshHud` reads `Now:`/`Next:` off, so the route and
+   * that row can never disagree about which migration is meant.
+   *
+   * Indexed rather than `.some()`: this runs once per frame in the draw
+   * path, and a closure per frame is a closure per frame.
+   */
+  private migrationHasFliers(): boolean {
+    const phase = this.game_.state.phase;
+    if (phase !== "build" && phase !== "migration") return false;
+    const m = this.game_.currentMigration();
+    if (!m) return false;
+    for (let i = 0; i < m.groups.length; i++) {
+      const group = m.groups[i];
+      if (group && content.invaders[group.invader]?.flying) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The fliers' air route: a line of blinking lights from the lane's spawn
+   * to the nest, marching the way the fliers will.
+   *
+   * **That line is the whole route.** A flying invader never touches the
+   * flow field — `moveInvaders` in `packages/sim/src/game.ts` sends it at
+   * the nest centre with `moveToward` and scores its `progress` as a
+   * manhattan distance to that cell — so its path is the segment between
+   * the two cells the lane already names, and no wall the player builds
+   * bends it. Not seeing that is what makes a flier migration feel unfair
+   * rather than hard: the player reads their maze as the answer to every
+   * migration, and for this one it is not the answer at all.
+   *
+   * Drawn only when a flier is actually in the migration being named, so
+   * the route means "this one goes over your maze" rather than being
+   * scenery. Both ends come from `content.valley.lane`; a map with a
+   * different spawn or nest moves the line with no change here.
+   *
+   * The blink is this scene's clock and nothing else — `this.time.now`,
+   * not `state.tick`. The sim has no timers and must not grow one for a
+   * decoration (CLAUDE.md rule 1), and keeping it off the tick also means
+   * the speed toggle does not speed the beacon up. A triangle wave rather
+   * than a sine: the hard turn at each end is what makes it read as a
+   * light blinking instead of a line breathing.
+   */
+  private drawAirRoute(gfx: Phaser.GameObjects.Graphics): void {
+    if (!this.migrationHasFliers()) return;
+    const lane = content.valley.lane;
+    const from = this.cellCenter(lane.spawn.x, lane.spawn.y);
+    const to = this.cellCenter(lane.exit.x, lane.exit.y);
+    const len = Math.hypot(to.x - from.x, to.y - from.y);
+    if (len === 0) return;
+    const a = this.game_.state.phase === "migration" ? AIR_ROUTE_SUBDUED : AIR_ROUTE_LOUD;
+
+    // 0 -> 1 -> 0 across AIR_ROUTE_BLINK_MS.
+    const t = (this.time.now % AIR_ROUTE_BLINK_MS) / AIR_ROUTE_BLINK_MS;
+    const blink = t < 0.5 ? t * 2 : 2 - t * 2;
+    const ux = (to.x - from.x) / len;
+    const uy = (to.y - from.y) / len;
+
+    // The line under the lights, so the route is a route between blinks
+    // and not a dotted suggestion. Dim at both strengths: the lights are
+    // the signal, this is what joins them up.
+    gfx.lineStyle(a.width, KIND_COLOR.flier, a.line);
+    gfx.lineBetween(from.x, from.y, to.x, to.y);
+
+    gfx.fillStyle(KIND_COLOR.flier, a.lightMin + (a.lightMax - a.lightMin) * blink);
+    const march = ((this.time.now % AIR_ROUTE_MARCH_MS) / AIR_ROUTE_MARCH_MS) * AIR_ROUTE_SPACING;
+    for (let d = march; d < len; d += AIR_ROUTE_SPACING) {
+      gfx.fillCircle(from.x + ux * d, from.y + uy * d, a.radius);
+    }
+  }
+
   private drawDynamic(alpha: number): void {
     const gfx = this.dynGfx;
     const g = this.game_;
     gfx.clear();
+
+    // Under everything else this layer draws — the route is context for
+    // the board, and must never be the thing the eye lands on when there
+    // is an invader or a placement preview to read instead.
+    this.drawAirRoute(gfx);
 
     // selection / hover
     if (this.selectedDino !== null) {
@@ -1027,6 +1128,24 @@ export class BoardScene extends Phaser.Scene {
       stats: this.panelStats.width,
       extras: this.panelExtras.width,
       lines: rows.reduce((n, t) => n + t.getWrappedText(t.text).length, 0),
+    };
+  }
+
+  /**
+   * The fliers' air route, for tests and debugging from the console:
+   * whether it is on screen, which of its two strengths it is at, and the
+   * segment it runs along. A test can assert the client's line is the
+   * lane's spawn-to-nest segment, which is the claim `drawAirRoute` makes
+   * about the sim — reading it off the canvas could only say that
+   * *something* blue was drawn.
+   */
+  get airRoute(): { shown: boolean; subdued: boolean; from: { x: number; y: number }; to: { x: number; y: number } } {
+    const lane = content.valley.lane;
+    return {
+      shown: this.migrationHasFliers(),
+      subdued: this.game_.state.phase === "migration",
+      from: this.cellCenter(lane.spawn.x, lane.spawn.y),
+      to: this.cellCenter(lane.exit.x, lane.exit.y),
     };
   }
 }
