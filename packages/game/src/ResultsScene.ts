@@ -1,0 +1,166 @@
+import Phaser from "phaser";
+import { CANVAS_H, CANVAS_W, GUTTER, RESULTS, TYPE } from "./layout.js";
+import { COLORS, KIND_COLOR, text } from "./theme.js";
+import type { RunSummary } from "./summary.js";
+
+/**
+ * The end-of-run screen: section 9 of `docs/01-art-hud-and-audio.md`, over
+ * a scrim with the board still visible behind it, because the board is
+ * what the player wants to look at.
+ *
+ * It owns no `Game` (§5.1). Everything it draws arrives through `init()`
+ * as a `RunSummary` of plain numbers, so there is nothing here that could
+ * resurrect the run it describes — and `again` therefore has to go back
+ * through `board`, which is the only scene that constructs a `Game`.
+ *
+ * Every field below is declared and not initialised, per §5.2: this scene
+ * is a singleton and `create()` runs again on every entry, so a field that
+ * kept its value would be holding a display object the previous entry
+ * destroyed.
+ */
+export class ResultsScene extends Phaser.Scene {
+  /** Assigned in `init()`, which Phaser runs before `create()` on every start. */
+  private summary!: RunSummary;
+
+  constructor() {
+    super("results");
+  }
+
+  init(summary: RunSummary): void {
+    this.summary = summary;
+  }
+
+  create(): void {
+    const s = this.summary;
+
+    // The scrim is 70% rather than opaque so the valley reads through it.
+    // `setInteractive()` with no handler is deliberate: it swallows taps
+    // that would otherwise fall through to whatever is behind, and this
+    // screen's only affordance is its own button.
+    this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, COLORS.bg, 0.7).setOrigin(0, 0).setInteractive();
+
+    // `title` at 2x, per §9's type column.
+    this.add
+      .text(CANVAS_W / 2, RESULTS.headline.y, s.outcome === "won" ? "The nest holds" : "The valley is quiet", text(TYPE.title * 2))
+      .setOrigin(0.5);
+
+    // The number first and big, which is what §9 asks for: the count is
+    // the headline statistic and "of 50" is the context for it.
+    this.add.text(CANVAS_W / 2, RESULTS.cleared.y, `${s.migrationsCleared}`, text(TYPE.vital)).setOrigin(0.5, 1);
+    this.add
+      .text(CANVAS_W / 2, RESULTS.cleared.y + 6, `of ${s.migrationsTotal} migrations turned back`, text(TYPE.label, COLORS.textDim))
+      .setOrigin(0.5, 0);
+
+    // Eggs left of centre, meat right of it, both on §9's y=520. The two
+    // share a line and are anchored to the centre rather than to the
+    // canvas edges, so neither moves when the other's digits grow.
+    this.add.text(CANVAS_W / 2 - GUTTER, RESULTS.eggsKept.y, `${s.eggsKept} eggs kept`, text(TYPE.body, COLORS.eggs)).setOrigin(1, 0);
+    this.add.text(CANVAS_W / 2 + GUTTER, RESULTS.meatUnspent.y, `${s.meatUnspent} meat unspent`, text(TYPE.body, COLORS.meat)).setOrigin(0, 0);
+
+    // `vital` in checkpoint yellow (§9). `theme.ts` holds the hue as a
+    // number for the renderer; Text wants the CSS form.
+    this.add
+      .text(CANVAS_W / 2, RESULTS.fossils.y, `+${s.fossilsEarned} fossils`, text(TYPE.vital, hexCss(COLORS.checkpoint)))
+      .setOrigin(0.5);
+
+    this.drawPack();
+
+    // Again sits in the HUD band at the same height Send was, so the thumb
+    // does not move between the run that ended and the next one (§9).
+    this.button(RESULTS.again, "Again", () => {
+      // Back through `board`, which rebuilds the `Game`. §5.3 is "again
+      // (same seed)": `BoardScene` keeps `runSeed` across a re-entry and
+      // only asks `nextSeed()` on its first create(), so the seed is the
+      // scene's to hold and not this screen's to pass.
+      this.scene.start("board");
+    });
+
+    // §5.3's `results ──▶ title` exit is not here, and that is deliberate
+    // rather than forgotten: `title` does not exist yet (ARB-217 owns it),
+    // and §9's element table specifies exactly one control on this screen.
+    // Inventing a second button's geometry would be a HUD layout decision
+    // taken in the renderer, which is maze-design's to make. The exit
+    // lands with the scene it targets.
+  }
+
+  /**
+   * The pack row: every genus the player grew to adult, as its block, in a
+   * row (§9). The one piece of this screen that is not a statistic.
+   *
+   * Drawn with the same rounded rect and stage pips `BoardScene.drawTowers`
+   * uses, so an animal is the same object here as it was on the valley —
+   * the client loads no atlas, and a different shape here would read as a
+   * different thing rather than as the one the player just played.
+   */
+  private drawPack(): void {
+    const { pack } = this.summary;
+    const box = RESULTS.pack;
+    if (pack.length === 0) {
+      this.add
+        .text(CANVAS_W / 2, box.y + box.h / 2, "No dinosaur reached adult", text(TYPE.body, COLORS.textDim))
+        .setOrigin(0.5);
+      return;
+    }
+
+    // Size the cell to the row rather than the row to the cell: a run with
+    // nine genera has to fit the same 688px as a run with two, and §9 gives
+    // the row a fixed height. Capped at PACK_CELL_MAX so two adults are not
+    // drawn the size of a hand.
+    const gap = 12;
+    const cell = Math.min(PACK_CELL_MAX, Math.floor((box.w - (pack.length - 1) * gap) / pack.length));
+    const rowW = pack.length * cell + (pack.length - 1) * gap;
+    const left = box.x + Math.round((box.w - rowW) / 2);
+    const gfx = this.add.graphics();
+
+    pack.forEach((entry, i) => {
+      const x = left + i * (cell + gap);
+      const y = box.y;
+      gfx.fillStyle(KIND_COLOR[entry.kind], 1);
+      gfx.fillRoundedRect(x, y, cell, cell, Math.round(cell / 6));
+      // Three pips: an adult is stage 3, and the pips are what say so on
+      // the valley too.
+      gfx.fillStyle(COLORS.ink, 0.85);
+      const pipR = Math.max(2, Math.round(cell / 12));
+      for (let p = 0; p < 3; p++) gfx.fillCircle(x + cell / 2 + (p - 1) * pipR * 3, y + cell - pipR * 3, pipR);
+
+      // The genus is the collectible, so it is spelled out rather than
+      // implied by hue. `cell + gap` is the wrap width: a long genus wraps
+      // inside its own column instead of running under its neighbour.
+      this.add
+        .text(x + cell / 2, y + cell + 6, entry.name, { ...text(TYPE.label), align: "center", wordWrap: { width: cell + gap } })
+        .setOrigin(0.5, 0);
+      if (entry.count > 1) {
+        this.add.text(x + cell - 4, y + 4, `x${entry.count}`, text(TYPE.label, COLORS.textDim)).setOrigin(1, 0);
+      }
+    });
+  }
+
+  /**
+   * A button from a layout rect. `BoardScene` has its own `button()` and
+   * this is deliberately not shared with it: that one stops propagation
+   * because the board has a scene-level `pointerdown` behind it that would
+   * otherwise cancel the player's selection. This screen has no such
+   * handler, so the stop would be cargo-culted.
+   */
+  private button(rect: { x: number; y: number; w: number; h: number }, label: string, onClick: () => void): void {
+    const bg = this.add.rectangle(rect.x, rect.y, rect.w, rect.h, COLORS.buttonActive).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    this.add.text(rect.x + rect.w / 2, rect.y + rect.h / 2, label, text(TYPE.body)).setOrigin(0.5);
+    bg.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      onClick();
+      p.event.preventDefault?.();
+    });
+  }
+
+  /** Everything this screen can report, for a browser spec to read back. */
+  get runSummary(): RunSummary {
+    return this.summary;
+  }
+}
+
+/** The pack blocks stop growing here; a two-genus run is not a mural. */
+const PACK_CELL_MAX = 96;
+
+/** `COLORS` holds hues as numbers for the renderer; `Text` wants `#rrggbb`. */
+function hexCss(hue: number): string {
+  return `#${hue.toString(16).padStart(6, "0")}`;
+}

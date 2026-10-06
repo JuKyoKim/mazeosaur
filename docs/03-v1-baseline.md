@@ -37,8 +37,8 @@ Every test below is tagged `[@baseline]` in its title and runs under
 | 3 | migrations spawn and path | `packages/sim/test/flowfield.test.ts` "routes around a wall and marks sealed cells unreachable", "nextStep walks a creep to the target along non-increasing distances"; `packages/sim/test/lane.test.ts` "still routes an invader through both legs with a dinosaur on the checkpoint" | sim | existing |
 | 4 | dinos attack | `packages/sim/test/mechanics.test.ts` "hits the N furthest-along invaders per cooldown"; `packages/sim/test/game.test.ts` "ground-only dinosaurs ignore fliers" | sim | existing |
 | 5 | meat and eggs economy | `packages/sim/test/game.test.ts` "charges meat, blocks the cell, and refuses when broke", "leaks eat eggs and an empty nest loses the game", "kills pay bounty, clearing pays the bonus, and clearing the last migration wins" | sim | existing |
-| 6a | the lose screen | the same smoke test — drives `loseOnNextLeak`, waits for the overlay, clicks "Play again" | client | existing |
-| 6b | the win screen | `tests/client/win-screen.spec.ts` "win screen: clearing the last migration shows it, and Play again starts a fresh run" | client | **added** |
+| 6a | the lose screen | the same smoke test — drives `loseOnNextLeak`, waits for the `results` scene, clicks "Again" | client | existing |
+| 6b | the win screen | `tests/client/win-screen.spec.ts` "win screen: clearing the last migration shows it, and Again starts a fresh run" | client | **added** |
 | 7 | restart | `tests/client/restart-regression.spec.ts` "scene.restart() leaves the canvas rendering with no renderer errors" | client | existing |
 | 8 | save and resume | `packages/sim/test/save.test.ts` (hash/replay/resumed-object round trips), `packages/game/test/resume.test.ts` (reuses the resumed `Game`, never replays twice), `apps/web/test/save-store.test.ts` (IndexedDB put/read/coalesce); `tests/client/resume.spec.ts` "save and resume: a reload picks the stored run back up, not a fresh one" | sim + client | sim existing, client **added** |
 
@@ -127,7 +127,7 @@ $ npm run test:baseline
 > vitest run -t "@baseline" && playwright test --config tests/client/playwright.config.ts --grep "@baseline"
 
   ✓  restart-regression.spec.ts … scene.restart() leaves the canvas rendering with no renderer errors [@baseline]
-  ✓  win-screen.spec.ts … win screen: clearing the last migration shows it, and Play again starts a fresh run [@baseline]
+  ✓  win-screen.spec.ts … win screen: clearing the last migration shows it, and Again starts a fresh run [@baseline]
   ✓  resume.spec.ts … save and resume: a reload picks the stored run back up, not a fresh one [@baseline]
   ✓  smoke.spec.ts … full run: four select+tap pairs, grow, sell, send, leak, lose, play again [@baseline]
 

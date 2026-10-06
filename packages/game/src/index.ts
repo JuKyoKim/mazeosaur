@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { BoardScene } from "./BoardScene.js";
+import { ResultsScene } from "./ResultsScene.js";
 import { CANVAS_H, CANVAS_W } from "./layout.js";
 import { COLORS } from "./theme.js";
 import { SERVICES_KEY, type GameHandle, type MountOptions } from "./platform.js";
@@ -26,7 +27,11 @@ export function mountGame(opts: MountOptions): GameHandle {
     // preBoot runs before the first scene's create(), so the services are
     // in the registry by the time anything asks for them.
     callbacks: { preBoot: (game) => game.registry.set(SERVICES_KEY, opts.services) },
-    scene: [scene],
+    // `board` first: Phaser auto-starts only the first scene in the list,
+    // so `results` is registered and idle until `board` hands it a
+    // `RunSummary`. §5.1's third scene, `title`, joins this list when it
+    // lands and takes the first slot with it.
+    scene: [scene, new ResultsScene()],
   });
 
   return {
@@ -37,6 +42,8 @@ export function mountGame(opts: MountOptions): GameHandle {
 }
 
 export { BoardScene } from "./BoardScene.js";
+export { ResultsScene } from "./ResultsScene.js";
+export { packFrom, runSummary, type PackEntry, type RunSummary } from "./summary.js";
 export {
   cloudFeatures,
   services,

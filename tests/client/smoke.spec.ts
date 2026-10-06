@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import {
+  AGAIN_BUTTON,
   GROW_BUTTON,
   HUD_BARE,
-  PLAY_AGAIN_BUTTON,
   SELL_BUTTON,
   SEND_BUTTON,
   SPEED_BUTTON,
@@ -18,6 +18,7 @@ import {
   trackPageErrors,
   waitAFrame,
   waitForEggsBelow,
+  waitForResults,
   waitForRunOver,
   waitForTickAdvance,
 } from "./helpers.js";
@@ -146,22 +147,23 @@ test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again 
   // Nothing is in the invaders' way, so a leak is a certainty, not a race.
   await waitForEggsBelow(page, 20);
 
-  // End the run and restart it the way a player does: the next leak loses
-  // the nest, the client raises its own overlay, and the test clicks the
-  // real "Play again" button on it.
+  // End the run and start the next one the way a player does: the next
+  // leak loses the nest, the board hands off to `results`, and the test
+  // clicks the real "Again" button on it.
   //
   // Calling `scene.restart()` straight out of a live migration would not
   // test this any more. Since saves landed, `flush()` keeps the in-flight
   // run on `doc`, and a restart mid-run therefore *resumes* it (see the
   // restart note in `BoardScene.create()`) — which is correct, and is why
-  // the only `scene.restart()` in the client sits behind an overlay that
-  // appears after the won/lost `flush()` has written `run: null`.
+  // the only way back into `board` is through a screen that cannot appear
+  // until the won/lost `flush()` has written `run: null`.
   await loseOnNextLeak(page);
   await waitForRunOver(page);
   await waitAFrame(page);
   expect((await simSnapshot(page)).phase).toBe("lost");
 
-  await page.mouse.click(PLAY_AGAIN_BUTTON.x, PLAY_AGAIN_BUTTON.y);
+  await waitForResults(page);
+  await page.mouse.click(AGAIN_BUTTON.x, AGAIN_BUTTON.y);
   await waitAFrame(page);
 
   const afterRestart = await simSnapshot(page);
