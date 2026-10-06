@@ -164,9 +164,10 @@ export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; 
 
 /**
  * Whether the fliers' air route is drawn, at which of its two strengths,
- * and the segment it runs along (`BoardScene.airRoute`).
+ * where its lights' blink has got to, and the segment it runs along
+ * (`BoardScene.airRoute`).
  */
-export function airRouteSnapshot(page: Page): Promise<{ shown: boolean; subdued: boolean; from: { x: number; y: number }; to: { x: number; y: number } }> {
+export function airRouteSnapshot(page: Page): Promise<{ shown: boolean; subdued: boolean; blink: number; from: { x: number; y: number }; to: { x: number; y: number } }> {
   return page.evaluate(() => window.mazeosaurBoard!().airRoute);
 }
 

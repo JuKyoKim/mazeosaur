@@ -6,11 +6,14 @@ import {
   RESTART_RUN_BUTTON,
   RESUME_BUTTON,
   SEND_BUTTON,
+  airRouteSnapshot,
   cellCenter,
   clockSnapshot,
+  firstFlierMigration,
   openGame,
   paletteButtonCenter,
   replaySnapshot,
+  setMigration,
   simSnapshot,
   trackPageErrors,
   waitAFrame,
@@ -194,6 +197,54 @@ test("ending the run shows the end-of-run screen and leaves nothing to resume", 
   const afterReload = await simSnapshot(page);
   expect(afterReload).toMatchObject({ dinos: 0, phase: "build" });
   await waitForTickAdvance(page, afterReload.tick);
+
+  expect(errors.messages).toEqual([]);
+});
+
+/**
+ * The pause has to stop everything that is drawn on a clock, not just the
+ * sim's. Effects already age on the stopped clock for this reason; the
+ * fliers' air route was the other one, and it is the loudest — a line of
+ * lights marching spawn-to-nest over a frozen migration reads as the game
+ * still being alive, which is the one thing a pause has to deny.
+ *
+ * Asserts the freeze, not the motion: that the lights march at all is
+ * `smoke.spec.ts`'s claim, and two samples of a triangle wave taken while
+ * the clock runs are unequal only up to float luck.
+ */
+test("the fliers' air route holds still under the pause scrim", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, SEED);
+
+  // The route is only drawn for a migration that actually has a flier in
+  // it, so the pause has nothing to freeze until one is named.
+  await setMigration(page, await firstFlierMigration(page));
+  await waitAFrame(page);
+  expect((await airRouteSnapshot(page)).shown).toBe(true);
+
+  await page.mouse.click(PAUSE_BUTTON.x, PAUSE_BUTTON.y);
+  await waitAFrame(page);
+  expect((await clockSnapshot(page)).paused).toBe(true);
+
+  // A full blink cycle of wall clock, which is what the lights would have
+  // marched through had they been reading `time.now`.
+  const atPause = await airRouteSnapshot(page);
+  await page.waitForTimeout(A_SECOND);
+  await waitAFrame(page);
+  expect(await airRouteSnapshot(page)).toEqual(atPause);
+
+  // And the route comes back with the run: still drawn, on a clock that is
+  // running again. Not asserted here: that the wave resumes exactly where
+  // it stopped. It does — `pause()` folds the session into `playedMsBase`
+  // before stopping, so the clock does not jump at either edge — but the
+  // number of frames between a click and a read is not fixed, and at ~1000
+  // frame-ms per cycle a tolerance wide enough never to flake is wide
+  // enough to pass on a clock that jumped.
+  await page.mouse.click(RESUME_BUTTON.x, RESUME_BUTTON.y);
+  await waitAFrame(page);
+  expect((await clockSnapshot(page)).paused).toBe(false);
+  expect((await airRouteSnapshot(page)).shown).toBe(true);
+  await waitForTickAdvance(page, (await replaySnapshot(page)).tick);
 
   expect(errors.messages).toEqual([]);
 });

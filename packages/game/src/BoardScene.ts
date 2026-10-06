@@ -561,12 +561,20 @@ export class BoardScene extends Phaser.Scene {
    * scenery. Both ends come from `content.valley.lane`; a map with a
    * different spawn or nest moves the line with no change here.
    *
-   * The blink is this scene's clock and nothing else — `this.time.now`,
-   * not `state.tick`. The sim has no timers and must not grow one for a
-   * decoration (CLAUDE.md rule 1), and keeping it off the tick also means
-   * the speed toggle does not speed the beacon up. A triangle wave rather
-   * than a sine: the hard turn at each end is what makes it read as a
-   * light blinking instead of a line breathing.
+   * The blink is this scene's clock and nothing else — not `state.tick`.
+   * The sim has no timers and must not grow one for a decoration (CLAUDE.md
+   * rule 1), and keeping it off the tick also means the speed toggle does
+   * not speed the beacon up. A triangle wave rather than a sine: the hard
+   * turn at each end is what makes it read as a light blinking instead of a
+   * line breathing.
+   *
+   * `playedMs()` rather than `this.time.now`, so the route holds still under
+   * the pause scrim for the same reason the effects do: the one thing a
+   * pause has to deny is the board looking alive, and lights marching
+   * spawn-to-nest over a frozen migration deny it loudest. The two clocks
+   * are the same clock while a run is running — `pause()` folds the session
+   * into `playedMsBase` before stopping it, so the value does not jump at
+   * either edge — and neither is the sim's.
    */
   private drawAirRoute(gfx: Phaser.GameObjects.Graphics): void {
     if (!this.migrationHasFliers()) return;
@@ -577,9 +585,7 @@ export class BoardScene extends Phaser.Scene {
     if (len === 0) return;
     const a = this.game_.state.phase === "migration" ? AIR_ROUTE_SUBDUED : AIR_ROUTE_LOUD;
 
-    // 0 -> 1 -> 0 across AIR_ROUTE_BLINK_MS.
-    const t = (this.time.now % AIR_ROUTE_BLINK_MS) / AIR_ROUTE_BLINK_MS;
-    const blink = t < 0.5 ? t * 2 : 2 - t * 2;
+    const blink = this.airRouteBlink();
     const ux = (to.x - from.x) / len;
     const uy = (to.y - from.y) / len;
 
@@ -590,10 +596,22 @@ export class BoardScene extends Phaser.Scene {
     gfx.lineBetween(from.x, from.y, to.x, to.y);
 
     gfx.fillStyle(KIND_COLOR.flier, a.lightMin + (a.lightMax - a.lightMin) * blink);
-    const march = ((this.time.now % AIR_ROUTE_MARCH_MS) / AIR_ROUTE_MARCH_MS) * AIR_ROUTE_SPACING;
+    const march = ((this.playedMs() % AIR_ROUTE_MARCH_MS) / AIR_ROUTE_MARCH_MS) * AIR_ROUTE_SPACING;
     for (let d = march; d < len; d += AIR_ROUTE_SPACING) {
       gfx.fillCircle(from.x + ux * d, from.y + uy * d, a.radius);
     }
+  }
+
+  /**
+   * The lights' alpha wave: 0 -> 1 -> 0 across `AIR_ROUTE_BLINK_MS`. Its
+   * own method so the `airRoute` getter a test reads is the same arithmetic
+   * the lights are drawn with, rather than a second copy that could drift
+   * from it. Returns a number, not an object, because the draw path
+   * allocates nothing.
+   */
+  private airRouteBlink(): number {
+    const t = (this.playedMs() % AIR_ROUTE_BLINK_MS) / AIR_ROUTE_BLINK_MS;
+    return t < 0.5 ? t * 2 : 2 - t * 2;
   }
 
   private drawDynamic(alpha: number): void {
@@ -1328,12 +1346,18 @@ export class BoardScene extends Phaser.Scene {
    * lane's spawn-to-nest segment, which is the claim `drawAirRoute` makes
    * about the sim — reading it off the canvas could only say that
    * *something* blue was drawn.
+   *
+   * `blink` is the triangle wave the lights' alpha is read off, so a test
+   * can assert the route holds still under the pause scrim. Two samples a
+   * stopped clock apart are the same number; two a running clock apart are
+   * not.
    */
-  get airRoute(): { shown: boolean; subdued: boolean; from: { x: number; y: number }; to: { x: number; y: number } } {
+  get airRoute(): { shown: boolean; subdued: boolean; blink: number; from: { x: number; y: number }; to: { x: number; y: number } } {
     const lane = content.valley.lane;
     return {
       shown: this.migrationHasFliers(),
       subdued: this.game_.state.phase === "migration",
+      blink: this.airRouteBlink(),
       from: this.cellCenter(lane.spawn.x, lane.spawn.y),
       to: this.cellCenter(lane.exit.x, lane.exit.y),
     };

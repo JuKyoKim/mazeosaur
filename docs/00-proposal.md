@@ -687,4 +687,9 @@ we find out.
   whenever it is non-null, so a mid-run restart that skipped it would hand
   back the run it was asked to throw away. Until the `title` and `results`
   scenes exist (section 5.1 of the same doc), ending a run shows the
-  end-of-run overlay the won and lost paths already draw.
+  end-of-run overlay the won and lost paths already draw. Everything drawn
+  on a clock stops on the same one: the attack and kill effects stop ageing,
+  and so do the fliers' air-route lights, which read `playedMs()` rather
+  than `time.now` for exactly this reason. A decoration that keeps moving
+  over a frozen board reads as the game still being alive, which is the one
+  thing a pause has to deny.
