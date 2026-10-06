@@ -65,26 +65,19 @@ wants to be smaller than `label` should instead not be on the screen.
 
 ---
 
-## 2. The art direction: reopened, with a fifth candidate
+## 2. The art direction: Toy Box
 
-**Section 9 item 4 is open again.** On 2026-10-05 the owner turned down all
-four directions below — `toy-box` included, two days after choosing it — and
-briefed a fifth: pixel art in the GBA tactics idiom, small readable map
-sprites, a limited palette, a clean dark outline, and **an idle loop and an
-attack cycle on every kind**, which is the part of that generation the brief
-is actually about. `tactics-pixel` is that brief, built by the same generator
-and rendered into the same frames, and it is in front of the owner now.
+**Mazeosaur is drawn in blocks. The direction is `toy-box`, it is the only
+one with a shipped atlas, and the other four below are the record of how it
+was chosen rather than live options.** Section 9 item 4 of the proposal is
+closed; the decision is `docs/decisions/0004-the-art-direction-is-toy-box.md`.
 
-**`toy-box` remains `CHOSEN` in `tools/art/directions.ts` until that is
-answered**, and is still the only direction with a shipped atlas. That is
-deliberate and it is not a prediction: the client integration is live against
-`packages/game/assets/toy-box`, and a half-swapped direction would leave the
-game loading an atlas no document describes. Changing direction is one line
-and one `npm run art:atlas` when the answer comes.
-
-Everything below about Toy Box describes the direction as built and as
-chosen on 2026-10-04. It is kept rather than rewritten, because the record of
-how a choice was made is the thing that stops the next one being made twice.
+**The idle loop and the attack cycle are part of the brief, and they are not
+part of the direction.** They were asked for alongside a fifth candidate and
+they outlived it: section 5.6's clips are a transform of a finished sprite,
+so the blocks breathe with the same code that made a pixel sprite bob.
+`build.ts anim <id>` writes them for any direction, which is why that machinery
+stays while `tactics-pixel` does not ship.
 
 The proposal left two axes open: pixel versus hand-drawn vector, and
 cute-round versus fierce-realistic. Three points on that grid were rendered
@@ -94,7 +87,8 @@ a fourth off that grid: blocks, in the Crossy Road register, "steer away from
 2d". **Toy Box** is that brief, built the same way and rendered into the same
 frames, and it is what the board then chose — with the instruction to keep
 working the models, which is why `blocks.ts` has had a second pass and why
-the anchor in 5.0 exists at all.
+the anchor in 5.0 exists at all. A fifth was briefed and rendered the day
+after, and the owner looked at it and kept Toy Box.
 
 | direction | axes | authored | ink | atlas | the pitch |
 | --- | --- | --- | --- | --- | --- |
@@ -102,9 +96,14 @@ the anchor in 5.0 exists at all.
 | **Clay Pack** | vector, cute-round | 48px | 2px | 126 kB | Sticker-weight line, heads a third too big, an eye you can still see at 20px. Friendliest read, easiest to animate. |
 | **Valley Naturalist** | vector, fierce | 48px | 1px | 121 kB | Skeletal proportions, hairline edge, deep belly shadow, cold rim light. Reads as an animal, not a mascot. |
 | **Toy Box** | blocks, cute-round | 64px | 2px | 68 kB | Six to fourteen boxes an animal under one fixed isometric camera, three flat tones a face. Reads as a solid toy rather than a drawing of one. |
-| **Tactics Pixel** | pixel, cute-round | 15px | 1px | **7 kB** | GBA map sprites: chunky pixels at an exact 3x, two body tones and a dark outline, and the only direction that moves — an idle bob and an attack lunge on every kind. |
+| **Tactics Pixel** | pixel, cute-round | 15px | 1px | **7 kB** | GBA map sprites: chunky pixels at an exact 3x, two body tones and a dark outline. Smallest atlas of the five, and the candidate the idle bob and the attack lunge were built for. |
 
-### Tactics Pixel, the fifth candidate
+### Tactics Pixel, the fifth candidate — not shipped
+
+**This direction was rendered, looked at, and turned down.** It is written up
+because the owner asked for it by name and because the 15px arithmetic below
+is the kind of thing that gets rediscovered expensively; it is not a live
+option, it has no atlas, and nothing in the client references it.
 
 **15px authored is the whole trick and it looks arbitrary.** A dinosaur is
 drawn into a 45px box (5.0), and 45/15 is exactly 3 — so one authored pixel
@@ -122,11 +121,11 @@ generator, in palettes derived from our own six kind hues. No sheet from any
 other game is read, traced or shipped — rule 5, and it is the reason this
 direction is a hundred lines of numbers rather than a folder of PNGs.
 
-The animation is section 5.6. It is not specific to this direction — the
-clips are a transform of a finished sprite, so if the answer is "keep Toy
-Box" the blocks breathe with the same code — but it is the reason this one
-exists, and `docs/art/<id>-animation.png` is generated for all five so that
-claim can be checked rather than believed.
+The animation is section 5.6, and it is the part of this candidate that
+survived it. The clips are a transform of a finished sprite, not of this
+direction's sprites, so the blocks breathe with the same code;
+`docs/art/<id>-animation.png` is generated for all five, which is how that
+claim gets checked rather than believed.
 
 ### What Toy Box is, and what it is not
 
@@ -1531,15 +1530,10 @@ button was, so the thumb does not move.
 
 ## 10. What this leaves open
 
-1. **The direction, again.** Section 2. The owner reopened it on 2026-10-05
-   and `tactics-pixel` is the fifth candidate; `toy-box` holds `CHOSEN` and
-   the shipped atlas until the answer lands. Nothing else in this document
-   depends on which way it goes — the HUD, the anchor, the atlas contract
-   and the clips are all direction-independent.
-2. **The kind-hue change** in section 3 is a proposed replacement for
+1. **The kind-hue change** in section 3 is a proposed replacement for
    `KIND_COLOR` and can land independently of the art — it is measured, and
    it is an improvement on M2 under every eye.
-3. **Animation beyond the attack strike and the two clips.** Two separate
+2. **Animation beyond the attack strike and the two clips.** Two separate
    things are now specified and neither is the whole of it. The *effect* is
    in v1 because the owner asked for it by name: section 5.4.1's attack
    strike, eighteen frames in the atlas for 12.4 kB against a 40 MB binary,
@@ -1551,6 +1545,6 @@ button was, so the thumb does not move.
    for the reasons 5.6 gives; and whether the board's collective breath
    reads as a field of life or as one pulse is the one thing in 5.6 that has
    to be watched rather than argued. `npm run art:anim` is what to watch.
-4. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
+3. **The fifth boss** is *Spinosaurus* at migration 50 in the content as
    it stands. The proposal says "a final one to be designed", so this is a
    placeholder the content can change without touching this document.
