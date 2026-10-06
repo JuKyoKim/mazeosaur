@@ -23,6 +23,7 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const problems = [];
@@ -30,12 +31,28 @@ const problems = [];
 /** Every markdown file in the repo, minus dependencies. */
 function markdownFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === "dist" || entry.name.startsWith(".")) continue;
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) markdownFiles(full, out);
     else if (entry.name.endsWith(".md")) out.push(full);
   }
   return out;
+}
+
+/**
+ * Which of `paths` git ignores, in one batched call. `test-results/` and
+ * `playwright-report/` are gitignored generated output, not docs; walking
+ * them the same as `dist` means every future generated directory needs this
+ * list too, so defer to .gitignore instead of growing a parallel one here.
+ */
+function gitIgnored(paths) {
+  if (paths.length === 0) return new Set();
+  const result = spawnSync("git", ["check-ignore", "--stdin"], {
+    cwd: root,
+    input: paths.map((p) => relative(root, p)).join("\n"),
+    encoding: "utf8",
+  });
+  return new Set(result.stdout.split("\n").filter(Boolean));
 }
 
 function sourceFiles(dir, out = []) {
@@ -48,7 +65,9 @@ function sourceFiles(dir, out = []) {
   return out;
 }
 
-const docs = markdownFiles(root);
+const candidates = markdownFiles(root);
+const ignored = gitIgnored(candidates);
+const docs = candidates.filter((doc) => !ignored.has(relative(root, doc)));
 
 // 1 and 2: the "What is in here" list of each package and app.
 for (const doc of docs) {
