@@ -67,14 +67,6 @@ out:
   dinosaurs ignore fliers". All four are in `packages/sim/test/game.test.ts`;
   `mechanics.test.ts` only has the multi-target hit test. Fixed above.
 
-### Correction: `lane.test.ts` had the tag and this table did not know
-
-[ARB-264](/ARB/issues/ARB-264) found that `packages/sim/test/lane.test.ts`
-picked up `[@baseline]` when the checkpoint work landed (`#53`) without
-this table's row 3 learning about it — the exact "unlisted tag" failure
-mode the guard below exists to catch. Added above; see that doc section
-for the guard itself.
-
 ## Idle and attack animations, answered
 
 The owner's list (routed through [ARB-199](/ARB/issues/ARB-199) and
@@ -143,8 +135,8 @@ quotes with paraphrase, so it is for a human, not a parser). A tagged test
 that disappears, or a new one that appears without `EXPECTED` learning about
 it, exits 1 with the exact file and title at fault. Updating `EXPECTED`
 without updating the mapping table above leaves the two out of sync, so keep
-both in the same commit -- this is the discipline the "Correction" note above
-exists to record one failure of.
+both in the same commit -- row 3's `lane.test.ts` entry is the one case on
+record where they drifted.
 
 Run it the same way `check` and `client-smoke` are run locally
 (`docs/02-ci.md`), with Chromium installed once via

@@ -17,6 +17,13 @@
 // description of it. A test dropping its tag (or losing the file it lived
 // in) shrinks the scan below EXPECTED; a test gaining the tag without this
 // list learning about it grows the scan past EXPECTED. Both exit 1.
+//
+// The title scan below only matches a plain string literal passed directly
+// to `it(`/`test(`. A template-literal title, or a tag added inside
+// `it.skip(`/`test.skip(`, will not be found -- in the unlisted direction
+// only, so a skipped or templated test could carry the tag without this
+// script noticing. The dropped direction is unaffected: EXPECTED is still
+// checked against whatever the scan does find.
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
