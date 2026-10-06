@@ -309,14 +309,14 @@ export class BoardScene extends Phaser.Scene {
   private toastUntil!: number;
 
   /**
-   * Whichever overlay is up: the pause menu, or the screen a player who
-   * chose "End run" is left on. One field, because only one is ever up.
+   * The pause menu's container while it is up, null otherwise.
    *
-   * A *won or lost* run no longer appears here — §5.3 sends it to the
-   * `results` scene, which is a scene and not a container. The abandon
-   * path still draws in here because `RunSummary.outcome` is `won | lost`
-   * by §5.4 and quitting is neither; routing it to `results` is a design
-   * question (does quitting pay fossils?) and not a merge decision.
+   * It is the only overlay drawn *inside* this scene. Every way a run ends
+   * — won, lost, and the player's own "End run" — goes to the `results`
+   * scene, which is a scene and not a container (§5.3). The field keeps
+   * its nullable shape and its `create()` reset because the menu is still
+   * per-run state holding a display object, and §5.2 makes no exception
+   * for the last one left.
    */
   private overlay!: Phaser.GameObjects.Container | null;
 

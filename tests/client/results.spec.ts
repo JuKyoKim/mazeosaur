@@ -23,17 +23,18 @@ import {
 const SEED = 123;
 
 /**
- * The `board ──won / lost──▶ results ──again──▶ board` loop of §5.3, from
- * the player's side.
+ * The `board ──won / lost / abandoned──▶ results ──again──▶ board` loop of
+ * §5.3, from the player's side.
  *
  * Deliberately **not** `[@baseline]`: lines 6a and 6b of
  * `docs/03-v1-baseline.md` are already carried by `smoke.spec.ts` and
  * `win-screen.spec.ts`, and that set is eight lines by definition. This is
  * the extra coverage the new scene needs, not a ninth line.
  *
- * `win-screen.spec.ts` covers the same seam from a win. This one drives a
- * loss, because the two differ in the headline and in the numbers, and
- * because a loss is the end of a run a player actually reaches.
+ * One edge each: `win-screen.spec.ts` drives the win and `pause.spec.ts`
+ * the player's own quit. This one drives a **loss**, because the three
+ * differ in the headline and in the numbers, and because a loss is the end
+ * of a run a player actually reaches.
  */
 test("results: a lost run lands on the summary, and Again replays the same seed fresh", async ({ page }) => {
   const errors = trackPageErrors(page);
