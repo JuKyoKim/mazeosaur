@@ -77,7 +77,7 @@ interface Button {
 const REFUSAL_TEXT: Record<Refusal, string> = {
   "out-of-bounds": "Off the valley",
   occupied: "Something is already there",
-  "lane-cell": "Can't build on the trail",
+  "lane-cell": "Can't build on the spawn or the nest",
   "would-block": "That would seal the maze",
   "unknown-dino": "Unknown dinosaur",
   "no-meat": "Not enough meat",

@@ -1,6 +1,6 @@
 import { Grid, type Point } from "./grid.js";
-import { computeFlowField, distanceAt, nextStep, UNREACHABLE, type FlowField } from "./flowfield.js";
-import { buildRefusal, laneTargets, type BuildRefusal } from "./lane.js";
+import { distanceAt, nextStep, UNREACHABLE, type FlowField } from "./flowfield.js";
+import { buildRefusal, computeLaneFields, legCount, type BuildRefusal } from "./lane.js";
 import { Rng } from "./rng.js";
 import {
   CELL,
@@ -33,7 +33,7 @@ export interface Invader {
   hp: number;
   readonly maxHp: number;
   readonly flying: boolean;
-  /** which lane leg a ground invader is on (index into laneTargets) */
+  /** which lane leg a ground invader is on (index into the lane's legs) */
   leg: number;
   /** the cell a ground invader is walking toward, or null when it needs a new one */
   next: Point | null;
@@ -108,7 +108,7 @@ export class Game {
   private fields: FlowField[] = [];
   private events: GameEvent[] = [];
   private readonly rock: Set<number>;
-  private readonly legTargets: readonly Point[];
+  private readonly legs: number;
 
   constructor(
     readonly content: Content,
@@ -121,7 +121,7 @@ export class Game {
       this.grid.setBlocked(r.x, r.y, true);
       this.rock.add(this.grid.index(r.x, r.y));
     }
-    this.legTargets = laneTargets(v.lane);
+    this.legs = legCount(v.lane);
     this.rng = new Rng(seed);
     this.state = {
       tick: 0,
@@ -372,7 +372,7 @@ export class Game {
             // on the leg's target (or sealed in, which the build rules prevent)
             if (distanceAt(field, this.grid, cell) === 0) {
               inv.leg++;
-              if (inv.leg >= this.legTargets.length) {
+              if (inv.leg >= this.legs) {
                 this.leak(i);
                 break;
               }
@@ -398,7 +398,7 @@ export class Game {
           budget = 0;
         }
       }
-      if (inv.leg < this.legTargets.length) {
+      if (inv.leg < this.legs) {
         const field = this.fields[inv.leg] as FlowField;
         const cell = { x: Math.floor(inv.px / CELL), y: Math.floor(inv.py / CELL) };
         const d = distanceAt(field, this.grid, cell);
@@ -539,9 +539,12 @@ export class Game {
   }
 
   private rebuildFields(): void {
-    this.fields = this.legTargets.map((t) => computeFlowField(this.grid, t));
+    this.fields = computeLaneFields(this.grid, this.content.valley.lane);
     // invaders mid-step keep their current target cell (still walkable, the
     // build rules guarantee it); they pick a new direction at the next cell.
+    //
+    // Building on a checkpoint changes which cells end that leg, so this has
+    // to recompute from the grid rather than from a cached target list.
   }
 
   /** Flow field for a lane leg; the renderer uses it to draw the route preview. */

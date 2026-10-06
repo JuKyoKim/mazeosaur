@@ -23,14 +23,21 @@ export const DIAG_COST = 14;
 export const UNREACHABLE = -1;
 
 /**
- * A flow field is the integer distance from every cell to one target.
- * Creeps do not store a path; each tick they step to the neighbour with the
- * lowest distance. Rebuilding the field after a build/sell is all it takes
- * for every creep to re-path, which is exactly what mazing needs.
+ * A flow field is the integer distance from every cell to the nearest of its
+ * targets. Creeps do not store a path; each tick they step to the neighbour
+ * with the lowest distance. Rebuilding the field after a build/sell is all it
+ * takes for every creep to re-path, which is exactly what mazing needs.
+ *
+ * Nearly every field has one target. A lane leg that ends on an occupied
+ * checkpoint has several (`legTargetCells` in `lane.ts`) and the creep is done
+ * with the leg on whichever of them it reaches first, so all of them have to
+ * sit at distance zero in one field. That is a multi-source Dijkstra; nothing
+ * else about the field changes, and a single target behaves exactly as before.
  */
 export interface FlowField {
-  readonly target: Point;
-  /** distance per cell index, UNREACHABLE where the target cannot be reached */
+  /** the cells at distance 0; empty only when every target cell is blocked */
+  readonly targets: readonly Point[];
+  /** distance per cell index, UNREACHABLE where no target can be reached */
   readonly dist: Int32Array;
 }
 
@@ -47,17 +54,27 @@ export function canStep(grid: Grid, from: Point, dir: Point): boolean {
 }
 
 /**
- * Dijkstra from the target outward. With two edge weights a plain binary
+ * Dijkstra from the target(s) outward. With two edge weights a plain binary
  * heap is fine; grids in this game are a few hundred cells to ~2000 cells,
  * so this runs in well under a millisecond.
+ *
+ * A blocked target is dropped rather than rejected: it has no distance of its
+ * own and creeps cannot stand on it. Drop every target and the field is
+ * entirely UNREACHABLE, which is what `laneIsOpen` reads as a sealed leg.
  */
-export function computeFlowField(grid: Grid, target: Point): FlowField {
+export function computeFlowField(grid: Grid, target: Point | readonly Point[]): FlowField {
+  const targets = Array.isArray(target) ? (target as readonly Point[]) : [target as Point];
   const dist = new Int32Array(grid.width * grid.height).fill(UNREACHABLE);
-  if (grid.isBlocked(target.x, target.y)) return { target, dist };
 
   const heap = new MinHeap();
-  dist[grid.index(target.x, target.y)] = 0;
-  heap.push(0, target.x, target.y);
+  for (const t of targets) {
+    // isBlocked is true out of bounds too, so this is also the bounds check.
+    if (grid.isBlocked(t.x, t.y)) continue;
+    const i = grid.index(t.x, t.y);
+    if (dist[i] === 0) continue; // a duplicate target
+    dist[i] = 0;
+    heap.push(0, t.x, t.y);
+  }
 
   while (heap.size > 0) {
     const [d, x, y] = heap.pop();
@@ -79,7 +96,7 @@ export function computeFlowField(grid: Grid, target: Point): FlowField {
       }
     }
   }
-  return { target, dist };
+  return { targets, dist };
 }
 
 export function distanceAt(field: FlowField, grid: Grid, p: Point): number {
@@ -88,8 +105,8 @@ export function distanceAt(field: FlowField, grid: Grid, p: Point): number {
 }
 
 /**
- * The next cell a creep at `from` should move to, or null if it is on the
- * target or the target is unreachable. Ties break in DIRS8 order so every
+ * The next cell a creep at `from` should move to, or null if it is already on
+ * a target or no target is reachable. Ties break in DIRS8 order so every
  * client makes the same choice.
  */
 export function nextStep(field: FlowField, grid: Grid, from: Point): Point | null {
