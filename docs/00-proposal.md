@@ -659,7 +659,12 @@ we find out.
   believes it. Three fixes in a row were that, one of them pointing into a
   file that had been a bare re-export since the canvas and HUD geometry moved
   into the client package. Name the exported symbol, the
-  function or the field instead; `npm run check:readmes` now rejects a
+  function or the field instead. The shape to copy is already in section 4 of
+  [01-art-hud-and-audio.md](01-art-hud-and-audio.md): the no-pre-selection
+  paragraph names `buildHud` and `selectDef`, and the selected-card table
+  names `ROW3.kindButton.y` for the rest position. Both have survived every
+  edit that rotted a neighbouring line number, because a grep finds a symbol
+  wherever it moved to. `npm run check:readmes` now rejects a
   citation of the form path-dot-extension-colon-digits in any markdown prose,
   with fenced blocks exempt so a quoted transcript may keep the numbers it
   actually printed.
