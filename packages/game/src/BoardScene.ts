@@ -1104,4 +1104,15 @@ export class BoardScene extends Phaser.Scene {
   get selection(): { kindId: string | null; dinoId: number | null; preview: { x: number; y: number } | null } {
     return { kindId: this.selectedDef?.id ?? null, dinoId: this.selectedDino, preview: this.hoverCell };
   }
+
+  /**
+   * How many sounds §6's cap threw away this run, for a drive from the
+   * console. The limiter's own behaviour is asserted in
+   * `test/audio.test.ts` against an injected clock; what a browser adds is
+   * the ratio under a real migration, which is the number that says whether
+   * the cap is doing anything at all on this content. Nothing reads it.
+   */
+  get sfxDropped(): number {
+    return this.sfx.dropped;
+  }
 }
