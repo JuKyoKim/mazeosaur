@@ -20,6 +20,7 @@
     "lint": "node scripts/lint.mjs",
     "check:readmes": "node scripts/check-readme-files.mjs",
     "check:baseline-tags": "node scripts/check-baseline-tags.mjs",
+    "check:gates": "node scripts/check-merge-gates.mjs",
     "check": "npm run lint && npm run check:readmes && npm run check:baseline-tags && npm run typecheck && npm test",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "art:check": "tsx tools/art/build.ts check",
