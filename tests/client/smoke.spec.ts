@@ -52,9 +52,10 @@ test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again"
   // whatever else was loading the CI runner — a 53.5s pass next to a 60s
   // timeout on unrelated diffs. `fastForwardUntilEggsBelow` and
   // `fastForwardUntilRunOver` below drive the sim directly instead, so
-  // this test now finishes in about a second; 20s is headroom against a
-  // regression back to a real-time wait, not a budget this needs.
-  test.setTimeout(20_000);
+  // this test now finishes in about a second. The config's 60s default
+  // timeout stands: page load plus the click/`waitAFrame` round trips
+  // this spec still does is paced by CI worker contention, not by this
+  // fix, and a tighter override has already gone red on a 2-core runner.
 
   const errors = trackPageErrors(page);
   await openGame(page, SEED);

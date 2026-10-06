@@ -307,8 +307,10 @@ export class BoardScene extends Phaser.Scene {
    * delivery (ARB-242: the same spec timed out at Playwright's 60s limit on
    * one run and passed in 53.5s on another, no gameplay difference between
    * them). For tests and debugging from the console, like `sim` below;
-   * reachable only through `window.mazeosaurBoard`, which the dev build
-   * installs and a production build never does.
+   * reachable only through `window.mazeosaurBoard`, which the Playwright
+   * harness installs in `openGame` via `addInitScript`, built on top of
+   * `window.mazeosaur`, which the dev build installs and a production
+   * build never does.
    */
   advanceTicks(n: number): void {
     for (let i = 0; i < n && (this.game_.state.phase === "build" || this.game_.state.phase === "migration"); i++) {
