@@ -1279,9 +1279,11 @@ Everything else stays flat, and `select` is the one worth stating outright
 because it looks like an omission. It fires on a tap that opens the dinosaur
 sheet — a panel naming that one dinosaur's kind, stage and stats, with its
 hue on it. There is no eyes-free version of that interaction, so a pitched
-tick would be a fourth copy of a fact already on screen, and at 50ms it is
-the quietest sound in the table precisely because it is chrome. A tap tone
-that moves teaches the player to hear the interface as an instrument. `kill`
+tick would be a fourth copy of a fact already on screen — after the sprite
+on the board, the sheet's name and the sheet's hue. At 50ms it is meant to
+sit below notice: it is chrome, not feedback, and it should be mixed as the
+quietest thing the game makes. A tap tone that moves teaches the player to
+hear the interface as an instrument. `kill`
 is flat for the neighbouring reason: the kill belongs to the invader, several
 dinosaurs may have paid for it, and the player's eye is already on the ring.
 
