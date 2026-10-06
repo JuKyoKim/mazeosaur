@@ -7,6 +7,7 @@ import type { Content } from "../src/index.js";
  */
 export const fixture: Content = {
   version: "test",
+  difficulty: "easy",
   rules: {
     startingMeat: 50,
     eggs: 3,

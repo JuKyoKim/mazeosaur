@@ -364,6 +364,33 @@ is bumped in the same commit, which is exactly the commit where somebody
 should be thinking about whose run it ends. Cosmetic edits never touch the
 digest and never fail.
 
+#### The difficulty is in the version string
+
+There is no single `content.version` any more. `@mazeosaur/content`
+exports `contentFor(difficulty)`, which returns one of three complete
+`Content` values, and each carries its own version: `m3.0-easy`,
+`m3.0-medium`, `m3.0-hard`. The generation prefix follows the rule above —
+it bumps when a sim-visible number changes — and the suffix is the
+difficulty the numbers belong to.
+
+That is deliberate, and it is what makes difficulty safe to resume. A run
+is `(seed, content, command log)`; difficulty is not a fourth input, it is
+*which content*. So the only thing that could silently change a resumed
+run's difficulty is a shell handing `loadSave` the wrong one — and because
+the difficulty is in the string the `===` above already compares, that run
+is **dropped** with `runDropped: "content-version"` instead of replaying
+at numbers the player never played. The guarantee is in the format, not in
+the shell remembering.
+
+Today that version check is the *whole* of the protection, not a backstop.
+`RunSave` has no difficulty field, so a shell resuming a run has nothing to
+read and has to guess which `Content` to hand in; the `===` is what catches
+it guessing wrong. Giving the save its own `difficulty` field — so the
+shell can know rather than guess, and the version check goes back to being
+the second line of defence — is [ARB-220](/ARB/issues/ARB-220), which bumps
+`SAVE_VERSION` and appends the first migration entry. Nothing above this
+paragraph waits on it.
+
 ### 1.6 Size, measured
 
 A full run of the scripted player in `packages/content/test/balance.test.ts`
@@ -852,6 +879,12 @@ were actually checked:
 - A document describes what the branch contains, not what it will contain
   once another branch merges. `npm run check:readmes` answers this for the
   file lists; the review answers it for the prose.
+- A document does not assert the present state of a file it does not
+  describe. Nothing can gate that sentence: no test reads prose, and the
+  reviewer approves it against a commit that the next merge moves, so it
+  goes false with nothing editing it. State the rule the code has to
+  satisfy, or a number the named file derives, and name the symbol rather
+  than the line so a grep can still find it later.
 - The verification in the PR body is of the kind described in 6.2.3.
 
 Request changes with the specific line and the specific rule. "Looks fine"

@@ -36,7 +36,8 @@ import {
   kindButtonX,
 } from "./layout.js";
 import { Raster, ellipse, rect, subtract, taper, union, darken, lighten, mix, rgb, type Rgb, type Shape } from "./raster.js";
-import { INVADER_BOX_CELLS, dinoSprite, inkBox, invaderSprite, renderParts } from "./sprites.js";
+import { INVADER_BOX_CELLS, dinoSprite, inkBox, invaderSprite, renderParts, strikeSprite } from "./sprites.js";
+import { STRIKE_FRAMES, STRIKE_NAME, STRIKE_SEQUENCE } from "./strikes.js";
 
 // ------------------------------------------------------------------ helpers
 
@@ -590,6 +591,62 @@ export function effectsPlate(d: Direction): Raster {
       }
     }
     drawText(r, x0 + tile / 2, y0 + tile + 12, name, TYPE.label, BOARD.textDim, "center");
+  });
+  return r;
+}
+
+/**
+ * The six attack strikes, three steps each, on the cell a dinosaur stands
+ * in and at the size the client draws them. This is the plate the client
+ * implements `case "attack"` against, so every number in it is the client's
+ * own rule read off the atlas `meta` — `(cell * drawCells) / authored` for
+ * the scale, the cell centre for the strike's origin, the cell's bottom edge
+ * for the dinosaur's feet — and not a layout invented for the picture.
+ *
+ * The adult is drawn under every strike because a strike alone cannot be
+ * judged: the question the plate answers is whether the shape still reads
+ * when it is on top of the animal that threw it.
+ */
+export function strikesPlate(d: Direction): Raster {
+  const scale = (CELL_PX * DRAW_CELLS) / d.spritePx;
+  const tile = Math.round(d.spritePx * STRIKE_FRAMES * scale);
+  // The gutter holds the longest kind name over the longest strike name, at
+  // the label scale the 5x7 font rounds those to; measured rather than
+  // guessed, because a gutter a few pixels short silently clips a word and
+  // the plate still looks finished.
+  const widest = (xs: string[]): number => Math.max(...xs.map((x) => x.length)) * (GLYPH_W + 1) * fontScale(TYPE.label);
+  const label = 16 + widest([...KINDS, ...Object.values(STRIKE_NAME)]);
+  const title = `${d.name} — attack strikes at board scale, ${STRIKE_SEQUENCE.length} steps`;
+  const r = new Raster(
+    Math.max(label + STRIKE_SEQUENCE.length * (tile + 8) + 8, 24 + title.length * (GLYPH_W + 1) * fontScale(TYPE.body)),
+    44 + KINDS.length * (tile + 8) + 8,
+  );
+  r.clear(BOARD.hud, 1);
+  drawText(r, 12, 14, title, TYPE.body, BOARD.text);
+  const sheet = new Sheet(d);
+
+  KINDS.forEach((kind, row) => {
+    const y0 = 44 + row * (tile + 8);
+    drawText(r, 10, y0 + tile / 2 - 4, `${kind}`, TYPE.label, rgb(KIND_HUE[kind]));
+    drawText(r, 10, y0 + tile / 2 + 8, STRIKE_NAME[kind], TYPE.label, BOARD.textDim);
+    STRIKE_SEQUENCE.forEach((step, col) => {
+      const x0 = label + col * (tile + 8);
+      r.fill(rect(x0, y0, tile, tile), BOARD.boardBg, 1, 1);
+      // The cell the dinosaur is standing in, so the reach reads against it.
+      const c = { x: x0 + tile / 2, y: y0 + tile / 2 };
+      const half = CELL_PX / 2;
+      r.fill(rect(c.x - half, c.y - half, CELL_PX, 1), BOARD.gridLine, 1, 1);
+      r.fill(rect(c.x - half, c.y + half, CELL_PX, 1), BOARD.gridLine, 1, 1);
+      r.fill(rect(c.x - half, c.y - half, 1, CELL_PX), BOARD.gridLine, 1, 1);
+      r.fill(rect(c.x + half, c.y - half, 1, CELL_PX), BOARD.gridLine, 1, 1);
+      // setOrigin(0.5, 1) at the cell's bottom edge: 5.0's anchor.
+      const dino = sheet.dino(kind, 3);
+      const box = dino.w * scale;
+      blitScaled(r, dino, c.x, c.y + half - box / 2, box);
+      // setOrigin(0.5, 0.5) on the cell centre: the strike's anchor.
+      blitScaled(r, strikeSprite(kind, step, d), c.x, c.y, tile);
+      if (row === 0) drawText(r, c.x, y0 - 10, `step ${step}`, TYPE.label, BOARD.textDim, "center");
+    });
   });
   return r;
 }

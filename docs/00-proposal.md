@@ -600,6 +600,24 @@ we find out.
   have: the counter plus a `60 left` readout is 245 of the 224 the band
   between the eggs and Send actually has. The fix is section 4's bar, not a
   coordinate.
+- 2026-10-05: **difficulty is three `Content` values, not a switch in the
+  sim.** `@mazeosaur/content` carries one `DIFFICULTY_TUNING` table —
+  invader count, invader hit points, bounty, build-phase seconds — and
+  `contentFor(difficulty)` builds a whole `Content` from it. The sim knows
+  the three *names* (`Difficulty`, so the save's narrower can check one
+  exhaustively and a HUD can print a label) and nothing else: no rule
+  branches on a difficulty, and a run stays `(seed, content, command
+  log)`. The difficulty is part of `content.version` — `m3.0-easy` — so
+  §1.5's `===` check already drops a run resumed against the wrong
+  difficulty rather than replaying it at numbers the player never played.
+  Easy is today's invaders with a 35-second build phase; medium is 130%
+  invaders; hard adds 140% hit points and takes the 3 seconds off. The
+  owner tunes the values, per [ARB-216](/ARB/issues/ARB-216); the shape is
+  what was decided here. One lever the owner's three columns did not name
+  is in the table because the model needs it: at full bounty, 30% more
+  invaders is 30% more meat, and the balance harness reached *further* on
+  medium than on easy and won the valley. `bountyPercent` holds meat per
+  migration flat so "more enemies" means pressure.
 - 2026-10-05: **the docs cite symbols, never a line number.** A line number
   reads as precise, passes review because it once was, and rots on the next
   unrelated edit to the file — and it rots invisibly, because the reader who

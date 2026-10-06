@@ -32,11 +32,11 @@ import {
   type Direction,
   type Kind,
 } from "./directions.js";
-import { drawText, effectsPlate, renderBoardFrame } from "./frame.js";
+import { drawText, effectsPlate, renderBoardFrame, strikesPlate } from "./frame.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, DRAW_CELLS, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
 import { encodePng, pngHasPixels } from "./png.js";
 import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
-import { dinoSprite, invaderSprite, pack } from "./sprites.js";
+import { dinoSprite, invaderSprite, pack, strikeEntries } from "./sprites.js";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -425,6 +425,10 @@ function generatedFrames(): { rel: string; raster: Raster }[] {
 
     out.push({ rel: `docs/art/${d.id}-legibility.png`, raster: legibilitySheet(d) });
     out.push({ rel: `docs/art/${d.id}-effects.png`, raster: effectsPlate(d) });
+    // Only a direction that actually has strikes. `strikeEntries` says why
+    // the three archived ones do not, and a plate of six empty cells would
+    // be a picture asserting something that is not true of them.
+    if (strikeEntries(d).length) out.push({ rel: `docs/art/${d.id}-strikes.png`, raster: strikesPlate(d) });
   }
   out.push({ rel: "docs/art/kind-hues.png", raster: colourSheet() });
   out.push({ rel: "docs/art/directions-compared.png", raster: compareSheet() });
@@ -651,6 +655,11 @@ function doCheck(): void {
     };
     for (const k of KINDS) for (const s of [1, 2, 3] as const) note(`${k}-${s}`, dinoSprite(k, s, d));
     for (const a of ARCHETYPES) for (const k of KINDS) note(`${a}-${k}`, invaderSprite(a, k, d));
+    // The strikes are measured on the same terms, and they are the frames
+    // most able to fail it: `project`'s v is `(x + z)/2 - y`, so height in
+    // the model costs twice what reach does, and a wind-up authored above
+    // y = 1 leaves the top of its own square. One did.
+    for (const e of strikeEntries(d)) note(e.name, e.raster);
     const shipped = d.id === CHOSEN.id;
     if (worst && shipped) bad++;
     const tag = !worst ? "ok  " : shipped ? "FAIL" : "warn";
@@ -662,12 +671,21 @@ function doCheck(): void {
   for (const d of DIRECTIONS) {
     const dinos = KINDS.flatMap((k) => ([1, 2, 3] as const).map((s) => ({ name: `${k}-${s}`, raster: dinoSprite(k, s, d) })));
     const invs = ARCHETYPES.flatMap((a) => KINDS.map((k) => ({ name: `${a}-${k}`, raster: invaderSprite(a, k, d) })));
+    const strikes = strikeEntries(d);
     const w = d.spritePx <= 24 ? 256 : 512;
     const da = pack(dinos, w);
     const ia = pack(invs, w);
-    const bytes = encodePng(da.raster.w, da.raster.h, da.raster.px).length + encodePng(ia.raster.w, ia.raster.h, ia.raster.px).length;
+    // Untrimmed, like the shipping atlas: the strikes sheet is mostly
+    // transparent by construction and the number worth reporting is what
+    // that actually costs after compression, not what it would cost trimmed.
+    const sa = strikes.length ? pack(strikes, w, 1, false) : null;
+    const bytes =
+      encodePng(da.raster.w, da.raster.h, da.raster.px).length +
+      encodePng(ia.raster.w, ia.raster.h, ia.raster.px).length +
+      (sa ? encodePng(sa.raster.w, sa.raster.h, sa.raster.px).length : 0);
+    const sheets = `${da.raster.w}x${da.raster.h} + ${ia.raster.w}x${ia.raster.h}${sa ? ` + ${sa.raster.w}x${sa.raster.h}` : ""}`;
     console.log(
-      `  ${d.id.padEnd(20)} ${String(d.spritePx).padStart(2)}px  ${da.frames.length + ia.frames.length} frames  ${(bytes / 1024).toFixed(1)} kB  (${da.raster.w}x${da.raster.h} + ${ia.raster.w}x${ia.raster.h})`,
+      `  ${d.id.padEnd(20)} ${String(d.spritePx).padStart(2)}px  ${da.frames.length + ia.frames.length + (sa?.frames.length ?? 0)} frames  ${(bytes / 1024).toFixed(1)} kB  (${sheets})`,
     );
   }
 

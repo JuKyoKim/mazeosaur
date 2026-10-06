@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Game, KIND_CYCLE, type Content, type Kind } from "@mazeosaur/sim";
-import { content, hatchlings } from "../src/index.js";
+import { DIFFICULTIES, Game, KIND_CYCLE, type Content, type Difficulty, type Kind } from "@mazeosaur/sim";
+import { content, contentFor, hatchlings } from "../src/index.js";
 
 /**
  * A scripted player, deliberately unremarkable: it paints the obvious
@@ -138,15 +138,45 @@ describe("balance harness", () => {
     expect(last.w, "migrations reached").toBeGreaterThanOrEqual(35);
   });
 
-  it("without any dinosaurs the nest falls by migration three", () => {
-    const g = new Game(content, 1);
-    let w = 0;
-    while (phaseOf(g) === "build") {
-      w = g.state.migration + 1;
-      g.apply({ type: "send" });
-      for (let i = 0; i < 100_000 && phaseOf(g) === "migration"; i++) g.tick();
+  /**
+   * The difficulties are asserted as an *order*, never as three absolute
+   * numbers, because the scripted player does not measure them equally
+   * well. It is meat-bound rather than hit-point-bound: once
+   * `bountyPercent` keeps income flat, thirty percent more invaders barely
+   * moves it (easy and medium both end on the same migration), while
+   * forty percent more hit points moves it a long way. Pinning a number
+   * per difficulty would pin that quirk; the order is the thing that must
+   * never invert, and it did invert once — see `DifficultyTuning`.
+   *
+   * Run with `--silent=false --reporter=verbose` to read the per-migration
+   * lines, which is what a tuning pass actually wants.
+   */
+  it("a harder difficulty never carries the scripted player further than an easier one", () => {
+    const reached: Partial<Record<Difficulty, number>> = {};
+    for (const d of DIFFICULTIES) {
+      const results = playScripted(contentFor(d), 1);
+      const last = results[results.length - 1]!;
+      reached[d] = last.w;
+      const leaks = results.reduce((sum, r) => sum + r.leaks, 0);
+      console.log(`${d.padEnd(6)} reach=m${String(last.w).padStart(2, "0")} eggs=${last.eggs} leaks=${leaks} buildTicks=${contentFor(d).rules.buildPhaseTicks}`);
     }
-    expect(g.state.phase).toBe("lost");
-    expect(w).toBeLessThanOrEqual(3);
+    expect(reached.easy, "easy keeps the harness's standing floor").toBeGreaterThanOrEqual(35);
+    expect(reached.medium, "medium is not easier than easy").toBeLessThanOrEqual(reached.easy!);
+    expect(reached.hard, "hard is not easier than medium").toBeLessThanOrEqual(reached.medium!);
+    expect(reached.hard, "hard is strictly harder than easy, not merely not-easier").toBeLessThan(reached.easy!);
+  });
+
+  it("without any dinosaurs the nest falls by migration three, on every difficulty", () => {
+    for (const d of DIFFICULTIES) {
+      const g = new Game(contentFor(d), 1);
+      let w = 0;
+      while (phaseOf(g) === "build") {
+        w = g.state.migration + 1;
+        g.apply({ type: "send" });
+        for (let i = 0; i < 100_000 && phaseOf(g) === "migration"; i++) g.tick();
+      }
+      expect(g.state.phase, d).toBe("lost");
+      expect(w, d).toBeLessThanOrEqual(3);
+    }
   });
 });
