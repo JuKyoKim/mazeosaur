@@ -1,6 +1,6 @@
 import type { ConsoleMessage, Page } from "@playwright/test";
 import type { BoardScene, GameHandle, ResultsScene, RunSummary } from "@mazeosaur/game";
-import { CANVAS_W, CELL_PX, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
+import { CANVAS_W, CELL_PX, PAUSE_MENU, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
 
 /**
  * Where to click. The board is one canvas with no DOM to query, so driving
@@ -28,6 +28,7 @@ export function paletteButtonCenter(index: number): { x: number; y: number } {
 }
 
 export const SEND_BUTTON = center(ROW1.send);
+export const PAUSE_BUTTON = center(ROW1.pause);
 export const SPEED_BUTTON = center(ROW1.speed);
 export const GROW_BUTTON = center(ROW3.grow);
 export const SELL_BUTTON = center(ROW3.sell);
@@ -46,12 +47,31 @@ export const HUD_BARE = { x: CANVAS_W / 2, y: ROW2.y + ROW2.h / 2 };
 /**
  * The "Again" button on the results screen.
  *
- * Imported from `layout.ts` rather than restated, unlike the HUD
- * constants above: `RESULTS.again` is where the renderer gets it too, so
- * this cannot drift from the button actually on screen. The HUD half of
- * this file is still hand-written and ARB-186 is moving it the same way.
+ * `RESULTS.again` is where the renderer gets it too, so this cannot drift
+ * from the button actually on screen.
+ *
+ * This replaces `PLAY_AGAIN_BUTTON`, which was the same button on the
+ * in-board overlay: a won or lost run goes to `results` now, and both of
+ * that constant's callers (`smoke.spec.ts`, `win-screen.spec.ts`) came
+ * here with it. The overlay `showOverlay` still draws for a run the
+ * *player* ended has a "Play again" of its own, and no spec clicks it —
+ * `pause.spec.ts` asserts that path through the reload instead — so there
+ * is no constant for it rather than an unused one.
  */
 export const AGAIN_BUTTON = { x: RESULTS.again.x + RESULTS.again.w / 2, y: RESULTS.again.y + RESULTS.again.h / 2 };
+
+/**
+ * The pause menu's three entries, from `PAUSE_MENU` in `layout.ts` like
+ * every other control here. A point on the scrim but on none of them, for
+ * the tap-to-dismiss gesture, is the gap above the first button — derived
+ * from `resume.y` rather than written as 420, so widening the gap cannot
+ * quietly move the dismiss test onto a button.
+ */
+const entry = (e: { y: number }) => ({ x: PAUSE_MENU.x + PAUSE_MENU.w / 2, y: e.y + PAUSE_MENU.h / 2 });
+export const RESUME_BUTTON = entry(PAUSE_MENU.resume);
+export const RESTART_RUN_BUTTON = entry(PAUSE_MENU.restart);
+export const END_RUN_BUTTON = entry(PAUSE_MENU.end);
+export const PAUSE_SCRIM_BARE = { x: CANVAS_W / 2, y: PAUSE_MENU.resume.y - 12 };
 
 /**
  * What the harness reaches for inside the page, declared against the real
@@ -217,9 +237,10 @@ export function hudTargets(page: Page): Promise<{ name: string; x: number; y: nu
 
 /**
  * Whether the fliers' air route is drawn, at which of its two strengths,
- * and the segment it runs along (`BoardScene.airRoute`).
+ * where its lights' blink has got to, and the segment it runs along
+ * (`BoardScene.airRoute`).
  */
-export function airRouteSnapshot(page: Page): Promise<{ shown: boolean; subdued: boolean; from: { x: number; y: number }; to: { x: number; y: number } }> {
+export function airRouteSnapshot(page: Page): Promise<{ shown: boolean; subdued: boolean; blink: number; from: { x: number; y: number }; to: { x: number; y: number } }> {
   return page.evaluate(() => window.mazeosaurBoard!().airRoute);
 }
 
@@ -233,6 +254,29 @@ export function firstFlierMigration(page: Page): Promise<number> {
   return page.evaluate(() => {
     const c = window.mazeosaurBoard!().sim.content;
     return c.migrations.findIndex((m) => m.groups.some((g) => c.invaders[g.invader]?.flying));
+  });
+}
+
+/**
+ * Whether the clock is running, from `BoardScene.clock`. A pause is
+ * invisible below the client by design, so `state.tick` holding still is
+ * all a sim snapshot can see — and a frozen renderer looks identical.
+ */
+export function clockSnapshot(page: Page): Promise<{ paused: boolean; abandoned: boolean; speed: number }> {
+  return page.evaluate(() => window.mazeosaurBoard!().clock);
+}
+
+/**
+ * Everything a replay is a function of: the tick reached, the command log,
+ * and the state hash those two produce. This is the determinism assertion
+ * a pause has to survive — `packages/sim/test/save.test.ts` proves the
+ * round trip below the client, and this proves the client did not quietly
+ * add a tick or a command while the menu was up.
+ */
+export function replaySnapshot(page: Page): Promise<{ tick: number; hash: number; log: string }> {
+  return page.evaluate(() => {
+    const sim = window.mazeosaurBoard!().sim;
+    return { tick: sim.state.tick, hash: sim.hash(), log: JSON.stringify(sim.log) };
   });
 }
 

@@ -21,9 +21,18 @@ ports themselves are section 2 of
 - `src/BoardScene.ts` — the board, the HUD and all input. The only scene
   that constructs a `Game`. Resumes a saved run via `src/resume.ts`'s
   `gameForRun()`, and autosaves at phase boundaries through
-  `services(this).saves`. `endRun()` is the single place the
+  `services(this).saves`. It also owns **the clock**: the sim has no
+  timers, so the speed toggle and the pause menu are this scene choosing
+  how often to call `tick()`, and a pause is it choosing not to. The
+  menu's "Restart run" and "End run" abandon the run — written with
+  `run: null` because nothing is left to resume, but not counted as
+  finished;
+  [the pause decision](../../docs/decisions/0004-pause-stops-the-clients-clock.md)
+  says why. `showResults()` is the single place the
   `board ──won / lost──▶ results` transition is written, and the order
-  inside it is load-bearing — see the comment there.
+  inside it is load-bearing — see the comment there. It is a separate
+  method from the menu's `endRun()` on purpose: a run the player quits is
+  neither won nor lost, so it still ends on the in-board overlay.
 - `src/ResultsScene.ts` — the end-of-run screen (section 9 of
   [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md)): the
   headline, the four statistics, the pack row, and "Again". It owns no
@@ -32,8 +41,9 @@ ports themselves are section 2 of
 - `src/summary.ts` — `RunSummary` and the `runSummary()`/`packFrom()` that
   build it. Pure and Phaser-free, so what the results screen is *told* is
   unit tested while what it draws stays a browser spec. The fossil figure
-  comes from the same `fossilAward` call `runFinished` uses, which is what
-  stops the number shown and the number banked from disagreeing.
+  is *handed in*, not computed: section 5.4 pays the run in `BoardScene`,
+  so `runSummary()` has no access to `fossilWeights` and a second award
+  calculation is a type error rather than a thing to remember.
 - `src/resume.ts` — `gameForRun()`: reuses `MountOptions.resumed`
   (`LoadOutcome.resumed` from the shell's `loadSave`) instead of replaying
   the run a second time, falling back to `@mazeosaur/sim`'s `replay()` only

@@ -46,6 +46,7 @@ test("every HUD control clears the 44pt hit floor on the rendered canvas", async
   // content edit.
   expect(targets.map((t) => t.name)).toEqual([
     "Send",
+    "Pause",
     "speed toggle",
     ...hatchlings.map((_, i) => `kind card ${i}`),
     "Grow",
@@ -67,6 +68,7 @@ test("every HUD control clears the 44pt hit floor on the rendered canvas", async
   // The boxes are `layout.ts`'s, not merely big enough.
   const byName = new Map(targets.map((t) => [t.name, t]));
   expect(byName.get("Send")).toMatchObject({ x: ROW1.send.x, y: ROW1.send.y, w: ROW1.send.w, h: ROW1.send.h });
+  expect(byName.get("Pause")).toMatchObject({ x: ROW1.pause.x, y: ROW1.pause.y, w: ROW1.pause.w, h: ROW1.pause.h });
   expect(byName.get("speed toggle")).toMatchObject({ x: ROW1.speed.x, y: ROW1.speed.y, w: ROW1.speed.w, h: ROW1.speed.h });
   expect(byName.get("Grow")).toMatchObject({ x: ROW3.grow.x, y: ROW3.grow.y, w: ROW3.grow.w, h: ROW3.grow.h });
   expect(byName.get("Sell")).toMatchObject({ x: ROW3.sell.x, y: ROW3.sell.y, w: ROW3.sell.w, h: ROW3.sell.h });

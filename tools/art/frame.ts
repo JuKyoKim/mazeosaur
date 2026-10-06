@@ -779,10 +779,14 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
 
   if (s.phase === "build") {
     const bonus = g.earlySendBonus();
-    drawButton(r, ROW1.send, BOARD.buttonActive, "SEND", TYPE.body, BOARD.text, bonus > 0 ? `+${bonus} meat` : undefined);
+    // `+25` and not `+25 meat`: Send is an 82px square since Pause took the
+    // width it had spare, and the client's own label lost the word for the
+    // same reason. The mock draws the strings the client draws.
+    drawButton(r, ROW1.send, BOARD.buttonActive, "SEND", TYPE.body, BOARD.text, bonus > 0 ? `+${bonus}` : undefined);
   } else {
     drawButton(r, ROW1.send, BOARD.button, "SEND", TYPE.body, BOARD.textDim);
   }
+  drawButton(r, ROW1.pause, BOARD.button, "PAUSE", TYPE.body, BOARD.text);
   drawButton(r, ROW1.speed, BOARD.button, "1×", TYPE.body, BOARD.text);
 
   // row 2: the next migration

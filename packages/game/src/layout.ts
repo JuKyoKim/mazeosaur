@@ -165,9 +165,21 @@ export const TYPE = {
 
 /**
  * Row 1, the vitals. A full-width build-timer bar across the very top of
- * the HUD, then meat, eggs, the migration counter, Send and the speed
- * toggle. The timer is a draining bar rather than digits so it is legible
- * without being read.
+ * the HUD, then meat, eggs, the migration counter, and the three clock
+ * controls: Send, Pause and the speed toggle. The timer is a draining bar
+ * rather than digits so it is legible without being read.
+ *
+ * The three controls are 82 wide each because that is the only width three
+ * of them fit in at the hit floor, not because 82 looked right. Their band
+ * is fixed at both ends — the migration readout's own widest value ends at
+ * 428 and needs Send's origin to stay at 444, and the row's right edge is
+ * `CONTENT_RIGHT` — so 260px carry 3 * `MIN_HIT` = 246 and two 7px gaps,
+ * with nothing left over. Send gave up the 82 Pause needed because it was
+ * the only control in the row with any to give: it was 164 wide against a
+ * floor of 82, and everything else here is either at the floor already or
+ * a text field whose own measured clearance is 8 or 16px (§4). What it
+ * cost is Send's bonus label, which is now two lines (`Send` over `+25`)
+ * exactly as Grow and Sell already are.
  */
 export const ROW1 = {
   y: HUD_Y,
@@ -181,8 +193,9 @@ export const ROW1 = {
   eggValue: { x: 230, y: HUD_Y + 30 },
   migrationLabel: { x: 320, y: HUD_Y + 26 },
   migrationValue: { x: 320, y: HUD_Y + 50 },
-  send: { x: 444, y: HUD_Y + 11, w: 164, h: 82 },
-  speed: { x: 622, y: HUD_Y + 11, w: 82, h: 82 },
+  send: { x: 444, y: HUD_Y + 11, w: MIN_HIT, h: MIN_HIT },
+  pause: { x: 533, y: HUD_Y + 11, w: MIN_HIT, h: MIN_HIT },
+  speed: { x: 622, y: HUD_Y + 11, w: MIN_HIT, h: MIN_HIT },
 } as const;
 
 /**
@@ -342,4 +355,28 @@ export const RESULTS = {
   /** Every dinosaur grown to adult, as its sprite, in a row. */
   pack: { x: GUTTER, y: 680, w: CONTENT_W, h: 180 },
   again: { x: Math.round((CANVAS_W - 328) / 2), y: HUD_Y + 11, w: 328, h: 82 },
+} as const;
+
+/**
+ * The pause menu, centred in the board area with the board still visible
+ * behind its scrim. Three entries — back to the run, start it over, stop
+ * playing it — each `MIN_HIT` tall with 14px between them, which is more
+ * separation than any two controls in the HUD get and is deliberate: the
+ * third entry throws the run away, so this is the one menu in the client
+ * where a mis-tap is unrecoverable.
+ *
+ * `RESULTS.again`'s width and x, not its own 328: the pause menu and the
+ * results screen are the same shape of thing in the same place, and a
+ * player who ends a run from here lands on that screen with the button
+ * under the same thumb. One number, so they cannot drift apart.
+ */
+export const PAUSE_MENU = {
+  title: { y: 328 },
+  sub: { y: 388 },
+  x: RESULTS.again.x,
+  w: RESULTS.again.w,
+  h: MIN_HIT,
+  resume: { y: 432 },
+  restart: { y: 432 + MIN_HIT + 14 },
+  end: { y: 432 + (MIN_HIT + 14) * 2 },
 } as const;
