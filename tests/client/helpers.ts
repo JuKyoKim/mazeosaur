@@ -281,9 +281,59 @@ export async function waitForTickAdvance(page: Page, fromTick: number, timeoutMs
   await page.waitForFunction((t) => window.mazeosaurBoard!().sim.state.tick > t, fromTick, { timeout: timeoutMs });
 }
 
-/** Waits for an egg to be lost, i.e. for an invader to reach the nest. */
-export async function waitForEggsBelow(page: Page, eggs: number, timeoutMs = 45_000): Promise<void> {
-  await page.waitForFunction((n) => window.mazeosaurBoard!().sim.state.eggs < n, eggs, { timeout: timeoutMs });
+/**
+ * Drives `BoardScene.advanceTicks(1)` in a tight loop, at CPU speed,
+ * instead of waiting for `update()`'s real-time accumulator
+ * (`this.acc += delta * this.speed`) to deliver enough animation frames to
+ * cover the same ground. That accumulator paces ticks to the browser's
+ * actual frame rate — even at the 3x the "Speed" button offers — so an
+ * invader's walk down the full lane took real wall-clock seconds that grew
+ * or shrank with whatever else was loading the CI runner. That was
+ * ARB-242: the same full-run spec timed out at the 60s Playwright limit on
+ * one run and passed in 53.5s on another, with no gameplay difference
+ * between them.
+ *
+ * `advanceTicks` runs the same per-tick pipeline the update loop runs —
+ * sim tick, then `handleEvents` on whatever drained — so the leak, the
+ * loss and the overlay `handleEvents` raises on it all still come from the
+ * real code path, just not paced by frame delivery. One tick per call
+ * (rather than handing `advanceTicks` the whole `maxTicks` budget up
+ * front) stops as soon as the condition is met instead of running the
+ * rest of the migration for free.
+ */
+async function fastForwardUntil(page: Page, until: "eggsBelow" | "runOver", arg: number, maxTicks: number): Promise<boolean> {
+  return page.evaluate(
+    ({ until, arg, maxTicks }) => {
+      const board = window.mazeosaurBoard!();
+      const reached = () => (until === "eggsBelow" ? board.sim.state.eggs < arg : board.sim.state.phase === "won" || board.sim.state.phase === "lost");
+      let n = 0;
+      while (!reached() && n < maxTicks) {
+        board.advanceTicks(1);
+        n++;
+      }
+      return reached();
+    },
+    { until, arg, maxTicks },
+  );
+}
+
+/**
+ * Fast-forwards until an egg is lost, i.e. until an invader reaches the
+ * nest. See `fastForwardUntil` for why this drives the sim directly
+ * instead of waiting on real time.
+ */
+export async function fastForwardUntilEggsBelow(page: Page, eggs: number, maxTicks = 20_000): Promise<void> {
+  const reached = await fastForwardUntil(page, "eggsBelow", eggs, maxTicks);
+  if (!reached) throw new Error(`eggs did not drop below ${eggs} within ${maxTicks} ticks`);
+}
+
+/**
+ * Fast-forwards until the run ends, won or lost. See `fastForwardUntil`
+ * for why this drives the sim directly instead of waiting on real time.
+ */
+export async function fastForwardUntilRunOver(page: Page, maxTicks = 20_000): Promise<void> {
+  const reached = await fastForwardUntil(page, "runOver", 0, maxTicks);
+  if (!reached) throw new Error(`run did not end within ${maxTicks} ticks`);
 }
 
 /**
