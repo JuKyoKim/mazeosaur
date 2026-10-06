@@ -6,11 +6,14 @@ import {
   SELL_BUTTON,
   SEND_BUTTON,
   SPEED_BUTTON,
+  airRouteSnapshot,
   cellCenter,
+  firstFlierMigration,
   loseOnNextLeak,
   openGame,
   paletteButtonCenter,
   selectionSnapshot,
+  setMigration,
   simSnapshot,
   trackPageErrors,
   waitAFrame,
@@ -304,6 +307,65 @@ test("selection: a sheet and an armed card are never both live", async ({ page }
   expect(after.dinoId).toBeNull();
   expect(after.kindId).toBeNull();
   expect(await simSnapshot(page)).toMatchObject({ dinos: 1, meat: placed.meat });
+
+  expect(errors.messages).toEqual([]);
+});
+
+/**
+ * The fliers' air route (`BoardScene.drawAirRoute`). A flying invader
+ * ignores the flow field and flies the straight line from the lane's spawn
+ * to the nest, so the maze the player spent the whole build phase on does
+ * nothing to it — and until this indicator there was nothing on screen
+ * that said so.
+ *
+ * Three claims, and none of them can be made off a screenshot. That the
+ * route is *conditional*: a migration with no flier draws nothing, or the
+ * line is scenery rather than a warning. That it is the lane's own
+ * segment, which is the claim the client makes about the sim's
+ * `moveToward(nest)` — a pixel sample could only say that something blue
+ * was drawn somewhere. And that it drops to its quiet strength the moment
+ * the migration is in the air, which is the half of the owner's ask that
+ * is about not drowning the invaders out.
+ */
+test("air route: a flier migration lights the spawn-to-nest line, and only a flier migration does", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, SEED);
+
+  // Migration 1 is ground-only, so the board says nothing about the air.
+  const ground = await airRouteSnapshot(page);
+  expect(ground.shown).toBe(false);
+
+  const flierMigration = await firstFlierMigration(page);
+  expect(flierMigration).toBeGreaterThan(0);
+  await setMigration(page, flierMigration);
+  await waitAFrame(page);
+
+  // Still the build phase: the route is up before the fliers are, which is
+  // the whole point — it has to be readable while the maze is still being
+  // built, not as an explanation after the eggs are gone.
+  const coming = await airRouteSnapshot(page);
+  expect((await simSnapshot(page)).phase).toBe("build");
+  expect(coming).toMatchObject({ shown: true, subdued: false });
+  // The lane's spawn and nest cell centres, which is where the sim flies
+  // them: cellCenter() here is the harness's own copy of the geometry.
+  expect(coming.from).toEqual(cellCenter(0, 0));
+  expect(coming.to).toEqual(cellCenter(19, 27));
+
+  // Sent: the same route, now a trace rather than a beacon.
+  await page.mouse.click(SEND_BUTTON.x, SEND_BUTTON.y);
+  await waitAFrame(page);
+  expect((await simSnapshot(page)).phase).toBe("migration");
+  expect(await airRouteSnapshot(page)).toMatchObject({ shown: true, subdued: true });
+
+  // The invaders that arrive are the fliers the route was drawn for, and
+  // the canvas is still advancing with it on screen.
+  const flying = await page.waitForFunction(() => {
+    const sim = window.mazeosaurBoard!().sim;
+    const live = sim.state.invaders;
+    return live.length > 0 && live.every((inv) => inv.flying) ? live.length : false;
+  });
+  expect(await flying.jsonValue()).toBeGreaterThan(0);
+  await waitForTickAdvance(page, (await simSnapshot(page)).tick);
 
   expect(errors.messages).toEqual([]);
 });
