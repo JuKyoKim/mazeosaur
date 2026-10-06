@@ -32,6 +32,7 @@ import {
   type Direction,
   type Kind,
 } from "./directions.js";
+import { describeProblem as describeDocProblem, geometryDrift, readDoc } from "./doc-table.js";
 import { drawText, effectsPlate, renderBoardFrame, strikesPlate } from "./frame.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, DRAW_CELLS, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
 import { encodePng, pngHasPixels } from "./png.js";
@@ -597,6 +598,20 @@ function doCheck(): void {
   for (const row of layoutTable()) {
     if (!row.logical.includes("x") || row.what.startsWith("type")) continue;
     console.log(`  ${row.what.padEnd(22)} ${row.logical.padEnd(22)} ${row.points} pt`);
+  }
+
+  // `docs/01-art-hud-and-audio.md` §4 is hand-maintained, not generated from
+  // the table above it, so nothing stopped it from going stale the way
+  // `BoardScene` did against it in ARB-186. `tools/art/test/doc-table.test.ts`
+  // is what actually gates this (`npm run check` does not run `art:check`);
+  // this is the same comparison surfaced here for a human running the CLI.
+  console.log("\ndocs/01 §4 against layout.ts (ARB-292)");
+  const docProblems = geometryDrift(readDoc(ROOT));
+  if (docProblems.length) {
+    bad += docProblems.length;
+    for (const p of docProblems) console.error(`  FAIL ${describeDocProblem(p)}`);
+  } else {
+    console.log("  ok   every row agrees");
   }
 
   // A sprite touching its own frame border has been clipped, and what goes
