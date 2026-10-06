@@ -150,6 +150,20 @@ is what keeps that door open.
   implemented and tested** in `packages/sim/src/flowfield.ts` and
   `lane.ts`, including the exact "would this placement seal the maze"
   check.
+- **A leg ends on a set of cells, not on one cell.** The spawn and the nest
+  are reserved and nothing is ever built on them. A checkpoint is a routing
+  waypoint and is buildable: while it is open the leg's target is the
+  checkpoint alone, and while a dinosaur stands on it the leg's targets are
+  the checkpoint's open eight-neighbours, so the leg ends one cell short and
+  nothing else about the route moves. A field with several targets is one
+  multi-source Dijkstra; the leg is finished at distance zero either way.
+  The seal check reads this with no special case: block a checkpoint and all
+  of its neighbours and the leg has no targets left, its whole field is
+  `UNREACHABLE`, and the placement is refused as `would-block`. `laneIsOpen`
+  requires every cell that can *begin* a leg to reach that leg's targets —
+  the spawn, then the previous leg's target cells — which is also the
+  condition that no invader standing beside an occupied checkpoint can be
+  walled into a pocket. `legTargetCells` in `lane.ts` is the whole rule.
 
 ### 4.2 Content as data (`@mazeosaur/content`)
 
@@ -583,8 +597,8 @@ we find out.
 - 2026-10-05: the refused preview's hatching is **3px stripes of `ink` at
   alpha 1, stepped 8px, over `refusal` at 0.45**. `ink` because hatching in
   `refusal` is one hue at two alphas, which the bright spawn, checkpoint and
-  nest markers erase outright — the four cells that always refuse and that a
-  new player tries first. 3px because at the reference device a 2px stripe is
+  nest markers erase outright — the four marked cells a new player tries
+  first, two of which always refuse. 3px because at the reference device a 2px stripe is
   1.08pt, barely over one device pixel at DPR 1, where it measures 57% texture
   against a 3px stripe's 76%. The spacing and the fill stay where they
   were. Section 4 of
@@ -600,3 +614,41 @@ we find out.
   have: the counter plus a `60 left` readout is 245 of the 224 the band
   between the eggs and Send actually has. The fix is section 4's bar, not a
   coordinate.
+- 2026-10-05: **difficulty is three `Content` values, not a switch in the
+  sim.** `@mazeosaur/content` carries one `DIFFICULTY_TUNING` table —
+  invader count, invader hit points, bounty, build-phase seconds — and
+  `contentFor(difficulty)` builds a whole `Content` from it. The sim knows
+  the three *names* (`Difficulty`, so the save's narrower can check one
+  exhaustively and a HUD can print a label) and nothing else: no rule
+  branches on a difficulty, and a run stays `(seed, content, command
+  log)`. The difficulty is part of `content.version` — `m3.0-easy` — so
+  §1.5's `===` check already drops a run resumed against the wrong
+  difficulty rather than replaying it at numbers the player never played.
+  Easy is today's invaders with a 35-second build phase; medium is 130%
+  invaders; hard adds 140% hit points and takes the 3 seconds off. The
+  owner tunes the values, per [ARB-216](/ARB/issues/ARB-216); the shape is
+  what was decided here. One lever the owner's three columns did not name
+  is in the table because the model needs it: at full bounty, 30% more
+  invaders is 30% more meat, and the balance harness reached *further* on
+  medium than on easy and won the valley. `bountyPercent` holds meat per
+  migration flat so "more enemies" means pressure.
+- 2026-10-05: **the checkpoints are buildable; the spawn and the nest stay
+  reserved.** The owner, on the demo: "the points 1 and 2 needs to not be
+  physically blocking? we need to allow players to build on those areas, but
+  the mobs need to follow that general pathing which is good." A checkpoint
+  is a routing waypoint and nothing else, so it reserves nothing; the spawn
+  is where invaders appear and the nest is where they arrive, so a dinosaur
+  on either breaks the fiction — and blocking either makes the lane closed by
+  definition, so it would be refused as `would-block` anyway and `lane-cell`
+  is only the clearer message. The leg therefore ends on a *set* of cells
+  (§4.1): the checkpoint while it is open, its open eight-neighbours while a
+  dinosaur stands on it. Rejected: targeting the nearest open cell and
+  recomputing, because the effective waypoint then drifts arbitrarily far as
+  the player builds around it and needs an invented tie-break, which loses
+  the routing the owner asked to keep; and a fixed 3x3 region, because it
+  shortens every leg even with nothing built, changing the natural route and
+  the mazed-lane multiplier for no reason. The chosen rule is byte for byte
+  today's field until somebody builds on a checkpoint and moves the leg's end
+  by one cell when they do. Sealing stays impossible by the same exact test
+  rather than a new rule: no targets left means no reachable cells, which is
+  what `laneIsOpen` already reads as closed.

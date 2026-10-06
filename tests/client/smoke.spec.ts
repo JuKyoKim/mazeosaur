@@ -34,11 +34,14 @@ const WALL = [
 /** One more cell on the same row, placed without re-arming the tray. */
 const AFTER_REFUSAL = { x: 16, y: 2 };
 
-// The lane's spawn cell. `buildRefusal` rejects the spawn, both
-// checkpoints and the nest outright, so this is a refusal that does not
-// depend on what is already built or on how much meat is left — and
-// `content.valley.rock` is empty, so a lane cell is the only terrain that
-// can refuse at all.
+// The lane's spawn cell. `buildRefusal` rejects the spawn and the nest
+// outright, so this is a refusal that does not depend on what is already
+// built or on how much meat is left — and `content.valley.rock` is empty,
+// so one of those two cells is the only terrain that can refuse at all.
+// The checkpoints are *not* in that set: a dinosaur may stand on one and
+// the leg then ends on the checkpoint's open neighbours instead
+// (`legTargetCells`), so a checkpoint here would be a placement, not a
+// refusal.
 const LANE_CELL = { x: 0, y: 0 };
 
 const HATCHLING_COST = 10;

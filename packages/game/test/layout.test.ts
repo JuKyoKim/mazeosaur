@@ -207,6 +207,25 @@ describe("the grid inside the board area", () => {
     expect(gridTop(27)).toBe(18);
   });
 
+  /**
+   * Width has no `gridLeft()` because it does not vary: `GRID_W` is fixed in
+   * v1 and `CELL_PX` is derived from it. Height is centred and tested across
+   * four values; width is pinned, and a pin needs something holding it.
+   *
+   * Both halves matter and neither implies the other. If content widened the
+   * valley alone, the scene would still draw 36px cells — it bounds columns
+   * with `colAt(p.x, v.width)` off content, not off `GRID_W` — and the extra
+   * columns would run off the right edge of a 720px canvas. If both moved
+   * together, `CELL_PX` would stay 36 and the grid would no longer span the
+   * canvas, leaving dead pixels down one side and every sprite at a cell size
+   * the atlas was not authored at. Neither shows up in any other test, and
+   * both are a content edit away.
+   */
+  it("pins the valley's width to the grid the cell size is derived from", () => {
+    expect(content.valley.width).toBe(GRID_W);
+    expect(CELL_PX).toBe(CANVAS_W / GRID_W);
+  });
+
   it("maps a pointer back to the row under it, for every valley height", () => {
     for (const gridH of HEIGHTS) {
       const top = gridTop(gridH);

@@ -12,9 +12,10 @@
 
 import { ARCHETYPE_SILHOUETTE, KIND_SILHOUETTE, type Archetype, type Part } from "./bestiary.js";
 import { ARCHETYPE_BLOCKS, BLOCK_SPAN, KIND_BLOCKS } from "./blocks.js";
-import { KIND_HUE, type Direction, type Kind, type Palette } from "./directions.js";
+import { KIND_HUE, KINDS, type Direction, type Kind, type Palette } from "./directions.js";
 import { Raster, lighten, darken, scaleShape, union, type Rgb } from "./raster.js";
-import { fitFor, outlined, renderBoxes, type Box } from "./voxel.js";
+import { KIND_STRIKE, STRIKE_FRAMES, STRIKE_SEQUENCE, type StrikeStep } from "./strikes.js";
+import { fitFor, outlined, project, renderBoxes, type Box, type Fit } from "./voxel.js";
 
 function toneColor(tone: Part["tone"], p: Palette): Rgb {
   return p[tone];
@@ -122,6 +123,72 @@ export function invaderSprite(archetype: Archetype, kind: Kind, d: Direction): R
  */
 export const INVADER_FRAMES = (archetype: Archetype): number => (archetype === "boss" ? 2 : 1);
 
+// ------------------------------------------------------------------ strikes
+
+/**
+ * Where a strike frame's double square sits in the projected world: centred
+ * on the projected centre of the dinosaur's own ground tile, at the
+ * bestiary's world scale.
+ *
+ * Both halves are deliberate and neither comes from the model.
+ *
+ * `span` is `BLOCK_SPAN * STRIKE_FRAMES`, so one world unit is the same
+ * number of pixels in a strike frame as in a dinosaur frame. A strike is
+ * reach, not size: the double frame buys the room for a horn thrust that
+ * leaves the cell, and the weapon stays the size the animal carrying it is.
+ *
+ * `cu`/`cv` are **fixed for every strike**, which is the opposite of what
+ * `fitFor` does for an animal. An animal is centred in its own frame because
+ * nothing downstream cares where inside the square it was drawn — `pack`
+ * trims it away. A strike is the other case entirely: *where* it sits
+ * relative to the cell is the whole content of the frame, because a club
+ * swings out to one side and a dive comes down from above. Centring each
+ * step on its own ink would delete the swing and leave three pictures of a
+ * club in the middle of the cell.
+ *
+ * So the centre is `project(0.5, 0, 0.5)` — the middle of the unit tile the
+ * dinosaur stands on, at ground level — and that is the point the client
+ * puts on the cell centre with `setOrigin(0.5, 0.5)`. A box authored at
+ * y = 0 is therefore on the floor of the cell, and x > 1 is past its forward
+ * edge. Read off `project` rather than written as `(0, 0.5)` so a change of
+ * camera moves the anchor with it.
+ */
+export function strikeFit(): Fit {
+  const [cu, cv] = project(0.5, 0, 0.5);
+  return { cu, cv, span: BLOCK_SPAN * STRIKE_FRAMES };
+}
+
+/**
+ * One step of one kind's attack effect, in that kind's hue.
+ *
+ * Hue stays the channel it already is — the strike is drawn in the same
+ * palette as the dinosaur throwing it — and shape is what this adds. See
+ * `strikes.ts` for the six silhouettes and why they are those six.
+ */
+export function strikeSprite(kind: Kind, step: StrikeStep, d: Direction): Raster {
+  const p = d.palette(KIND_HUE[kind]);
+  const n = d.spritePx * STRIKE_FRAMES;
+  const body = renderBoxes(KIND_STRIKE[kind](step), n, (t) => p[t], d.faces ?? FACES, strikeFit(), d.samples);
+  return outlined(body, d.outline, p.ink);
+}
+
+/**
+ * Every strike frame a direction ships, named as the client builds the name:
+ * `strike-<kind>-<step>`.
+ *
+ * Empty for a direction that is not `blocks`. The strikes were authored for
+ * the direction that shipped and they are block models; rendering them
+ * through a flat direction's palette would put a solid in a picture that has
+ * no solids in it. The other three directions are the record of how the
+ * choice was made (section 5.5) and nothing in them is in an atlas, so the
+ * honest answer for them is that they have no strikes rather than a
+ * half-converted one.
+ */
+export function strikeEntries(d: Direction): { name: string; raster: Raster }[] {
+  if (d.model !== "blocks") return [];
+  return KINDS.flatMap((kind) => STRIKE_SEQUENCE.map((step) => ({ name: `strike-${kind}-${step}`, raster: strikeSprite(kind, step, d) })));
+}
+
 /**
  * The on-board box an archetype is drawn into, in cells.
  *
@@ -195,9 +262,19 @@ export function inkBox(r: Raster): { x: number; y: number; w: number; h: number 
  * Every entry is trimmed to its ink first, so a packed frame *is* the
  * animal. That is what lets the client anchor with a plain
  * `setOrigin(0.5, 1)` — see `atlasJson`.
+ *
+ * `trim: false` keeps the whole authored square, and the strikes atlas is
+ * the one set that needs it. Trimming answers "where is the animal" by
+ * throwing away the answer to "where in the cell was this drawn", and for an
+ * effect that is the only question: a tail club swings out to one side of
+ * the cell and a dive comes down from above it. An untrimmed strike frame
+ * carries its own geometry, so the client places it with
+ * `setOrigin(0.5, 0.5)` on the cell centre and nothing has to be looked up.
+ * The cost is transparent pixels, which is what PNG compresses best.
  */
-export function pack(entries: { name: string; raster: Raster }[], width: number, pad = 1): Atlas {
+export function pack(entries: { name: string; raster: Raster }[], width: number, pad = 1, trim = true): Atlas {
   const trimmed = entries.map((e) => {
+    if (!trim) return { name: e.name, raster: e.raster };
     const box = inkBox(e.raster);
     const raster = new Raster(box.w, box.h);
     raster.blit(e.raster, -box.x, -box.y);

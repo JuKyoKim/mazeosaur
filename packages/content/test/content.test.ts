@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { Game, laneIsOpen, Grid, KIND_CYCLE } from "@mazeosaur/sim";
-import { content, fossilAward, hatchlings } from "../src/index.js";
+import { DIFFICULTIES, Game, laneIsOpen, Grid, KIND_CYCLE, TICKS_PER_SECOND, type Content } from "@mazeosaur/sim";
+import { allContent, content, contentFor, DEFAULT_DIFFICULTY, DIFFICULTY_TUNING, fossilAward, hatchlings } from "../src/index.js";
+
+/** Total hit points a difficulty asks the player to chew through. */
+function hpPool(c: Content): number {
+  return c.migrations.reduce((sum, m) => sum + m.groups.reduce((t, g) => t + g.count * c.invaders[g.invader]!.hp, 0), 0);
+}
+
+/** Invaders a difficulty sends, across all fifty migrations. */
+function invaderCount(c: Content): number {
+  return c.migrations.reduce((sum, m) => sum + m.groups.reduce((t, g) => t + g.count, 0), 0);
+}
 
 describe("content integrity", () => {
-  it("every migration references a known invader and every growsTo a known next stage", () => {
+  it.each(DIFFICULTIES)("%s: every migration references a known invader and every growsTo a known next stage", (difficulty) => {
+    const content = contentFor(difficulty);
     for (const m of content.migrations) {
       for (const g of m.groups) {
         expect(content.invaders[g.invader], `${m.id} -> ${g.invader}`).toBeDefined();
@@ -22,7 +33,11 @@ describe("content integrity", () => {
         expect(d.stage).toBe(3);
       }
     }
-    for (const i of Object.values(content.invaders)) expect(KIND_CYCLE).toContain(i.kind);
+    for (const i of Object.values(content.invaders)) {
+      expect(KIND_CYCLE).toContain(i.kind);
+      expect(i.hp, `${i.id} hp`).toBeGreaterThan(0);
+      expect(i.bounty, `${i.id} bounty`).toBeGreaterThan(0);
+    }
     expect(hatchlings.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -77,8 +92,8 @@ describe("content integrity", () => {
    * no egg lost. Every number behind that promise lives in content, so the
    * promise can drift without anyone editing the spec. This pins it.
    */
-  it("one hatchling is enough for the first migration, as onboarding promises", () => {
-    const g = new Game(content, 1);
+  it("one hatchling is enough for the first migration on easy, as onboarding promises", () => {
+    const g = new Game(contentFor("easy"), 1);
     expect(g.apply({ type: "place", defId: "raptor-1", x: 1, y: 1 })).toBeNull();
     g.apply({ type: "send" });
     let kills = 0;
@@ -91,5 +106,99 @@ describe("content integrity", () => {
     expect(kills).toBeGreaterThan(0);
     // "not enough to lose an egg even with one dinosaur placed"
     expect(g.state.eggs).toBe(content.rules.eggs);
+  });
+});
+
+/**
+ * Difficulty is content data: three complete `Content` values out of one
+ * tuning table. These tests pin the *ordering* the owner asked for in
+ * [ARB-216](/ARB/issues/ARB-216) item 3, which is the part a tuning pass
+ * can accidentally break, and the version-string rule the save format
+ * leans on.
+ */
+describe("difficulty", () => {
+  it("each difficulty is its own content, and says which one it is", () => {
+    for (const difficulty of DIFFICULTIES) {
+      const c = contentFor(difficulty);
+      expect(c.difficulty, "the label matches the key it was fetched by").toBe(difficulty);
+      expect(c.version, "the difficulty is part of the version string").toContain(difficulty);
+      // Referentially stable: a `Game` holds its `Content` for a whole run.
+      expect(contentFor(difficulty)).toBe(c);
+    }
+    const versions = allContent.map((c) => c.version);
+    expect(new Set(versions).size, `distinct content versions: ${versions.join(", ")}`).toBe(DIFFICULTIES.length);
+    expect(content).toBe(contentFor(DEFAULT_DIFFICULTY));
+  });
+
+  /**
+   * Section 1.5 of `docs/01-v1-architecture.md`: `loadSave` compares
+   * `run.contentVersion` with `content.version` using `===`. Because the
+   * difficulty is in that string, a resume handed the wrong difficulty's
+   * content drops the run instead of replaying it at numbers the player
+   * never played. That is the whole determinism argument, so it gets a
+   * test rather than a sentence.
+   */
+  it("no two difficulties could ever be mistaken for each other by the save's version check", () => {
+    for (const a of DIFFICULTIES) {
+      for (const b of DIFFICULTIES) {
+        if (a === b) continue;
+        expect(contentFor(a).version).not.toBe(contentFor(b).version);
+      }
+    }
+  });
+
+  it("easy is exactly today's invader numbers: the identity, not an approximation", () => {
+    const easy = DIFFICULTY_TUNING.easy;
+    expect(easy.countPercent).toBe(100);
+    expect(easy.hpPercent).toBe(100);
+    expect(easy.bountyPercent).toBe(100);
+  });
+
+  it("more invaders on medium, tankier ones on hard, and neither takes any away", () => {
+    const [easy, medium, hard] = [contentFor("easy"), contentFor("medium"), contentFor("hard")];
+
+    // "medium lets make the waves have more enemies"
+    expect(invaderCount(medium)).toBeGreaterThan(invaderCount(easy));
+    // "hard more enemies with more health or tankyness"
+    expect(invaderCount(hard)).toBeGreaterThanOrEqual(invaderCount(medium));
+    expect(hpPool(hard)).toBeGreaterThan(hpPool(medium));
+    expect(hpPool(medium)).toBeGreaterThan(hpPool(easy));
+
+    // A boss is still one boss: percentOf(1, 130) rounds back to 1.
+    for (const c of [medium, hard]) {
+      for (const m of c.migrations) {
+        for (const g of m.groups) {
+          if (c.invaders[g.invader]!.archetype === "boss") expect(g.count, `${c.difficulty} ${m.id}`).toBe(1);
+        }
+      }
+    }
+  });
+
+  /**
+   * The lever that makes "more enemies" mean pressure instead of income.
+   * Thirty percent more invaders at full bounty paid for thirty percent
+   * more maze, and the scripted player reached *further* on medium than on
+   * easy and won the valley. Flat meat per migration is the fix, and this
+   * is the assertion that keeps it fixed.
+   */
+  it("a harder difficulty never pays more meat than an easier one", () => {
+    const meatPool = (c: Content) =>
+      c.migrations.reduce((sum, m) => sum + m.clearBonus + m.groups.reduce((t, g) => t + g.count * c.invaders[g.invader]!.bounty, 0), 0);
+    expect(meatPool(contentFor("medium"))).toBeLessThanOrEqual(meatPool(contentFor("easy")));
+    expect(meatPool(contentFor("hard"))).toBeLessThanOrEqual(meatPool(contentFor("medium")));
+  });
+
+  /**
+   * Item 8 asked for "a bit more time to the mob/wave spawn" and item 3
+   * for hard's timer to be "3 seconds shorter". Both land on the same
+   * field, so both are pinned here: the three-second gap in particular,
+   * because it is a number the owner named out loud.
+   */
+  it("hard gives three seconds less to maze than medium, and medium gives easy's", () => {
+    const seconds = (c: Content) => c.rules.buildPhaseTicks / TICKS_PER_SECOND;
+    expect(seconds(contentFor("easy")), "item 8: more than the 30s it was").toBeGreaterThan(30);
+    expect(seconds(contentFor("medium"))).toBe(seconds(contentFor("easy")));
+    expect(seconds(contentFor("hard"))).toBe(seconds(contentFor("medium")) - 3);
+    for (const c of allContent) expect(Number.isInteger(c.rules.buildPhaseTicks), c.difficulty).toBe(true);
   });
 });

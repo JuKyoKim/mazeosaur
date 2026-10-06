@@ -69,6 +69,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          # The same list as `check`, so both jobs compute one cache key and
+          # share a single entry. setup-node's default is not a glob: it is
+          # the first of package-lock.json / npm-shrinkwrap.json / yarn.lock
+          # found in the repo ROOT, so a nested lockfile is picked up by
+          # neither job on its own. Add a lockfile, edit both lists.
+          cache-dependency-path: |
+            package-lock.json
+            tools/lint/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:client
@@ -108,3 +116,8 @@ jobs:
           file: apps/web/Dockerfile
           push: true
           tags: ghcr.io/jukyokim/mazeosaur:${{ github.sha }}
+          # The same 40 characters as the tag above, by construction, so the
+          # commit the bundle reports and the commit the image is tagged
+          # with cannot drift. apps/web/Dockerfile declares ARG BUILD_COMMIT.
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
