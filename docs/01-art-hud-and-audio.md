@@ -382,6 +382,14 @@ clears the hit floor twice over, and `tests/client/dino-sheet.spec.ts`
 re-takes the measurement on every run so a content edit cannot quietly
 push a line past it.
 
+Those four px figures are one machine's `system-ui` fallback, not a fact
+about the game: a second machine resolved a narrower face and measured the
+same four lines non-uniformly smaller. The ordering is what holds — the
+modifier line is the widest and the genus is not — and the enforceable
+bound is the spec's own assertion, every line inside `SHEET_COL_W` in
+whatever font the client resolves, backed by the character caps in
+`packages/game/test/sheet.test.ts`.
+
 **Grow** shows the cost when affordable, dims to `FULLY GROWN` at stage 3,
 and dims to the cost when it is not affordable — the player should be able
 to read the price of the thing they cannot buy yet. **Sell** always shows
