@@ -28,7 +28,22 @@ ports themselves are section 2 of
   `run: null` because nothing is left to resume, but not counted as
   finished;
   [the pause decision](../../docs/decisions/0004-pause-stops-the-clients-clock.md)
-  says why.
+  says why. `showResults()` is the single place the
+  `board ──won / lost──▶ results` transition is written, and the order
+  inside it is load-bearing — see the comment there. It is a separate
+  method from the menu's `endRun()` on purpose: a run the player quits is
+  neither won nor lost, so it still ends on the in-board overlay.
+- `src/ResultsScene.ts` — the end-of-run screen (section 9 of
+  [docs/01-art-hud-and-audio.md](../../docs/01-art-hud-and-audio.md)): the
+  headline, the four statistics, the pack row, and "Again". It owns no
+  `Game`; everything it draws arrives through `init()` as a `RunSummary`,
+  so the screen that describes a finished run cannot resurrect it.
+- `src/summary.ts` — `RunSummary` and the `runSummary()`/`packFrom()` that
+  build it. Pure and Phaser-free, so what the results screen is *told* is
+  unit tested while what it draws stays a browser spec. The fossil figure
+  is *handed in*, not computed: section 5.4 pays the run in `BoardScene`,
+  so `runSummary()` has no access to `fossilWeights` and a second award
+  calculation is a type error rather than a thing to remember.
 - `src/resume.ts` — `gameForRun()`: reuses `MountOptions.resumed`
   (`LoadOutcome.resumed` from the shell's `loadSave`) instead of replaying
   the run a second time, falling back to `@mazeosaur/sim`'s `replay()` only
@@ -62,13 +77,17 @@ ports themselves are section 2 of
   them for all 18 defs in a running client.
 - `src/theme.ts` — colours and text styles, and nothing geometric.
 
-`mountGame` starts `BoardScene` with the save the shell already loaded
-and migrated, and a shell with nowhere to write injects `NULL_SAVE_STORE`.
-Two more files are specified and not yet written —
-`src/TitleScene.ts` and `src/ResultsScene.ts` (the other two v1 screens,
-section 5) — plus `src/ui.ts`, the button primitive they share. Write them
-against the doc rather than against this list, and extend this list when
-they land.
+`mountGame` registers `board` and `results` and starts the first of them;
+the save the shell already loaded and migrated goes to `BoardScene`, and a
+shell with nowhere to write injects `NULL_SAVE_STORE`. One more file is
+specified and not yet written — `src/TitleScene.ts`, the third v1 screen
+(section 5), owned by [ARB-217](/ARB/issues/ARB-217) — plus `src/ui.ts`,
+the button primitive the screens would share. Write them against the doc
+rather than against this list, and extend this list when they land.
+
+§5.3's `results ──▶ title` exit is not built, because `title` is not: it
+lands with the scene it targets, and section 9's element table specifies
+one control on the results screen, not two.
 
 ## The one rule that bites
 

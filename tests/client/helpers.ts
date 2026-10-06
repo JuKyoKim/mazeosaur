@@ -1,6 +1,6 @@
 import type { ConsoleMessage, Page } from "@playwright/test";
-import type { BoardScene, GameHandle } from "@mazeosaur/game";
-import { BOARD_H, CANVAS_W, CELL_PX, PAUSE_MENU, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
+import type { BoardScene, GameHandle, ResultsScene, RunSummary } from "@mazeosaur/game";
+import { CANVAS_W, CELL_PX, ENDED_RUN, PAUSE_MENU, RESULTS, ROW1, ROW2, ROW3, kindButtonX } from "@mazeosaur/game/layout";
 
 /**
  * Where to click. The board is one canvas with no DOM to query, so driving
@@ -44,8 +44,30 @@ export const SELL_BUTTON = center(ROW3.sell);
  */
 export const HUD_BARE = { x: CANVAS_W / 2, y: ROW2.y + ROW2.h / 2 };
 
-/** The "Play again" button on the end-of-run overlay (`showOverlay`). */
-export const PLAY_AGAIN_BUTTON = { x: CANVAS_W / 2, y: BOARD_H / 2 + 60 + 64 / 2 };
+/**
+ * The "Again" button on the results screen.
+ *
+ * `RESULTS.again` is where the renderer gets it too, so this cannot drift
+ * from the button actually on screen.
+ *
+ * A won or lost run goes to `results` now, so this is not the same button
+ * as `PLAY_AGAIN_BUTTON` below, which is the one the in-board overlay
+ * draws for a run the *player* ended. Both of this constant's callers
+ * (`smoke.spec.ts`, `win-screen.spec.ts`) follow the won/lost path.
+ */
+export const AGAIN_BUTTON = { x: RESULTS.again.x + RESULTS.again.w / 2, y: RESULTS.again.y + RESULTS.again.h / 2 };
+
+/**
+ * "Play again" on the in-board overlay a player's own "End run" leaves up,
+ * from `ENDED_RUN.again` — the same constant `showOverlay` draws from.
+ *
+ * It is the one reachable `scene.restart()` left in the package: the
+ * results screen's "Again" is a `scene.start("board")` from another scene,
+ * and `restartScene()` calls `scene.restart()` from the harness rather
+ * than through a button. So a click here is the only test of the restart
+ * rule on the path a finger actually takes to it.
+ */
+export const PLAY_AGAIN_BUTTON = { x: ENDED_RUN.again.x + ENDED_RUN.again.w / 2, y: ENDED_RUN.again.y + ENDED_RUN.again.h / 2 };
 
 /**
  * The pause menu's three entries, from `PAUSE_MENU` in `layout.ts` like
@@ -76,6 +98,7 @@ declare global {
   interface Window {
     mazeosaur?: GameHandle;
     mazeosaurBoard?: () => BoardScene;
+    mazeosaurResults?: () => ResultsScene;
   }
 }
 
@@ -142,6 +165,13 @@ export async function openGame(page: Page, seed: number): Promise<void> {
       if (!scene) throw new Error("the board scene is not mounted");
       return scene as BoardScene;
     };
+    window.mazeosaurResults = () => {
+      const handle = window.mazeosaur;
+      if (!handle) throw new Error("window.mazeosaur is unset: the client only exposes it in a dev build");
+      const scene = handle.phaser.scene.keys["results"];
+      if (!scene) throw new Error("the results scene is not registered");
+      return scene as ResultsScene;
+    };
   });
   await page.goto(`/?seed=${seed}`);
   await waitForBoardMounted(page);
@@ -184,10 +214,13 @@ export async function flushSave(page: Page): Promise<void> {
  * debugging from the console"), and the shell exposes the `GameHandle` as
  * `window.mazeosaur` in dev builds. This is that console, automated.
  */
-export function simSnapshot(page: Page): Promise<{ meat: number; eggs: number; dinos: number; phase: string; tick: number }> {
+export function simSnapshot(page: Page): Promise<{ meat: number; eggs: number; dinos: number; phase: string; tick: number; migration: number }> {
   return page.evaluate(() => {
     const s = window.mazeosaurBoard!().sim.state;
-    return { meat: s.meat, eggs: s.eggs, dinos: s.dinos.length, phase: s.phase as string, tick: s.tick };
+    // `migration` is the index of the current or next one, which is also
+    // the count of the ones already cleared — the number the results
+    // screen reports, so a spec can check the screen against the sim.
+    return { meat: s.meat, eggs: s.eggs, dinos: s.dinos.length, phase: s.phase as string, tick: s.tick, migration: s.migration };
   });
 }
 
@@ -207,6 +240,16 @@ export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; 
  * (`BoardScene.hudTargets`), which is the only thing that can tell a
  * layout constant from the box actually on screen.
  */
+/** The profile `flush()` last wrote: the award a finished run actually banked. */
+export function bankedProfile(page: Page): Promise<{ fossilsEarned: number; runsFinished: number }> {
+  return page.evaluate(() => window.mazeosaurBoard!().bankedProfile);
+}
+
+/** Whether the board's toast is on screen. */
+export function toastShown(page: Page): Promise<boolean> {
+  return page.evaluate(() => window.mazeosaurBoard!().toastShown);
+}
+
 export function hudTargets(page: Page): Promise<{ name: string; x: number; y: number; w: number; h: number }[]> {
   return page.evaluate(() => window.mazeosaurBoard!().hudTargets);
 }
@@ -398,11 +441,36 @@ export async function waitForRunOver(page: Page, timeoutMs = 45_000): Promise<vo
 }
 
 /**
- * Calls the same `scene.restart()` the "Play again" button calls, so a
- * restart can be exercised without winning or losing a run first.
+ * Calls `scene.restart()` on the board directly, so the restart hazard can
+ * be exercised without winning or losing a run first.
+ *
+ * This is no longer the same call the player's button makes — "Again" on
+ * the results screen does `scene.start("board")` from a *different* scene.
+ * Both re-run `BoardScene.create()`, which is what the regression this
+ * guards is about, and the player's path is covered end to end by
+ * `results.spec.ts`.
  */
 export async function restartScene(page: Page): Promise<void> {
   await page.evaluate(() => {
     window.mazeosaurBoard!().scene.restart();
   });
+}
+
+/** Whether the results scene is the one currently running. */
+export function resultsShown(page: Page): Promise<boolean> {
+  return page.evaluate(() => window.mazeosaurResults!().scene.isActive());
+}
+
+/**
+ * The `RunSummary` the board handed the results screen — the numbers the
+ * screen is drawing, read from the scene rather than guessed from pixels.
+ */
+export function resultsSummary(page: Page): Promise<RunSummary> {
+  return page.evaluate(() => window.mazeosaurResults!().runSummary);
+}
+
+/** Resolves once the board has handed off and `results` is up. */
+export async function waitForResults(page: Page): Promise<void> {
+  await page.waitForFunction(() => window.mazeosaurResults?.().scene.isActive() === true);
+  await waitAFrame(page);
 }

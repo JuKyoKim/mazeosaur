@@ -48,7 +48,7 @@ const EXPECTED = [
   { file: "tests/client/restart-regression.spec.ts", title: "scene.restart() leaves the canvas rendering with no renderer errors" },
   { file: "tests/client/resume.spec.ts", title: "save and resume: a reload picks the stored run back up, not a fresh one" },
   { file: "tests/client/smoke.spec.ts", title: "full run: four select+tap pairs, grow, sell, send, leak, lose, play again" },
-  { file: "tests/client/win-screen.spec.ts", title: "win screen: clearing the last migration shows it, and Play again starts a fresh run" },
+  { file: "tests/client/win-screen.spec.ts", title: "win screen: clearing the last migration shows it, and Again starts a fresh run" },
 ];
 
 function testFiles(dir, out = []) {

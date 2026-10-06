@@ -17,6 +17,7 @@ import {
   CANVAS_W,
   CELL_PX,
   CONTENT_W,
+  ENDED_RUN,
   GUTTER,
   HUD_H,
   HUD_Y,
@@ -43,6 +44,7 @@ import { SfxBus } from "./audio.js";
 import { services } from "./platform.js";
 import { runFinished, runStarted } from "./profile.js";
 import { gameForRun } from "./resume.js";
+import { runSummary } from "./summary.js";
 
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 /**
@@ -227,12 +229,24 @@ export class BoardScene extends Phaser.Scene {
   private playedMsBase!: number;
   private sessionStartMs!: number;
   // `won`/`lost` is terminal: nothing re-ticks it, so the phase is still
-  // `won` or `lost` for as long as the "Play again" overlay is up, and
+  // `won` or `lost` for as long as `results` is up, and
   // `GameHandle.suspend()` calls `flush()` unconditionally in that window
-  // (every `visibilitychange` -> hidden, every `pagehide`). Latches the
-  // fossil award and `runsFinished` to once per run so a backgrounded
-  // results screen cannot count the same run twice.
+  // (every `visibilitychange` -> hidden, every `pagehide`) — this scene is
+  // stopped, not destroyed, so `flush()` still reaches a live `game_`.
+  // Latches the fossil award and `runsFinished` to once per run so a
+  // backgrounded results screen cannot count the same run twice.
   private finishedAccounted!: boolean;
+  /**
+   * What this run earned, as `runFinished` computed it at the terminal
+   * flush. Per-run state, reset in `create()` with the latch above.
+   *
+   * Kept here rather than recomputed for `results` because §5.4 pays the
+   * run in this scene: the award exists once, at the save that latches it,
+   * and `showResults()` hands that same number on. `flush()` runs its
+   * body synchronously before it awaits the store, so this is already set
+   * by the time `showResults()`'s `autosave()` returns.
+   */
+  private fossilsAwarded!: number;
 
   private staticGfx!: Phaser.GameObjects.Graphics;
   private towerGfx!: Phaser.GameObjects.Graphics;
@@ -294,10 +308,14 @@ export class BoardScene extends Phaser.Scene {
   private toastUntil!: number;
 
   /**
-   * Whichever overlay is up: the pause menu, or the end-of-run screen.
-   * One field, because only one is ever up and because `wireInput` reads
-   * it to make the board inert underneath — a tap on the valley behind a
-   * menu must not place a dinosaur.
+   * Whichever overlay is up: the pause menu, or the screen a player who
+   * chose "End run" is left on. One field, because only one is ever up.
+   *
+   * A *won or lost* run no longer appears here — §5.3 sends it to the
+   * `results` scene, which is a scene and not a container. The abandon
+   * path still draws in here because `RunSummary.outcome` is `won | lost`
+   * by §5.4 and quitting is neither; routing it to `results` is a design
+   * question (does quitting pay fossils?) and not a merge decision.
    */
   private overlay!: Phaser.GameObjects.Container | null;
 
@@ -326,20 +344,26 @@ export class BoardScene extends Phaser.Scene {
     // here, or the HUD keeps touching destroyed objects.
     //
     // `initialDoc` is read only once, on the very first create() (the
-    // mount-time load from disk). Every later create() -- a "Play again"
-    // `scene.restart()` -- reads `doc` instead, which `flush()` has kept
+    // mount-time load from disk). Every later create() -- an "Again" out
+    // of `results` -- reads `doc` instead, which `flush()` has kept
     // current with every profile and run update since. Reading
-    // `initialDoc` again on a restart would resurrect the run that just
+    // `initialDoc` again on a re-entry would resurrect the run that just
     // ended (it is frozen at whatever the mount loaded) and discard every
     // profile change -- `runsStarted`, `runsFinished`, `best` -- that
     // happened since. `hasStarted` already exists to tell the two apart.
     //
-    // This depends on `doc.run` already being `null` by the time a
-    // restart is reachable: the overlay that offers "Play again" only
-    // shows after `flush()` has written the won/lost run with `run:
-    // null` (see `handleEvents`), and that is currently the only
-    // `scene.restart()` in the package. Revisit when `results`/`title`
-    // land (§5.1) and `scene.start("board")` becomes a second way in.
+    // §5.1's `results` has landed, so `scene.start("board")` is now the
+    // second way in and this is no longer a single-caller argument. It
+    // still holds, and for a stronger reason than before: the *only*
+    // producer of that second entry is `ResultsScene`, the only way to
+    // reach `ResultsScene` is `showResults()`, which calls `flush()`
+    // -- which assigns `this.doc` with `run: null` synchronously -- before
+    // it starts the scene. So `doc.run` is null on every path that can get
+    // here twice, by construction rather than by a flag. The hazard to
+    // watch is a *third* producer: anything that calls
+    // `scene.start("board")` without having finished a run first would
+    // resume mid-run instead of restarting, which is why `showResults()`
+    // is the one place the transition is written.
     const base = this.hasStarted ? this.doc : this.initialDoc;
     const run = base.run;
     this.doc = { ...base, run: null };
@@ -376,8 +400,9 @@ export class BoardScene extends Phaser.Scene {
     this.hasStarted = true;
     // §1.2: a won/lost run must be accounted for exactly once, even
     // though `suspend()` keeps calling `flush()` while the terminal
-    // phase sits under the "Play again" overlay. See `flush()`.
+    // phase sits behind the `results` screen. See `flush()`.
     this.finishedAccounted = false;
+    this.fossilsAwarded = 0;
     this.sessionStartMs = this.time.now;
     this.acc = 0;
     this.speed = 1;
@@ -398,6 +423,14 @@ export class BoardScene extends Phaser.Scene {
     this.cardFlashDefId = null;
     this.cardFlashUntil = 0;
     this.trayCards = [];
+    // `wireInput`'s pointerdown returns early whenever this is set, and the
+    // only "Play again" that reaches it — the one `showOverlay` draws for a
+    // run the *player* ended — calls `scene.restart()` without closing the
+    // overlay first. So this line is what makes the restarted board take a
+    // tap at all; without it the field still points at the container
+    // `shutdown` destroyed, the guard reads it as an overlay that is up, and
+    // neither a cell nor the pause button responds. The two are far apart in
+    // this file and have come unstuck twice.
     this.overlay = null;
     this.toastUntil = 0;
     // "" is not any migration's key, so the first `refreshPreview` of a
@@ -574,14 +607,12 @@ export class BoardScene extends Phaser.Scene {
           this.autosave();
           break;
         case "won":
-          this.showOverlay("The nest is safe", `All ${content.migrations.length} migrations turned back with ${g.state.eggs} eggs left.`);
           this.sfx.play("victory");
-          this.autosave();
+          this.showResults("won");
           break;
         case "lost":
-          this.showOverlay("The nest is lost", `Fell on migration ${g.state.migration + 1} of ${content.migrations.length}.`);
           this.sfx.play("defeat");
-          this.autosave();
+          this.showResults("lost");
           break;
         case "placed":
           this.towersDirty = true;
@@ -1292,6 +1323,53 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
+   * Hand a won or lost run to `results` (§5.3's `board ──won / lost──▶
+   * results`). Replaces the in-board "Play again" overlay this scene used
+   * to raise for itself.
+   *
+   * Named `showResults` and not `endRun`, which the pause menu already
+   * owns for the player's own "End run" — two different events that both
+   * finish a run, and §5.4's `outcome` is `won | lost`, so they are not
+   * the same call with a third argument.
+   *
+   * **The order of these two statements is the restart contract.**
+   * `flush()` writes a won or lost run with `run: null` and assigns
+   * `this.doc` synchronously, before it awaits the store — so by the time
+   * `results` can exist, and therefore long before its `Again` can call
+   * `scene.start("board")`, `doc.run` is already null and the re-entry
+   * falls through `create()`'s resume branch to the fresh-run one. That is
+   * §5.2's "by construction rather than by a flag": the only path into
+   * this scene a second time is through a screen that cannot be reached
+   * until the save that clears `run` has been made.
+   *
+   * `autosave()` rather than `flush()` because a storage error must not
+   * strand the player on a board whose run is over; the handoff below
+   * happens either way. It still has to come *first*, and not only for the
+   * `doc.run` reason above: `flush()` is where §5.4 pays the run, so
+   * `this.fossilsAwarded` is only the award after it has run.
+   */
+  private showResults(outcome: "won" | "lost"): void {
+    this.autosave();
+    // The toast fades on `playedMs()`, and `scene.pause()` below stops the
+    // clock it reads — so whatever was up when the run ended would sit
+    // there at a fixed alpha for as long as the results screen is, which
+    // on a loss is always "An invader reached the nest: -1 egg". Seen in
+    // the drive. Same argument as `abandonRun`'s `showSheet(false)`: a run
+    // that is over must not leave live-looking HUD behind the scrim.
+    this.hideToast();
+    const summary = runSummary(outcome, this.game_.state, (d) => this.game_.dinoDef(d), this.runSeed, content, this.fossilsAwarded);
+    // `launch` + `pause`, not `start`. §9 of the art doc puts the results
+    // screen "over a 70% `bg` scrim, the board still visible behind it,
+    // because the board is what the player wants to look at" — and
+    // `scene.start()` *stops* this scene, which leaves the scrim over an
+    // empty canvas and the last thing the player did invisible. A paused
+    // scene keeps rendering and stops updating, which is exactly the two
+    // halves wanted: the valley stays on screen and its input is dead.
+    this.scene.launch("results", summary);
+    this.scene.pause();
+  }
+
+  /**
    * The scrim every overlay sits on, with the board still legible behind
    * it. Two jobs beyond the dimming:
    *
@@ -1328,9 +1406,12 @@ export class BoardScene extends Phaser.Scene {
   private showOverlay(title: string, sub: string): void {
     if (this.overlay) return;
     const c = this.scrim();
-    c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 - 60, title, text(48)).setOrigin(0.5));
-    c.add(this.add.text(CANVAS_W / 2, BOARD_H / 2 + 4, sub, text(22, COLORS.textDim)).setOrigin(0.5));
-    const b = this.button(CANVAS_W / 2 - 120, BOARD_H / 2 + 60, 240, 64, "Play again", () => this.scene.restart(), 22);
+    c.add(this.add.text(CANVAS_W / 2, ENDED_RUN.title.y, title, text(48)).setOrigin(0.5));
+    c.add(this.add.text(CANVAS_W / 2, ENDED_RUN.sub.y, sub, text(22, COLORS.textDim)).setOrigin(0.5));
+    const a = ENDED_RUN.again;
+    // Bare `scene.restart()`: `create()` nulls `overlay` for us, and it has
+    // to, because this callback outlives the container it sits in.
+    const b = this.button(a.x, a.y, a.w, a.h, "Play again", () => this.scene.restart(), 22);
     c.add([b.bg, b.label]);
     this.overlay = c;
   }
@@ -1466,6 +1547,15 @@ export class BoardScene extends Phaser.Scene {
    */
   private wireInput(): void {
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      // A won or lost run no longer needs a guard here: `showResults()`
+      // pauses this scene, which takes its input plugin down with it.
+      //
+      // This one is still load-bearing for the other two overlays. The
+      // pause menu and an ended run are drawn *inside* this scene, so
+      // their taps do reach this handler — `scrim()` stops propagation
+      // and should catch them first, and this is the second line of that
+      // defence rather than a duplicate of it: the guard holds even for a
+      // pointer event that never crossed the scrim's own hit area.
       if (this.overlay) return;
       const cell = this.cellAt(p);
       if (!cell) {
@@ -1715,14 +1805,14 @@ export class BoardScene extends Phaser.Scene {
         };
     // §1.7: a won or lost run writes `profile.best`, exactly once. `won`
     // and `lost` are terminal, so the phase is still `finished` for as
-    // long as the "Play again" overlay is up, and `suspend()` calls
+    // long as `results` is up, and `suspend()` calls
     // `flush()` unconditionally on every later tab-hide or `pagehide` in
     // that window -- without the latch, each of those would hand the
     // already-finished run to `runFinished` again and double (or
     // triple...) `fossilsEarned` and `runsFinished`. The award comes from
     // `content.rules.fossilWeights`, never a number here -- rule 4.
     const accountFinish = finished && !this.finishedAccounted;
-    const profile = accountFinish
+    const finish = accountFinish
       ? runFinished(this.doc.profile, content.rules.fossilWeights, {
           valleyId: content.valley.id,
           seed: this.runSeed,
@@ -1731,8 +1821,14 @@ export class BoardScene extends Phaser.Scene {
           eggsLeft: this.game_.state.eggs,
           meatUnspent: this.game_.state.meat,
         })
-      : this.doc.profile;
-    if (accountFinish) this.finishedAccounted = true;
+      : null;
+    const profile = finish ? finish.profile : this.doc.profile;
+    if (finish) {
+      this.finishedAccounted = true;
+      // The one place this run's award is produced; `showResults()` shows
+      // this number rather than deriving a second one. §5.4.
+      this.fossilsAwarded = finish.fossilsAwarded;
+    }
     this.doc = { ...this.doc, run, profile, writtenBy: this.build };
     return services(this).saves.put(this.doc);
   }
@@ -1822,6 +1918,27 @@ export class BoardScene extends Phaser.Scene {
    * has its geometry, and the alternative is a test that silently measures
    * five of the seven.
    */
+  /**
+   * The profile as `flush()` last wrote it, for tests and for the console.
+   *
+   * Exists so a browser spec can hold the award on the results screen
+   * against the award actually banked — the §5.4 claim that there is only
+   * one of them. Nothing else can check it: the player is shown one figure
+   * and credited another, and sees only the first.
+   */
+  get bankedProfile(): SaveDocument["profile"] {
+    return this.doc.profile;
+  }
+
+  /**
+   * Whether the toast is on screen. For `results.spec.ts`, which asserts
+   * it is not: the fade runs on `playedMs()`, and the results screen stops
+   * that clock, so a toast left up would stay up.
+   */
+  get toastShown(): boolean {
+    return this.toastPanel.visible;
+  }
+
   get hudTargets(): { name: string; x: number; y: number; w: number; h: number }[] {
     const box = (name: string, r: Phaser.GameObjects.Rectangle) => ({
       name,
