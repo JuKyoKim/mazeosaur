@@ -39,10 +39,13 @@ export const COLORS = {
   hpLow: 0xe74c3c,
   ghost: 0xffffff,
   /**
-   * One selection convention, so the player learns it once: the ring on a
-   * selected dinosaur, the border on a selected tray card and the tap ring
-   * are all this colour. It is `text` as a number — the HUD's lightest
-   * token, 15.9:1 on `hud` — per §4 of docs/01-art-hud-and-audio.md.
+   * One selection convention, so the player learns it once. Every mark that
+   * means "selected" or "your tap landed here" is this colour: the selected
+   * dinosaur's range ring and its 3px cell outline, the valid cell's preview
+   * range ring, the selected tray card's 3px border, and the tap ring. There
+   * is deliberately no second near-white for marks on the board — §4 of
+   * docs/01-art-hud-and-audio.md decides that and says why. It is `text` as a
+   * number: the HUD's lightest token, 15.9:1 on `hud`.
    */
   selection: 0xecf0f1,
   /**
