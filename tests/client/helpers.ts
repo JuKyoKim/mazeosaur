@@ -92,6 +92,17 @@ export async function waitAFrame(page: Page): Promise<void> {
 }
 
 /**
+ * Common tail of a (re)load: wait for the canvas, wait for the board scene
+ * to be mounted inside it, then wait a frame so the first real draw has
+ * happened before anything reads state off it.
+ */
+async function waitForBoardMounted(page: Page): Promise<void> {
+  await page.waitForSelector("canvas");
+  await page.waitForFunction(() => window.mazeosaur?.phaser.scene.keys["board"] !== undefined);
+  await waitAFrame(page);
+}
+
+/**
  * Loads the game pinned to a seed and waits for the first real frame.
  *
  * Two things this has to wait for that a `?seed=` page load does not give
@@ -103,17 +114,6 @@ export async function waitAFrame(page: Page): Promise<void> {
  * both at once, and turns a save leaking between tests into a loud failure
  * here rather than a quiet drift in whichever spec runs second.
  */
-/**
- * Common tail of a (re)load: wait for the canvas, wait for the board scene
- * to be mounted inside it, then wait a frame so the first real draw has
- * happened before anything reads state off it.
- */
-async function waitForBoardMounted(page: Page): Promise<void> {
-  await page.waitForSelector("canvas");
-  await page.waitForFunction(() => window.mazeosaur?.phaser.scene.keys["board"] !== undefined);
-  await waitAFrame(page);
-}
-
 export async function openGame(page: Page, seed: number): Promise<void> {
   // Installed before any page script runs, so it is there for the first
   // evaluate after load. One accessor, so the path into the page is

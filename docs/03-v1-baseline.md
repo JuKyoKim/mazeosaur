@@ -34,7 +34,7 @@ Every test below is tagged `[@baseline]` in its title and runs under
 | - | --- | --- | --- | --- |
 | 1 | start a run | `tests/client/smoke.spec.ts` "full run: four select+tap pairs, grow, sell, send, leak, lose, play again" | client | existing |
 | 2 | tap-to-select then tap-to-place | the same smoke test — four select-then-tap pairs, each asserting the card is spent by its placement, per the one-shot model ([ARB-166](/ARB/issues/ARB-166) #43/#44) | client | existing |
-| 3 | migrations spawn and path | `packages/sim/test/flowfield.test.ts` "routes around a wall and marks sealed cells unreachable", "nextStep walks a creep to the target along non-increasing distances" | sim | existing |
+| 3 | migrations spawn and path | `packages/sim/test/flowfield.test.ts` "routes around a wall and marks sealed cells unreachable", "nextStep walks a creep to the target along non-increasing distances"; `packages/sim/test/lane.test.ts` "still routes an invader through both legs with a dinosaur on the checkpoint" | sim | existing |
 | 4 | dinos attack | `packages/sim/test/mechanics.test.ts` "hits the N furthest-along invaders per cooldown"; `packages/sim/test/game.test.ts` "ground-only dinosaurs ignore fliers" | sim | existing |
 | 5 | meat and eggs economy | `packages/sim/test/game.test.ts` "charges meat, blocks the cell, and refuses when broke", "leaks eat eggs and an empty nest loses the game", "kills pay bounty, clearing pays the bonus, and clearing the last migration wins" | sim | existing |
 | 6a | the lose screen | the same smoke test — drives `loseOnNextLeak`, waits for the overlay, clicks "Play again" | client | existing |
@@ -109,7 +109,10 @@ Tagging is a literal `[@baseline]` suffix on the test's title string, not a
 file-naming convention or a comment: `vitest`'s `-t`/`--testNamePattern`
 and Playwright's `--grep` both filter on the title, so one marker works
 for both runners without a second config file. A test earns the tag by
-proving one of the eight lines above; nothing else carries it. Tests
+proving one of the eight lines above; nothing else carries it. The
+mapping table above is maintained, not generated — other PRs add the
+tag to a new test as they land (row 3's `lane.test.ts` entry arrived
+this way), and the table must be updated in the same PR. Tests
 outside this set may stay red during v1 work — that is the point of the
 owner's decision — and the gate for `main` stays `check` and `client-smoke`
 exactly as `docs/02-ci.md` has them, unchanged by this doc.
@@ -123,10 +126,10 @@ $ npm run test:baseline
 
 > vitest run -t "@baseline" && playwright test --config tests/client/playwright.config.ts --grep "@baseline"
 
- Test Files  6 passed | 9 skipped (15)
-      Tests  13 passed | 95 skipped (108)
+ Test Files  7 passed | 9 skipped (16)
+      Tests  14 passed | 117 skipped (131)
 
-Running 4 tests using 4 workers
+Running 4 tests using 1 worker
 
   ✓  restart-regression.spec.ts … scene.restart() leaves the canvas rendering with no renderer errors [@baseline]
   ✓  win-screen.spec.ts … win screen: clearing the last migration shows it, and Play again starts a fresh run [@baseline]
