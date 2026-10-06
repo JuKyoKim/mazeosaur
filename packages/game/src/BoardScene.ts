@@ -21,11 +21,14 @@ import {
   MIN_HIT,
   SELECT_BORDER,
   SELECT_LIFT,
+  SHEET_COL_W,
   colAt,
   gridTop,
   rowAt,
 } from "./layout.js";
+import { sheetLines } from "./sheet.js";
 import { COLORS, KIND_COLOR, text } from "./theme.js";
+import { SfxBus } from "./audio.js";
 import { services } from "./platform.js";
 import { runFinished, runStarted } from "./profile.js";
 import { gameForRun } from "./resume.js";
@@ -58,6 +61,28 @@ const GRID_TOP = gridTop(content.valley.height);
 const TAP_RING_R = 54;
 /** Long enough to be seen leaving, short enough not to trail the finger. */
 const TAP_RING_MS = 120;
+
+/**
+ * The egg count that gets its own warning, per §6 of
+ * `docs/01-art-hud-and-audio.md`. A presentation threshold and not a rule:
+ * nothing in the sim knows it, and changing it changes no outcome.
+ */
+const WARN_EGGS_AT = 3;
+
+/**
+ * What an invader looked like at the top of the current tick. The position is
+ * the interpolation's `from`; `boss` is here because §6 of
+ * `docs/01-art-hud-and-audio.md` gives a boss its own `kill` and `leak`
+ * sound, and by the time the event is drained the sim has already removed
+ * the invader from `state.invaders`, so its archetype is no longer
+ * reachable. Snapshotting it with the position costs nothing: this object is
+ * allocated per invader per tick either way.
+ */
+interface PrevInvader {
+  x: number;
+  y: number;
+  boss: boolean;
+}
 
 /** Distance between the air route's lights along the line, in logical px. */
 const AIR_ROUTE_SPACING = 48;
@@ -166,8 +191,19 @@ export class BoardScene extends Phaser.Scene {
    * no fossils and does not count toward `runsFinished`; see `flush()`.
    */
   private abandoned!: boolean;
-  private prevPos!: Map<number, { x: number; y: number }>;
+  private prevInvaders!: Map<number, PrevInvader>;
   private effects!: Effect[];
+
+  /**
+   * Section 6's sound table and its limiter. Built fresh here rather than
+   * reset, so a `scene.restart()` cannot inherit a closed limiter and
+   * swallow the next run's first hit — see `audio.ts`. The port comes from
+   * the registry, so on a shell with no audio this is `NULL_AUDIO_PORT` and
+   * every call below is still made and still free.
+   */
+  private sfx!: SfxBus;
+  /** `warn-eggs` is "once" per §6, so the crossing is latched. */
+  private warnedEggs!: boolean;
 
   // Persistence. `doc` is the save as loaded, minus `run`, which is
   // rebuilt from `game_` on every autosave; see `flush()`.
@@ -220,8 +256,15 @@ export class BoardScene extends Phaser.Scene {
   private paletteButtons!: { def: DinoDef; button: Button; restY: number }[];
   private sendButton!: Button;
   private speedButton!: Button;
+  /**
+   * The sheet's four lines, one Text each. Four and not one string: see
+   * `sheet.ts`. A single line is what ran under Grow and Sell for every
+   * adult with two modifiers.
+   */
   private panelName!: Phaser.GameObjects.Text;
+  private panelKind!: Phaser.GameObjects.Text;
   private panelStats!: Phaser.GameObjects.Text;
+  private panelExtras!: Phaser.GameObjects.Text;
   private growButton!: Button;
   private sellButton!: Button;
   /**
@@ -314,8 +357,14 @@ export class BoardScene extends Phaser.Scene {
     this.speed = 1;
     this.paused = false;
     this.abandoned = false;
-    this.prevPos = new Map();
+    this.prevInvaders = new Map();
     this.effects = [];
+    // A fresh bus per run, which is the whole of the restart hazard for
+    // audio: no field here holds a display object, but the limiter's
+    // timestamps are per-run state and `this.time.now` does not restart
+    // with the scene.
+    this.sfx = new SfxBus(services(this).audio, () => this.time.now);
+    this.warnedEggs = false;
     this.towersDirty = true;
     this.selectedDef = null;
     this.selectedDino = null;
@@ -355,6 +404,27 @@ export class BoardScene extends Phaser.Scene {
         ticks++;
       }
     }
+    // §6: the two layers cross-fade on phase over 1.2s rather than cut, so
+    // the scene states the phase every frame and `SfxBus` ignores a repeat.
+    // Tracking the transition here instead would mean a second place that
+    // has to agree with `game_.state.phase`.
+    //
+    // `abandoned` is the one case where the phase is not the whole answer:
+    // a won or lost run reaches a phase of its own and falls to "none", but
+    // an ended run's phase is still `build` or `migration` (see `endRun`),
+    // so without this the migration layer would play on under the "The run
+    // is over" scrim. The rule is the same either way — no live run, no
+    // music. A *paused* run is still live and keeps its layer.
+    this.sfx.music(
+      this.abandoned
+        ? "none"
+        : g.state.phase === "build"
+          ? "build"
+          : g.state.phase === "migration"
+            ? "migration"
+            : "none",
+    );
+
     const alpha = Math.min(1, this.acc / TICK_MS);
     // Effects age on the same stopped clock. They are purely cosmetic, so
     // letting them run would not desync anything — but an attack line that
@@ -371,10 +441,28 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private snapshotPositions(): void {
-    this.prevPos.clear();
-    for (const inv of this.game_.state.invaders) this.prevPos.set(inv.id, { x: inv.px, y: inv.py });
+    this.prevInvaders.clear();
+    for (const inv of this.game_.state.invaders) {
+      this.prevInvaders.set(inv.id, {
+        x: inv.px,
+        y: inv.py,
+        boss: this.game_.invaderDef(inv).archetype === "boss",
+      });
+    }
   }
 
+  /**
+   * Draws and sounds what the tick did. §6's table names the event each
+   * sound fires on, and every one of them is taken from the sim's own event
+   * rather than from the command that caused it: the sim decides whether a
+   * placement happened, whether a kill was a boss and whether a send was
+   * early, so reading the answer here keeps the sound honest even when the
+   * command was refused.
+   *
+   * Nothing here branches on whether audio is available. Every sound has a
+   * visual partner in §5.4, so a silent build is the same scene minus the
+   * noise, and `NULL_AUDIO_PORT` makes each of these calls free.
+   */
   private handleEvents(events: GameEvent[]): void {
     const g = this.game_;
     for (const e of events) {
@@ -385,42 +473,79 @@ export class BoardScene extends Phaser.Scene {
           if (!d) break;
           const from = this.cellCenter(d.x, d.y);
           const to = inv ? this.worldFromMilli(inv.px, inv.py) : from;
-          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: KIND_COLOR[g.dinoDef(d).kind], ttl: 120, life: 120 });
+          const hue = KIND_COLOR[g.dinoDef(d).kind];
+          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: hue, ttl: 120, life: 120 });
+          // §6 fires `hit` on *damage dealt*, and a shield eats the whole
+          // attack for `damage: 0` — the ring that draws it is the feedback
+          // there, and a tick that did no damage has no tick to make. This
+          // is the one sound the board can produce hundreds of times a
+          // second, which is what the limiter in `SfxBus` is for.
+          if (e.damage > 0) this.sfx.play("hit", hue);
           break;
         }
         case "killed": {
           const p = this.worldFromMilli(e.at.x, e.at.y);
           this.effects.push({ kind: "kill", x: p.x, y: p.y, color: 0xf39c12, ttl: 300, life: 300 });
+          // The invader is already out of `state.invaders` by now, so the
+          // archetype comes from this tick's snapshot. An invader that both
+          // spawned and died inside one tick is not in it and reads as
+          // ordinary, which no boss can be: a boss has thousands of HP.
+          this.sfx.play(this.prevInvaders.get(e.invaderId)?.boss === true ? "kill-boss" : "kill");
           break;
         }
         case "leaked": {
           const n = this.cellCenter(content.valley.lane.exit.x, content.valley.lane.exit.y);
           this.effects.push({ kind: "leak", x: n.x, y: n.y, color: COLORS.refusal, ttl: 500, life: 500 });
           this.status(`An invader reached the nest: -${e.eggs} egg${e.eggs > 1 ? "s" : ""}`);
+          this.sfx.play(this.prevInvaders.get(e.invaderId)?.boss === true ? "leak-boss" : "leak");
           break;
         }
         case "migration-started":
           this.status(e.bonus > 0 ? `Sent early: +${e.bonus} meat` : "The migration begins");
+          // Both, when the player sent early: the horn is the answer to
+          // their button and the herd call is the migration arriving. The
+          // bonus is the sim's own test for "early", so this cannot
+          // disagree with the meat the player was just paid.
+          if (e.bonus > 0) this.sfx.play("send-early");
+          this.sfx.play("migration-start");
           this.autosave();
           break;
         case "migration-cleared":
           this.status(`Migration cleared: +${e.bonus} meat`);
+          this.sfx.play("migration-clear");
           this.autosave();
           break;
         case "won":
           this.showOverlay("The nest is safe", `All ${content.migrations.length} migrations turned back with ${g.state.eggs} eggs left.`);
+          this.sfx.play("victory");
           this.autosave();
           break;
         case "lost":
           this.showOverlay("The nest is lost", `Fell on migration ${g.state.migration + 1} of ${content.migrations.length}.`);
+          this.sfx.play("defeat");
           this.autosave();
           break;
         case "placed":
-        case "sold":
+          this.towersDirty = true;
+          this.sfx.play("place", KIND_COLOR[g.dinoDef(e.dino).kind]);
+          break;
         case "grown":
           this.towersDirty = true;
+          this.sfx.play("grow", KIND_COLOR[g.dinoDef(e.dino).kind]);
+          break;
+        case "sold":
+          this.towersDirty = true;
+          this.sfx.play("sell");
           break;
       }
+    }
+    // §6: "eggs drop to 3", once. Checked after the batch rather than inside
+    // the `leaked` case because a boss leak can take the count from 5 to 2
+    // and never pass through 3 — the threshold is the warning, not the
+    // exact number.
+    if (!this.warnedEggs && g.state.eggs <= WARN_EGGS_AT && g.state.phase !== "lost") {
+      this.warnedEggs = true;
+      this.sfx.play("warn-eggs");
     }
   }
 
@@ -670,7 +795,7 @@ export class BoardScene extends Phaser.Scene {
 
     // invaders
     for (const inv of g.state.invaders) {
-      const prev = this.prevPos.get(inv.id);
+      const prev = this.prevInvaders.get(inv.id);
       const px = prev ? prev.x + (inv.px - prev.x) * alpha : inv.px;
       const py = prev ? prev.y + (inv.py - prev.y) * alpha : inv.py;
       const p = this.worldFromMilli(px, py);
@@ -781,16 +906,26 @@ export class BoardScene extends Phaser.Scene {
     });
 
     // row 3: status + next migration
-    this.statusText = this.add.text(16, y0 + 132, "", text(18, COLORS.textDim));
-    this.previewText = this.add.text(16, y0 + 160, "", text(18));
+    this.statusText = this.add.text(16, y0 + 126, "", text(18, COLORS.textDim));
+    this.previewText = this.add.text(16, y0 + 152, "", text(18));
 
-    // row 4: selected dino panel
-    const panelY = y0 + 196;
-    this.add.rectangle(8, panelY, CANVAS_W - 16, 68, COLORS.hudPanel).setOrigin(0, 0);
-    this.panelName = this.add.text(20, panelY + 8, "", text(20));
-    this.panelStats = this.add.text(20, panelY + 36, "", text(15, COLORS.textDim));
-    this.growButton = this.button(CANVAS_W - 336, panelY + 8, 190, 52, "Grow", () => this.grow(), 17);
-    this.sellButton = this.button(CANVAS_W - 136, panelY + 8, 120, 52, "Sell", () => this.sell(), 17);
+    // Row 4, the selected dinosaur's sheet. Four text lines, so the panel
+    // is 86px rather than the 68 two lines needed and starts 16px higher;
+    // the status and preview rows above moved up by 6 to pay for it. The
+    // panel still ends inside the HUD: y0 + 180 + 86 = y0 + 266 < HUD_H.
+    const panelY = y0 + 180;
+    this.add.rectangle(8, panelY, CANVAS_W - 16, 86, COLORS.hudPanel).setOrigin(0, 0);
+    // `SHEET_COL_W` on every line, as a hard wrap rather than as a hope:
+    // a content edit that lengthens a line wraps it instead of running it
+    // under the buttons. `tests/client/dino-sheet.spec.ts` asserts no def
+    // in the shipped content actually reaches the wrap.
+    const col = { wordWrap: { width: SHEET_COL_W } };
+    this.panelName = this.add.text(20, panelY + 4, "", { ...text(20), ...col });
+    this.panelKind = this.add.text(20, panelY + 28, "", { ...text(15, COLORS.textDim), ...col });
+    this.panelStats = this.add.text(20, panelY + 46, "", { ...text(15), ...col });
+    this.panelExtras = this.add.text(20, panelY + 64, "", { ...text(15, COLORS.textDim), ...col });
+    this.growButton = this.button(CANVAS_W - 336, panelY + 17, 190, 52, "Grow", () => this.grow(), 17);
+    this.sellButton = this.button(CANVAS_W - 136, panelY + 17, 120, 52, "Sell", () => this.sell(), 17);
     this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
     this.setPanelVisible(false);
     // Nothing is armed at the start of a run, and that is a change from
@@ -804,7 +939,9 @@ export class BoardScene extends Phaser.Scene {
 
   private setPanelVisible(v: boolean): void {
     this.panelName.setVisible(v);
+    this.panelKind.setVisible(v);
     this.panelStats.setVisible(v);
+    this.panelExtras.setVisible(v);
     this.growButton.bg.setVisible(v);
     this.growButton.label.setVisible(v);
     this.sellButton.bg.setVisible(v);
@@ -877,18 +1014,11 @@ export class BoardScene extends Phaser.Scene {
       const d = s.dinos.find((x) => x.id === this.selectedDino);
       if (d) {
         const def = g.dinoDef(d);
-        const stage = ["", "hatchling", "juvenile", "adult"][def.stage];
-        this.panelName.setText(`${def.name}  ·  ${def.kind} ${stage}`);
-        const dps = ((def.damage * TICKS_PER_SECOND) / def.cooldown).toFixed(1);
-        const extras = [
-          def.splash ? "splash" : "",
-          def.slow ? `slow ${def.slow.percent}%` : "",
-          def.stun ? `stun ${(def.stun.ticks / TICKS_PER_SECOND).toFixed(1)}s` : "",
-          def.targetCount && def.targetCount > 1 ? `${def.targetCount} targets` : "",
-        ].filter(Boolean);
-        this.panelStats.setText(
-          `${def.damage} dmg every ${(def.cooldown / TICKS_PER_SECOND).toFixed(2)}s (${dps}/s) · range ${(def.range / CELL).toFixed(1)} · hits ${def.targets}${extras.length ? " · " + extras.join(", ") : ""}`,
-        );
+        const lines = sheetLines(def);
+        this.panelName.setText(lines.name);
+        this.panelKind.setText(lines.kind);
+        this.panelStats.setText(lines.stats);
+        this.panelExtras.setText(lines.extras);
         const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
         this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "Fully grown").setAlign("center");
         this.growButton.label.setColor(next && s.meat >= next.cost ? COLORS.text : COLORS.textDim);
@@ -1095,6 +1225,17 @@ export class BoardScene extends Phaser.Scene {
         this.selectedDef = null;
         this.hoverCell = null;
         this.setPanelVisible(true);
+        // §6's `select` fires on "a dinosaur is tapped", which is this tap
+        // and not a tray card: the card's own feedback is the lift and the
+        // border, and arming a kind is not yet a thing that happened on the
+        // valley.
+        //
+        // No hue: §6 gives `select` "a short soft tick", and names the kind
+        // only for `place`, `grow` and `hit`. The sink pitches whatever hue
+        // it is handed, so passing one here would pitch a sound the spec
+        // does not pitch. If §6 is amended to want a pitched tick, pass
+        // `KIND_COLOR[this.game_.dinoDef(dino).kind]` and it comes back.
+        this.sfx.play("select");
         return;
       }
       // Drawing the preview under the finger before placing is what makes
@@ -1181,6 +1322,11 @@ export class BoardScene extends Phaser.Scene {
       this.effects.push({ kind: "flash", x: c.x, y: c.y, color: COLORS.refusal, ttl: 250, life: 250 });
       this.status(REFUSAL_TEXT[r]);
       if (r === "no-meat") this.flashCardCost(this.selectedDef.id);
+      // Every refusal, and only a refusal: §6 gives `blocked` "a dry wooden
+      // click, no tone" precisely so it cannot be mistaken for a placement.
+      // `place` is not fired here — it comes from the sim's `placed` event
+      // below, so a sound can never claim a dinosaur the sim refused.
+      this.sfx.play("blocked");
       return;
     }
     // Placed. Spend the selection — the same two fields `selectDef` clears
@@ -1337,6 +1483,39 @@ export class BoardScene extends Phaser.Scene {
    */
   get selection(): { kindId: string | null; dinoId: number | null; preview: { x: number; y: number } | null } {
     return { kindId: this.selectedDef?.id ?? null, dinoId: this.selectedDino, preview: this.hoverCell };
+  }
+
+  /**
+   * How many sounds §6's cap threw away this run, for a drive from the
+   * console. The limiter's own behaviour is asserted in
+   * `test/audio.test.ts` against an injected clock; what a browser adds is
+   * the ratio under a real migration, which is the number that says whether
+   * the cap is doing anything at all on this content. Nothing reads it.
+   */
+  get sfxDropped(): number {
+    return this.sfx.dropped;
+  }
+
+  /**
+   * The sheet's four lines as the renderer actually laid them out: the
+   * width each one came to, and how many lines the wrap broke it into.
+   *
+   * This exists because the only honest check of "the text fits" is the
+   * measured one. The content is data, the font is the platform's, and the
+   * string lengths are not knowable from the layout constants — so the
+   * guard against a content edit pushing a line under the Grow button has
+   * to read real metrics out of a running client, which is what
+   * `tests/client/dino-sheet.spec.ts` does with this.
+   */
+  get sheetWidths(): { name: number; kind: number; stats: number; extras: number; lines: number } {
+    const rows = [this.panelName, this.panelKind, this.panelStats, this.panelExtras];
+    return {
+      name: this.panelName.width,
+      kind: this.panelKind.width,
+      stats: this.panelStats.width,
+      extras: this.panelExtras.width,
+      lines: rows.reduce((n, t) => n + t.getWrappedText(t.text).length, 0),
+    };
   }
 
   /**

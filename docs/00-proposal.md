@@ -307,7 +307,8 @@ exit criteria.
 
 ```
 mazeosaur/
-  docs/               proposals and design decisions, numbered
+  docs/               proposals and design documents, numbered
+  docs/decisions/     one decision per file, NNNN-slug.md
   packages/sim/       the deterministic simulation (started, tested)
   packages/content/   game data + schemas
   packages/game/      Phaser client
@@ -349,6 +350,15 @@ we find out.
    the store setup and the no-network rule on mobile.
 
 ## 10. Decisions taken so far
+
+**This list is closed. A new decision is a new file in
+[decisions/](decisions/README.md).** The entries below are the history and are
+left exactly as they were taken; nothing here is reworded. Appending meant
+every decision pull request editing the same last line of the same file, so
+any two of them conflicted by construction — and a conflicting pull request
+gets no merge ref, so GitHub builds it not at all and says nothing. The
+reasoning is
+[decisions/0001-decisions-live-in-their-own-files.md](decisions/0001-decisions-live-in-their-own-files.md).
 
 - 2026-09-20: separate repo from arbor; deploys on its own path.
 - 2026-09-20: TypeScript monorepo, npm workspaces (pnpm is a one-line

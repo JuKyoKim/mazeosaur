@@ -49,7 +49,7 @@ const LANE_CELL = { x: 0, y: 0 };
 
 const HATCHLING_COST = 10;
 
-test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again", async ({ page }) => {
+test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again [@baseline]", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 

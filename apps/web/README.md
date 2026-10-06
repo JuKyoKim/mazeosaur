@@ -38,6 +38,17 @@ In `src/main.ts` today:
   scene does async work in `create()`. A save from a newer build gets a
   `NULL_SAVE_STORE` for the rest of the session instead of the real
   store, so nothing here can clobber it.
+- **Audio**, in `src/audio.ts`. `createWebAudio()` is the web `AudioPort`:
+  oscillators and one noise buffer, no files, no decoding and no network,
+  which is what lets the seam be audible before a single clip exists and is
+  also the only kind of audio a mobile build may ever contain (rule 2). The
+  recipes are placeholders against section 6's character column; the
+  durations and the ducking rules come from `SOUNDS` in
+  `@mazeosaur/game`, so the spec is their single source. The
+  `AudioContext` is created on the first sound rather than at load, because
+  a browser blocks one made before a gesture — and if it is refused anyway,
+  `available` goes false and the run plays silently, which §6 makes a
+  supported way to play.
 - **Lifecycle**, `wireSuspend` in `src/main.ts`. `visibilitychange` ->
   hidden and `pagehide` both call `GameHandle.suspend()`, because the OS
   can kill a backgrounded tab without warning and `pagehide` is the one
