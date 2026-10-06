@@ -46,6 +46,13 @@ ports themselves are section 2 of
   tested without a browser and without waiting in real time. It names
   sounds and never fetches one; the thing that makes a noise is the
   shell's, injected as `AudioPort`.
+- `src/sheet.ts` — what the dinosaur sheet says, as four strings: the
+  genus, the family and stage, the comparable numbers, the modifiers. Pure
+  and Phaser-free, exported through the package's `./sheet` subpath, so the
+  client and the frame generator in `tools/art` build the same four lines
+  rather than two copies. Four lines and not one is the design decision the
+  file argues for; `tests/client/dino-sheet.spec.ts` measures all four of
+  them for all 18 defs in a running client.
 - `src/theme.ts` — colours and text styles, and nothing geometric.
 
 `mountGame` starts `BoardScene` with the save the shell already loaded
