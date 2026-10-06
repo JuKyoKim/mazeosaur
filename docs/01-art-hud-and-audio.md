@@ -412,18 +412,20 @@ Where ours differs, and why:
   of 6 come to 684 — 4px inside the 688 of `CONTENT_W`, which is the width
   the tray actually gets once the 16px gutters are taken off, and 36px inside
   the full 720. The card width is derived from that and not chosen:
-  `(688 - 5*6) / 6 = 109.6`, floored (`tools/art/layout.ts:155`). Fitting is
-  worth more than being able to grow:
-  a scrolling bottom row competes with the system's own edge gestures, and a
-  paged tray hides part of the kind chart, which is six facts the player is
-  in the middle of learning.
+  `(688 - 5*6) / 6 = 109.6`, floored — the `ROW3.kindButton` entry in
+  `packages/game/src/layout.ts`, whose doc comment is that derivation.
+  Fitting is worth more than being able to grow: a scrolling bottom row
+  competes with the system's own edge gestures, and a paged tray hides part
+  of the kind chart, which is six facts the player is in the middle of
+  learning.
 - **The gesture bar is cleared by the letterbox, and that is load-bearing.**
   At 390 x 693pt inside a 390 x 844pt screen there is 151pt of letterbox, and
-  `Phaser.Scale.CENTER_BOTH` (`packages/game/src/index.ts:21`) splits it 75.5
-  above and 75.5 below. 75.5pt clears the 34pt home indicator, so the tray's
-  bottom edge is not under the system swipe. A bottom-aligned canvas would put
-  the lower 34pt of the tray — a quarter of a 136px row — inside the gesture
-  area. The centring is a requirement, not a default we happen to have.
+  `Phaser.Scale.CENTER_BOTH` — the `autoCenter` of the game's Phaser config in
+  `packages/game/src/index.ts` — splits it 75.5 above and 75.5 below. 75.5pt
+  clears the 34pt home indicator, so the tray's bottom edge is not under the
+  system swipe. A bottom-aligned canvas would put the lower 34pt of the tray
+  — a quarter of a 136px row — inside the gesture area. The centring is a
+  requirement, not a default we happen to have.
 - **One tray at a time, where Kingdom Rush uses a radial.** A radial at the
   tapped cell is the one idea here that beats a tray on reach, because the
   control arrives where the finger already is. It loses on our cell size: at
@@ -684,8 +686,10 @@ A cell inside the grid never cancels: it places, or it refuses. Starting a
 migration does not cancel — mazing continues during one, and a selection
 silently lost at the phase change would be read as a dropped tap.
 
-**Sell, and the end of long-press.** `docs/00-proposal.md:240` promised
-long-press to sell. It is dropped, and not because drag is gone:
+**Sell, and the end of long-press.** The proposal originally promised
+long-press to sell and no longer does — `docs/00-proposal.md` now records it as
+dropped, in its Controls paragraph and again in section 10. The reason is not
+that drag is gone:
 
 - a long press is 500ms, and a deliberate thumb tap on a 19.5pt cell can
   cross that, so the gesture mis-fires on exactly the careful player;
