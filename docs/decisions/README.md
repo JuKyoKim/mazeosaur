@@ -7,7 +7,7 @@ before this directory existed. Why it works this way is itself a decision:
 
 There is deliberately **no index file**. An index would reintroduce the
 append-conflict this directory exists to remove, one line per decision. The
-sorted listing above is the index.
+sorted directory listing is the index.
 
 ## The convention
 
@@ -18,6 +18,9 @@ A file is `NNNN-slug.md`: a four-digit number, then a short kebab-case slug.
   not a conflict — they are different files, and whichever merges second may
   keep its number or renumber, because nothing links to a decision by number.
 - `date` in the front matter is the day the decision was taken, `YYYY-MM-DD`.
+- `status` is one of exactly two values: `decided`, or `superseded` once
+  another file replaces it. Nothing parses the front matter, so a third
+  spelling — `accepted`, `active` — would sit there uncorrected forever.
 - The title is the decision stated as a claim, not a topic. "The sim owns the
   tick rate", not "Tick rate".
 - Say what was decided, then **why**, then what was rejected and why. A
@@ -26,14 +29,21 @@ A file is `NNNN-slug.md`: a four-digit number, then a short kebab-case slug.
 - Cite symbols, never a line number. The 2026-10-05 decision in section 10
   applies here, and `npm run check:readmes` enforces it over this directory
   like any other markdown.
-- Superseding a decision does not edit it. Add a new file saying what it
-  replaces, and add `superseded-by` to the old one's front matter. The history
-  of a decision is as useful as the decision.
+- Superseding a decision does not rewrite it. Add a new file saying what it
+  replaces, then set the old one's `status` to `superseded` and give it
+  `superseded-by: NNNN-slug.md`. The history of a decision is as useful as the
+  decision.
+- That last step is the one line this convention still shares: two
+  supersessions of the same decision edit the same front matter and do
+  conflict. The guarantee is structural for *adding* a decision, which is what
+  a decision PR does; superseding is rare, and when it collides it collides on
+  one line, loudly. That is the trade, not a hole in the convention.
 
-Front matter is a fenced `yaml` block, so the files stay readable as plain
-markdown and nothing has to parse them:
+Front matter is ordinary YAML between `---` delimiters, not a fenced code
+block, so the files stay readable as plain markdown and nothing has to parse
+them. The whole of a file:
 
-````markdown
+```markdown
 ---
 date: 2026-10-06
 status: decided
@@ -46,7 +56,7 @@ What was decided, in a paragraph.
 **Why.** The reason, including what went wrong without it.
 
 **Rejected.** The alternatives, each with the reason it lost.
-````
+```
 
 ## What belongs here, and what does not
 
