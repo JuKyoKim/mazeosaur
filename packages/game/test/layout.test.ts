@@ -12,6 +12,8 @@ import {
   HUD_H,
   HUD_Y,
   MIN_HIT,
+  PAUSE_MENU,
+  RESULTS,
   ROW1,
   ROW1_WRAP,
   ROW2,
@@ -51,10 +53,15 @@ const overlaps = (a: Box, b: Box) => a.x < right(b) && b.x < right(a) && a.y < b
 /** Every box a finger is supposed to be able to hit. */
 const TOUCH_TARGETS = {
   Send: ROW1.send,
+  Pause: ROW1.pause,
   "speed toggle": ROW1.speed,
   "kind button": { ...ROW3.kindButton, x: kindButtonX(0) },
   Grow: ROW3.grow,
   Sell: ROW3.sell,
+  // The pause menu's entries are the only overlay controls in the client
+  // that are on the floor at all, and the only ones where a mis-tap can
+  // throw a run away. All three are the same box at three y's.
+  "pause menu entry": { x: PAUSE_MENU.x, y: PAUSE_MENU.resume.y, w: PAUSE_MENU.w, h: PAUSE_MENU.h },
 };
 
 describe("the hit-target floor", () => {
@@ -82,7 +89,7 @@ describe("the three rows", () => {
   });
 
   it("keep every row-1 box inside its row and inside the content column", () => {
-    for (const b of [ROW1.meatIcon, ROW1.eggIcon, ROW1.send, ROW1.speed]) {
+    for (const b of [ROW1.meatIcon, ROW1.eggIcon, ROW1.send, ROW1.pause, ROW1.speed]) {
       expect(b.x).toBeGreaterThanOrEqual(0);
       expect(right(b)).toBeLessThanOrEqual(CONTENT_RIGHT);
       expect(b.y).toBeGreaterThanOrEqual(ROW1.y);
@@ -95,6 +102,7 @@ describe("the three rows", () => {
       meatIcon: ROW1.meatIcon,
       eggIcon: ROW1.eggIcon,
       send: ROW1.send,
+      pause: ROW1.pause,
       speed: ROW1.speed,
     });
     for (const [an, a] of boxes) {
@@ -103,6 +111,27 @@ describe("the three rows", () => {
         expect(overlaps(a, b), `${an} overlaps ${bn}`).toBe(false);
       }
     }
+  });
+
+  /**
+   * The three clock controls spend their band exactly, and that is the whole
+   * argument for Send being 82 wide rather than the 164 it was: the band is
+   * fixed at both ends — the migration readout needs Send's origin and the
+   * row ends at `CONTENT_RIGHT` — so three controls at the floor leave 14px
+   * for two gaps and nothing over. A future control added to this row has
+   * to take the space from somewhere this test can see.
+   */
+  it("spend row 1's control band on three hit-floor squares and two equal gaps", () => {
+    const controls = [ROW1.send, ROW1.pause, ROW1.speed];
+    for (const b of controls) {
+      expect(b.w).toBe(MIN_HIT);
+      expect(b.h).toBe(MIN_HIT);
+      expect(b.y).toBe(ROW1.send.y);
+    }
+    expect(right(ROW1.speed)).toBe(CONTENT_RIGHT);
+    const gaps = [ROW1.pause.x - right(ROW1.send), ROW1.speed.x - right(ROW1.pause)];
+    for (const g of gaps) expect(g).toBeGreaterThan(0);
+    expect(CONTENT_RIGHT - ROW1.send.x).toBe(MIN_HIT * 3 + gaps[0]! + gaps[1]!);
   });
 
   it("stack the migration label over its value, left of Send", () => {
@@ -220,6 +249,33 @@ describe("row 2 and the toast", () => {
     expect(TOAST.barW).toBe(SELECT_BORDER);
     expect(TOAST.pad).toBeGreaterThan(TOAST.barW);
     expect(TYPE.body).toBeLessThanOrEqual(TOAST.h);
+  });
+});
+
+/**
+ * The pause menu, which is the first overlay in the client whose controls
+ * are placed from this file rather than written out in the scene. Its
+ * entries are where a mis-tap is least recoverable — the third one throws
+ * the run away — so the geometry is checked as geometry.
+ */
+describe("the pause menu", () => {
+  it("stacks three hit-floor entries down the board area, clear of the HUD", () => {
+    const entries = [PAUSE_MENU.resume, PAUSE_MENU.restart, PAUSE_MENU.end];
+    const gaps = [PAUSE_MENU.restart.y - PAUSE_MENU.resume.y, PAUSE_MENU.end.y - PAUSE_MENU.restart.y];
+    expect(PAUSE_MENU.h).toBe(MIN_HIT);
+    expect(gaps[0]).toBe(gaps[1]);
+    // More separation than any two HUD controls get, which is the point.
+    expect(gaps[0]! - PAUSE_MENU.h).toBeGreaterThan(ROW1.pause.x - right(ROW1.send));
+    expect(PAUSE_MENU.sub.y + TYPE.body).toBeLessThanOrEqual(PAUSE_MENU.resume.y);
+    for (const e of entries) expect(e.y + PAUSE_MENU.h).toBeLessThanOrEqual(BOARD_H);
+  });
+
+  it("is the results screen's button, so ending a run does not move the thumb", () => {
+    // One number and not two: a player who ends a run from here lands on
+    // the end-of-run overlay, and the two must not drift apart.
+    expect(PAUSE_MENU.x).toBe(RESULTS.again.x);
+    expect(PAUSE_MENU.w).toBe(RESULTS.again.w);
+    expect(PAUSE_MENU.x + PAUSE_MENU.w).toBe(CANVAS_W - PAUSE_MENU.x);
   });
 });
 
