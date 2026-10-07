@@ -1,5 +1,12 @@
 {
-  "$comment": "Gzip byte budgets per chunk group for apps/web/dist/assets/*.js. Checked by scripts/check-bundle-size.mjs after `npm run build`. Raise a budget only with a reason in the commit message; it exists so a regression fails CI instead of being noticed on a phone.",
+  "$comment": "Gzip byte budgets per asset group in apps/web/dist/assets, matched by filename regex and extension-agnostic. Checked by scripts/check-bundle-size.mjs after `npm run build`. A file in dist/assets that matches no exclude rule and no group fails the build, so a new kind of asset has to be budgeted on purpose. Raise a budget only with a reason in the commit message; it exists so a regression fails CI instead of being noticed on a phone.",
+  "exclude": [
+    {
+      "name": "sourcemaps",
+      "match": "\\.map$",
+      "reason": "vite.config.ts emits build.sourcemap: \"hidden\" for local debugging only; apps/web/Dockerfile deletes every *.map before the image ships, so these bytes never reach a phone and budgeting them would budget nothing real."
+    }
+  ],
   "groups": [
     {
       "name": "vendor",
@@ -10,6 +17,11 @@
       "name": "app",
       "match": "^(?!phaser-).*\\.js$",
       "gzipBudgetBytes": 60000
+    },
+    {
+      "name": "art",
+      "match": "\\.png$",
+      "gzipBudgetBytes": 100000
     }
   ]
 }

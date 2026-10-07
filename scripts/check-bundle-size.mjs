@@ -1,7 +1,12 @@
 #!/usr/bin/env node
-// Fails non-zero when a gzipped JS chunk group in apps/web/dist/assets
+// Fails non-zero when a gzipped asset group in apps/web/dist/assets
 // exceeds its budget in bundle-budget.json. Run after `npm run build`;
 // there is nothing to measure before the bundle exists.
+//
+// Matching is extension-agnostic: every file in dist/assets must land in
+// an exclude rule or a budget group, so a new kind of build output (an
+// atlas PNG today, anything else later) has to be budgeted on purpose
+// instead of silently passing because nothing was looking for it.
 import { gzipSync } from "node:zlib";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -14,25 +19,37 @@ const budgetPath = path.join(repoRoot, "bundle-budget.json");
 
 const budget = JSON.parse(readFileSync(budgetPath, "utf8"));
 
-let files;
+let entries;
 try {
-  files = readdirSync(assetsDir).filter((f) => f.endsWith(".js"));
+  entries = readdirSync(assetsDir, { withFileTypes: true });
 } catch {
   console.error(`no build output at ${assetsDir} — run "npm run build" first`);
   process.exit(1);
 }
 
+const files = entries.filter((e) => e.isFile()).map((e) => e.name);
+
 if (files.length === 0) {
-  console.error(`no .js files found in ${assetsDir}`);
+  console.error(`no files found in ${assetsDir}`);
   process.exit(1);
 }
 
 let failed = false;
-const unmatched = new Set(files);
+const excluded = new Set();
+
+for (const rule of budget.exclude ?? []) {
+  const re = new RegExp(rule.match);
+  const members = files.filter((f) => re.test(f));
+  for (const f of members) excluded.add(f);
+  console.log(`[excluded] ${rule.name}: ${members.length} file(s) — ${rule.reason}`);
+}
+
+const remaining = files.filter((f) => !excluded.has(f));
+const unmatched = new Set(remaining);
 
 for (const group of budget.groups) {
   const re = new RegExp(group.match);
-  const members = files.filter((f) => re.test(f));
+  const members = remaining.filter((f) => re.test(f));
   for (const f of members) unmatched.delete(f);
 
   const gzipBytes = members.reduce((sum, f) => {
@@ -51,7 +68,7 @@ for (const group of budget.groups) {
 }
 
 if (unmatched.size > 0) {
-  console.error(`chunk(s) matched no budget group: ${[...unmatched].join(", ")}`);
+  console.error(`file(s) matched no exclude rule or budget group: ${[...unmatched].join(", ")}`);
   failed = true;
 }
 
@@ -60,4 +77,4 @@ if (failed) {
   process.exit(1);
 }
 
-console.log("\nall chunk groups within budget");
+console.log("\nall asset groups within budget");
