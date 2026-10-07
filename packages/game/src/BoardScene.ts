@@ -753,6 +753,19 @@ export class BoardScene extends Phaser.Scene {
    * Nothing here branches on whether audio is available. Every sound has a
    * visual partner in §5.4, so a silent build is the same scene minus the
    * noise, and `NULL_AUDIO_PORT` makes each of these calls free.
+   *
+   * **One call is exactly one tick's events**, and the strike below depends
+   * on it. The only caller is `tickOnce()`, which is `tick()` then
+   * `drainEvents()`; `update()` reaches it through a loop that can run
+   * twenty ticks in a frame at 3x, but each of those drains its own. That is
+   * what makes `g.state.tick` constant across this batch and so a sound
+   * discriminator for "same swing". Draining once per *frame* instead —
+   * hoisting the `drainEvents()` out of `tickOnce()` and into `update()`,
+   * which is the natural-looking simplification — would silently merge
+   * several ticks into one batch, and the strike would stop sustaining
+   * across swings above 1x. `"a second attack sustains the strike at step 2
+   * instead of replaying the wind-up"` in `tests/client/attack-strike.spec.ts`
+   * is the spec that would go red.
    */
   private handleEvents(events: GameEvent[]): void {
     const g = this.game_;
@@ -795,12 +808,19 @@ export class BoardScene extends Phaser.Scene {
           if (live && live.tick !== g.state.tick) {
             // Sustain, not restart. A weapon already out does not wind up
             // again, and the wind-up's only job is to say where the weapon
-            // came from — so a further attack from the same dinosaur
-            // resumes at step 2, the frame that carries the kind. Above 1x
-            // the clip outlives the cooldown (raptor-3 is 6 ticks, 300ms,
-            // against 260ms), so this is what holds full extension on
-            // screen for as long as the animal keeps firing instead of
-            // alternating two silhouettes at 10Hz.
+            // came from — so a further **swing** by the same dinosaur, which
+            // is an `attack` from a later tick than the one that started
+            // this strike, resumes at step 2, the frame that carries the
+            // kind. Above 1x the clip outlives the cooldown (raptor-3 is 6
+            // ticks, 300ms, against 260ms), so this is what holds full
+            // extension on screen for as long as the animal keeps firing
+            // instead of alternating two silhouettes at 10Hz.
+            //
+            // "A further *attack*" is the wording §5.4.1 retired in
+            // `9236cd9`, and it is what licensed ARB-373: read literally it
+            // makes a flier's second event sustain the strike its own first
+            // event created one loop iteration earlier, and the wind-up is
+            // then never drawn at all. The unit is the swing, not the event.
             live.life = live.ttl - (this.reducedMotion ? 0 : STRIKE_STEP_MS[0]);
             live.tick = g.state.tick;
           } else if (!live && this.strikes.size < STRIKE_MAX) {
