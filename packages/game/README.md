@@ -154,8 +154,13 @@ cannot name, fails there in milliseconds rather than in a browser;
 `src/resume.ts`, `test/audio.test.ts` covers the `hit`/`kill` cap in
 `src/audio.ts` — a cap that silently stopped working would fail no other
 test and would not look wrong in a screenshot, so it is asserted rather
-than listened to — and `test/layout.test.ts` covers the HUD's
-*constants*. Everything else here is Phaser: it is checked either by
+than listened to — `test/palette-agreement.test.ts` covers `src/theme.ts`'s
+`COLORS` against the second copy of the same palette in
+`tools/art/directions.ts`, which is the copy `npm run art:check` grades
+against §1's contrast floor and the only one it can see, so that test is
+what makes the floor apply to the renderer at all — and
+`test/layout.test.ts` covers the HUD's *constants*. Everything else here
+is Phaser: it is checked either by
 driving it (`npm run dev`, then port 5173) or by a browser spec under
 `tests/client`, which is the only thing that can see what the renderer
 actually built — `hud-hit-targets.spec.ts` exists because
