@@ -146,6 +146,9 @@ the transitions between them — is section 5 of
 
 ## Verifying a change
 
+`test/atlas.test.ts` covers the toy-box atlases' geometry and the strike
+frame table in both directions — a kind with no art, or art the client
+cannot name, fails there in milliseconds rather than in a browser;
 `test/profile.test.ts` covers the pure accounting in `src/profile.ts`,
 `test/resume.test.ts` covers the resume-vs-replay decision in
 `src/resume.ts`, `test/audio.test.ts` covers the `hit`/`kill` cap in
@@ -158,6 +161,11 @@ driving it (`npm run dev`, then port 5173) or by a browser spec under
 actually built — `hud-hit-targets.spec.ts` exists because
 `test/layout.test.ts` was green for the whole period in which every
 control on screen was under the 44pt floor, and nothing compared the two.
+`attack-strike.spec.ts` is the same shape for section 5.4.1: it reads
+`strikeLayerDrawn` and `boardLayerOrder` off a running client, because
+`test/atlas.test.ts` cannot see a renderer that names the right frame on a
+sprite it never shows, scales by the strike frame's own 128 instead of the
+authored 64, or draws the tracer under the silhouette instead of over it.
 Three things have produced false conclusions:
 
 - **Tap a tray card and check it did not also cancel.** Placement is two
