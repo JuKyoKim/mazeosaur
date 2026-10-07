@@ -12,13 +12,24 @@ import {
   type SaveDocument,
 } from "@mazeosaur/sim";
 import { content, hatchlings } from "@mazeosaur/content";
-import { ATLAS, STRIKE_FRAMES, TOY_BOX_SCALE, loadToyBox } from "./atlas.js";
+import {
+  ATLAS,
+  DINO_AUTHORED,
+  DINO_FRAMES,
+  INVADER_DRAWN,
+  INVADER_FRAMES,
+  INVADER_SCALE,
+  STRIKE_FRAMES,
+  TOY_BOX_SCALE,
+  loadToyBox,
+} from "./atlas.js";
 import {
   BOARD_H,
   CANVAS_H,
   CANVAS_W,
   CELL_PX,
   CONTENT_W,
+  GRID_W,
   GUTTER,
   HUD_H,
   HUD_Y,
@@ -221,7 +232,7 @@ interface Button {
  * Anything a tray card is made of. All three have `setY` and `setVisible`,
  * which is all a lift and a tray swap need.
  */
-type CardPart = Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics | Phaser.GameObjects.Text;
+type CardPart = Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics | Phaser.GameObjects.Sprite | Phaser.GameObjects.Text;
 
 /**
  * One kind's card in the shop tray: the box, the silhouette, the kind name
@@ -232,7 +243,7 @@ type CardPart = Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics | Pha
 interface TrayCard {
   def: DinoDef;
   bg: Phaser.GameObjects.Rectangle;
-  art: Phaser.GameObjects.Graphics;
+  art: Phaser.GameObjects.Sprite;
   cost: Phaser.GameObjects.Text;
   parts: CardPart[];
   restY: number[];
@@ -397,8 +408,45 @@ export class BoardScene extends Phaser.Scene {
   private fossilsAwarded!: number;
 
   private staticGfx!: Phaser.GameObjects.Graphics;
-  private towerGfx!: Phaser.GameObjects.Graphics;
+  /**
+   * Everything drawn *under* the animals: the air route, the selection and
+   * range rings, and the placement preview. All three are context for a
+   * cell, so a sprite standing in that cell belongs on top of them.
+   */
   private dynGfx!: Phaser.GameObjects.Graphics;
+  /**
+   * Everything drawn *over* the animals: hp bars, the slow/stun/shield
+   * rings, and §5.4's effects. These are readouts about a sprite and are
+   * useless behind one — an hp bar under a tank is an hp bar nobody can
+   * act on, and that was the whole hazard of keeping one graphics object
+   * for both halves once the animals stopped being drawn into it.
+   */
+  private markGfx!: Phaser.GameObjects.Graphics;
+  /**
+   * §5.0's dinosaur layer: one pooled sprite per placed dinosaur, in its
+   * own container for the reason `strikeLayer` has one — a sprite
+   * allocated after `buildHud()` would otherwise draw over the HUD.
+   *
+   * Rebuilt only on `towersDirty`, which is placement, growth and sale.
+   * Nothing about it runs per frame: a wall of 250 dinosaurs is 250 static
+   * sprites the batcher draws in one pass, which is the whole reason this
+   * is sprites in a container rather than a redrawn `Graphics`.
+   */
+  private dinoLayer!: Phaser.GameObjects.Container;
+  private dinoPool!: Phaser.GameObjects.Sprite[];
+  /**
+   * §5.2's invader layer, over the dinosaurs: the threat is the thing the
+   * player must be able to find, and a swarm invader walking a corridor
+   * between two adult dinosaurs is 12.6px against their overhang.
+   *
+   * Assigned front-to-back per frame and the tail hidden, exactly as
+   * `strikePool` is, so a frame allocates only past the board's
+   * high-water mark. Nothing is carried on a sprite between frames —
+   * frame, position, scale and visibility are all written every frame —
+   * so a sprite handed from a dead invader to a new one brings nothing.
+   */
+  private invaderLayer!: Phaser.GameObjects.Container;
+  private invaderPool!: Phaser.GameObjects.Sprite[];
   private towersDirty!: boolean;
 
   private selectedDef!: DinoDef | null;
@@ -623,13 +671,20 @@ export class BoardScene extends Phaser.Scene {
     this.previewKey = "";
     this.cameras.main.setBackgroundColor(COLORS.bg);
 
+    // Seven display-list slots, in the order they are constructed, because
+    // nothing in this scene sets a `depth` and construction order *is*
+    // render order. §5.0's tile rule first — "every block painted before
+    // any animal", since a sprite overhangs the cell behind it — then the
+    // under-animal context, the two animal layers, their readouts, and
+    // §5.4.1's two effect layers. `buildHud()` below takes the next slot,
+    // so all of it stays under the HUD.
     this.staticGfx = this.add.graphics();
-    this.towerGfx = this.add.graphics();
     this.dynGfx = this.add.graphics();
-    // §5.4.1's three depths, as three display-list slots in order: the
-    // animals in `dynGfx` above, then the strikes over them, then each
-    // strike's own tracer over that. `buildHud()` below takes the next
-    // slot, so all three stay under the HUD.
+    this.dinoLayer = this.add.container(0, 0);
+    this.dinoPool = [];
+    this.invaderLayer = this.add.container(0, 0);
+    this.invaderPool = [];
+    this.markGfx = this.add.graphics();
     this.strikeLayer = this.add.container(0, 0);
     this.strikePool = [];
     this.tracerGfx = this.add.graphics();
@@ -693,7 +748,7 @@ export class BoardScene extends Phaser.Scene {
       }
     }
 
-    if (this.towersDirty) this.drawTowers();
+    if (this.towersDirty) this.drawDinos();
     this.drawDynamic(alpha);
     // Outside the `paused` guard on purpose: a paused board still has to
     // re-assert where its strikes are, because the pool is shared and the
@@ -990,20 +1045,79 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  private drawTowers(): void {
-    const gfx = this.towerGfx;
-    gfx.clear();
-    for (const d of this.game_.state.dinos) {
+  /**
+   * §5.0's dinosaurs, as atlas sprites: one pooled sprite per placed
+   * dinosaur, anchored feet-down on the bottom edge of its own cell and
+   * scaled by the atlas's own number.
+   *
+   * **The anchor is `setOrigin(0.5, 1)` and that is the whole of it.** The
+   * frames are trimmed to the ink and declared untrimmed at the trimmed
+   * size, so Phaser resolves the origin against the ink and puts it on the
+   * animal's feet — §5.5 is explicit that this is why the trim was done
+   * that way. Anchoring the authored square instead would float a
+   * hatchling half a cell off the floor of the cell it stands in, because
+   * the camera centres its subject and a hatchling leaves 18px of air
+   * underneath.
+   *
+   * **The stage is the sprite, not a pip.** Three genera at three sizes
+   * carry growth on their own — a hatchling draws 19.7 to 28.1px tall
+   * against an adult's 29.5 to 42.2 — which is §5.1's "the kind at a
+   * glance and the stage on a second look". The placeholder drew three
+   * pips because a rounded rect in a hue cannot say either.
+   *
+   * **Sorted by row and then by x**, per §5.0, so the overlap reads as
+   * depth and the same wall rebuilt draws the same picture. The sort is
+   * affordable precisely because this is not a per-frame path: it runs on
+   * `towersDirty`, which is a placement, a growth or a sale. `setDepth`
+   * plus one `sort` keeps a pooled sprite's slot independent of the order
+   * it was first allocated in.
+   */
+  private drawDinos(): void {
+    const dinos = this.game_.state.dinos;
+    // Indices rather than a copy of the array of dinos: the sort needs a
+    // stable read of row-then-x and this keeps it to one small array on a
+    // path that runs a few times a second at most.
+    const order = dinos.map((_, i) => i);
+    order.sort((a, b) => {
+      const da = dinos[a] as (typeof dinos)[number];
+      const db = dinos[b] as (typeof dinos)[number];
+      return da.y === db.y ? da.x - db.x : da.y - db.y;
+    });
+
+    let used = 0;
+    for (const i of order) {
+      const d = dinos[i];
+      if (!d) continue;
       const def = this.game_.dinoDef(d);
-      const x = d.x * CELL_PX;
-      const y = this.cellY(d.y);
-      gfx.fillStyle(KIND_COLOR[def.kind], 1);
-      gfx.fillRoundedRect(x + 3, y + 3, CELL_PX - 6, CELL_PX - 6, 6);
-      // growth stage as pips
-      gfx.fillStyle(COLORS.ink, 0.85);
-      for (let i = 0; i < def.stage; i++) gfx.fillCircle(x + 9 + i * 9, y + CELL_PX - 8, 3);
+      const sprite = this.dinoPool[used] ?? this.newDinoSprite();
+      sprite.setFrame(DINO_FRAMES[def.kind][def.stage]);
+      sprite.setPosition(d.x * CELL_PX + CELL_PX / 2, this.cellY(d.y) + CELL_PX);
+      sprite.setDepth(d.y * GRID_W + d.x);
+      sprite.setVisible(true);
+      used++;
     }
+    for (let i = used; i < this.dinoPool.length; i++) this.dinoPool[i]?.setVisible(false);
+    // A container does not re-sort on a child's `setDepth`; it sorts when
+    // asked. Asking here and not in `update()` is what keeps the depth
+    // rule off the draw path.
+    this.dinoLayer.sort("depth");
     this.towersDirty = false;
+  }
+
+  /**
+   * Grows the dinosaur pool by one, at §5.5's scale: the authored square
+   * into 1.25 cells, which is `TOY_BOX_SCALE` and is uniform across all
+   * eighteen frames. Uniform is load-bearing — normalising each frame to
+   * its own ink would delete the size channel that carries growth.
+   */
+  private newDinoSprite(): Phaser.GameObjects.Sprite {
+    const sprite = this.add
+      .sprite(0, 0, ATLAS.dinos, DINO_FRAMES.raptor[1])
+      .setOrigin(0.5, 1)
+      .setScale(TOY_BOX_SCALE);
+    this.dinoLayer.add(sprite);
+    this.dinoPool.push(sprite);
+    return sprite;
   }
 
   /**
@@ -1103,6 +1217,7 @@ export class BoardScene extends Phaser.Scene {
     const gfx = this.dynGfx;
     const g = this.game_;
     gfx.clear();
+    this.markGfx.clear();
 
     // Under everything else this layer draws — the route is context for
     // the board, and must never be the thing the eye lands on when there
@@ -1154,44 +1269,79 @@ export class BoardScene extends Phaser.Scene {
     }
 
     // invaders
+    // §5.2's invaders, as atlas sprites out of the pool, with their
+    // readouts over them in `markGfx` and their shadows under them here.
+    //
+    // Three layers and not one, because the three answer different
+    // questions and a flat `Graphics` could only put them in the order it
+    // happened to draw them: the shadow says how high a flier is, the
+    // sprite says what is coming, and the hp bar says how close it is to
+    // dying. Only the last of those is still useful behind a tank.
+    const mark = this.markGfx;
+    let used = 0;
     for (const inv of g.state.invaders) {
       const prev = this.prevInvaders.get(inv.id);
       const px = prev ? prev.x + (inv.px - prev.x) * alpha : inv.px;
       const py = prev ? prev.y + (inv.py - prev.y) * alpha : inv.py;
       const p = this.worldFromMilli(px, py);
       const def = g.invaderDef(inv);
-      const r = def.archetype === "boss" ? 15 : inv.flying ? 9 : def.archetype === "swarm" ? 8 : 11;
-      gfx.fillStyle(KIND_COLOR[def.kind], 1);
+      const box = INVADER_DRAWN[def.archetype];
+      // The sprite's own half-height, so every readout below follows a
+      // redrawn atlas instead of a radius retyped per archetype — which is
+      // what the placeholder's 15/9/8/11 were, and what made a boss and a
+      // tank carry bars of almost the same width.
+      const r = box.h / 2;
+
+      const sprite = this.invaderPool[used] ?? this.newInvaderSprite();
+      sprite.setFrame(INVADER_FRAMES[def.archetype][def.kind]);
+      sprite.setPosition(p.x, p.y);
+      sprite.setScale(INVADER_SCALE[def.archetype]);
+      sprite.setVisible(true);
+      used++;
+
+      // §5.2: the flier's ground shadow is drawn *separately and below*, so
+      // height reads even when the chevron is over a dark cell. Into
+      // `dynGfx` rather than a pool of its own precisely because this layer
+      // is already under the animals — a pooled shadow would have to be
+      // kept below the sprite by hand, every frame.
+      //
+      // The flying tell is the one §5.2 says must not fail: a flying
+      // migration ignores the maze, and a player who does not see that
+      // loses eggs to a rule they did not know applied.
       if (inv.flying) {
-        gfx.fillTriangle(p.x, p.y - r, p.x - r, p.y + r * 0.7, p.x + r, p.y + r * 0.7);
-      } else {
-        gfx.fillCircle(p.x, p.y, r);
+        gfx.fillStyle(COLORS.ink, 0.28);
+        gfx.fillEllipse(p.x, p.y + box.h * 0.62, box.w * 0.7, box.h * 0.22);
       }
+
       if (inv.slowUntil > g.state.tick) {
-        gfx.lineStyle(2, 0x74b9ff, 1);
-        gfx.strokeCircle(p.x, p.y, r + 2);
+        mark.lineStyle(2, 0x74b9ff, 1);
+        mark.strokeCircle(p.x, p.y, r + 2);
       }
       if (inv.stunUntil > g.state.tick) {
-        gfx.lineStyle(2, 0xf1c40f, 1);
-        gfx.strokeCircle(p.x, p.y, r + 5);
+        mark.lineStyle(2, 0xf1c40f, 1);
+        mark.strokeCircle(p.x, p.y, r + 5);
       }
       if (inv.shield > 0) {
-        gfx.lineStyle(3, 0xecf0f1, 0.9);
-        gfx.strokeCircle(p.x, p.y, r + 3);
+        mark.lineStyle(3, 0xecf0f1, 0.9);
+        mark.strokeCircle(p.x, p.y, r + 3);
       }
-      const w = r * 2 + 4;
+      const w = box.w + 4;
       const frac = Math.max(0, inv.hp / inv.maxHp);
-      gfx.fillStyle(COLORS.hpBack, 1);
-      gfx.fillRect(p.x - w / 2, p.y - r - 8, w, 4);
-      gfx.fillStyle(frac < 0.3 ? COLORS.hpLow : COLORS.hpFront, 1);
-      gfx.fillRect(p.x - w / 2, p.y - r - 8, w * frac, 4);
+      mark.fillStyle(COLORS.hpBack, 1);
+      mark.fillRect(p.x - w / 2, p.y - r - 8, w, 4);
+      mark.fillStyle(frac < 0.3 ? COLORS.hpLow : COLORS.hpFront, 1);
+      mark.fillRect(p.x - w / 2, p.y - r - 8, w * frac, 4);
     }
+    for (let i = used; i < this.invaderPool.length; i++) this.invaderPool[i]?.setVisible(false);
 
     // effects
     //
-    // All but one into `dynGfx`. The attack tracer goes to `tracerGfx`
-    // instead, because §5.4.1 puts it above the strike layer and this
-    // graphics object is below it — see `tracerGfx`.
+    // All but one into `markGfx`, over the animals: a kill ring and the
+    // meat pip that rises out of it are about an invader that was standing
+    // there, and under the layer they would be hidden by the next invader
+    // walking over the same cell. The attack tracer goes to `tracerGfx`
+    // instead, because §5.4.1 puts it above the strike layer and this one
+    // is below it — see `tracerGfx`.
     this.tracerGfx.clear();
     for (const e of this.effects) {
       const t = e.life / e.ttl;
@@ -1201,27 +1351,45 @@ export class BoardScene extends Phaser.Scene {
           this.tracerGfx.lineBetween(e.x, e.y, e.x2 as number, e.y2 as number);
           break;
         case "kill":
-          gfx.lineStyle(2, e.color, t);
-          gfx.strokeCircle(e.x, e.y, 6 + (1 - t) * 18);
+          mark.lineStyle(2, e.color, t);
+          mark.strokeCircle(e.x, e.y, 6 + (1 - t) * 18);
           break;
         case "flash":
-          gfx.fillStyle(e.color, t * 0.6);
-          gfx.fillRect(e.x - CELL_PX / 2, e.y - CELL_PX / 2, CELL_PX, CELL_PX);
+          mark.fillStyle(e.color, t * 0.6);
+          mark.fillRect(e.x - CELL_PX / 2, e.y - CELL_PX / 2, CELL_PX, CELL_PX);
           break;
         case "leak":
-          gfx.lineStyle(4, e.color, t);
-          gfx.strokeCircle(e.x, e.y, 10 + (1 - t) * 40);
+          mark.lineStyle(4, e.color, t);
+          mark.strokeCircle(e.x, e.y, 10 + (1 - t) * 40);
           break;
         case "tap":
           // The one thing the committed sprite cannot say: that the tap was
           // *registered*. Without it a refused tap and a dropped tap look
           // identical, and "nothing happened" is the worst feedback the game
           // can give. Expands from the cell centre to TAP_RING_R and fades.
-          gfx.lineStyle(2, e.color, t * 0.6);
-          gfx.strokeCircle(e.x, e.y, (1 - t) * TAP_RING_R);
+          mark.lineStyle(2, e.color, t * 0.6);
+          mark.strokeCircle(e.x, e.y, (1 - t) * TAP_RING_R);
           break;
       }
     }
+  }
+
+  /**
+   * Grows the invader pool by one. No frame or scale is set here: both are
+   * written every frame in `drawDynamic` from the invader's own def, and a
+   * pooled sprite is handed between invaders of different archetypes
+   * freely — so anything set once at construction would be a value some
+   * later invader inherits. The placeholder frame is only what the texture
+   * needs to exist.
+   */
+  private newInvaderSprite(): Phaser.GameObjects.Sprite {
+    const sprite = this.add.sprite(0, 0, ATLAS.invaders, INVADER_FRAMES.normal.raptor).setOrigin(0.5, 0.5);
+    // Reparented for the same reason the strikes are: `add.sprite` appends
+    // to the scene's display list, which by the time a migration is
+    // running is after the HUD.
+    this.invaderLayer.add(sprite);
+    this.invaderPool.push(sprite);
+    return sprite;
   }
 
   /**
@@ -1428,13 +1596,25 @@ export class BoardScene extends Phaser.Scene {
       const bg = this.add.rectangle(x, kb.y, kb.w, kb.h, hue, 0.22).setOrigin(0, 0);
       this.onTap(bg, () => this.selectDef(def));
 
-      // The silhouette, as a flat shape in the kind's hue until the atlas
-      // lands. Drawn centred on its own origin so the selected card can
-      // grow it with `setScale` — §4's third selection channel is 56px to
-      // 60px, and a Graphics cannot be resized without being redrawn.
-      const art = this.add.graphics({ x: cx, y: kb.y + ROW3.kindArt.dy + ROW3.kindArt.h / 2 });
-      art.fillStyle(hue, 1);
-      art.fillRoundedRect(-ROW3.kindArt.w / 2, -ROW3.kindArt.h / 2, ROW3.kindArt.w, ROW3.kindArt.h, 10);
+      // §4's silhouette: the kind's own hatchling out of the atlas, which
+      // is the same frame the board will draw when the card is spent. That
+      // identity is the point — the shop is where the six silhouettes are
+      // learned, and six rounded rects in six hues taught only the hues.
+      //
+      // The authored square is fitted to `kindArt.w`, not `TOY_BOX_SCALE`:
+      // the card is a 56px box and the board's cell is 36, so the board
+      // scale would draw a 25px hatchling in it. Fitting the *square* and
+      // not the ink keeps the six cards consistent with each other — a
+      // longneck hatchling is tall and narrow and a flier is wide, and
+      // normalising each to the box would flatten exactly the difference
+      // the card exists to show.
+      //
+      // Centred on its own origin so the selected card can grow it with
+      // `setScale`: §4's third selection channel is 56px to 60px.
+      const art = this.add
+        .sprite(cx, kb.y + ROW3.kindArt.dy + ROW3.kindArt.h / 2, ATLAS.dinos, DINO_FRAMES[def.kind][def.stage])
+        .setOrigin(0.5, 0.5)
+        .setScale(ROW3.kindArt.w / DINO_AUTHORED);
 
       const name = this.add.text(cx, kb.y + ROW3.kindName.dy, def.kind, text(TYPE.label)).setOrigin(0.5, 0);
 
@@ -2303,23 +2483,71 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * §5.4.1's depth rule, as the renderer will actually resolve it: the four
-   * layers sorted by their real display-list index.
+   * §5.0's and §5.4.1's depth rules, as the renderer will actually resolve
+   * them: every board layer sorted by its real display-list index.
    *
-   * Nothing in this scene sets a `depth`, so render order *is* display-list
-   * order, and the order these four objects are constructed in `create()`
+   * No board layer sets a `depth` — the per-sprite depths inside
+   * `dinoLayer` sort that container's children against each other and not
+   * against anything outside it — so render order between the layers *is*
+   * display-list order, and the order they are constructed in `create()`
    * is the whole mechanism. That makes it the kind of rule a later edit
    * breaks by adding one `this.add` in the wrong place — with no error, and
    * with a board that still looks almost right.
+   *
+   * Two of these carry §5.0's tile rule, which is why `tiles` is named
+   * here at all: "every block painted before any animal", because a
+   * dinosaur sprite overhangs the cell behind it and a tile painted later
+   * erases the feet of the one in front.
    */
   get boardLayerOrder(): string[] {
     const named: [string, Phaser.GameObjects.GameObject][] = [
-      ["animals", this.dynGfx],
+      ["tiles", this.staticGfx],
+      ["under", this.dynGfx],
+      ["dinos", this.dinoLayer],
+      ["invaders", this.invaderLayer],
+      ["marks", this.markGfx],
       ["strikes", this.strikeLayer],
       ["tracers", this.tracerGfx],
       ["hud", this.hudGfx],
     ];
     return named.sort((a, b) => this.children.getIndex(a[1]) - this.children.getIndex(b[1])).map(([name]) => name);
+  }
+
+  /**
+   * §5.0's and §5.2's animals as the renderer actually built them: one
+   * entry per *visible* pooled sprite, with the frame, the position, the
+   * scale and the origin read off the display object.
+   *
+   * The same gap `strikeLayerDrawn` exists for, and it cannot be closed
+   * from the atlas side. `atlas.test.ts` proves the frame names are real
+   * and that the two scale rules are 45/64 and 36/64; none of that notices
+   * a renderer that anchors a dinosaur on the authored square instead of
+   * on its feet, draws an invader at the *dinosaur* scale, or gives the
+   * boss the 2x §5.5 says is already in the art. All four produce a board
+   * that looks almost right.
+   *
+   * `originY` is in the payload precisely because the feet rule is the one
+   * thing a position cannot show: a dinosaur placed on the bottom edge of
+   * its cell with an `originY` of 0.5 is drawn half-sunk into the floor,
+   * and its `y` is still exactly the number §5.5 asks for.
+   *
+   * Read off visible sprites and not off sim state, so a sprite the
+   * renderer chose not to show is absent here rather than reported from
+   * the record that wanted it drawn.
+   */
+  get animalsDrawn(): { layer: "dino" | "invader"; frame: string; x: number; y: number; scale: number; originY: number }[] {
+    const read = (layer: "dino" | "invader", pool: Phaser.GameObjects.Sprite[]) =>
+      pool
+        .filter((sprite) => sprite.visible)
+        .map((sprite) => ({
+          layer,
+          frame: String(sprite.frame.name),
+          x: sprite.x,
+          y: sprite.y,
+          scale: sprite.scaleX,
+          originY: sprite.originY,
+        }));
+    return [...read("dino", this.dinoPool), ...read("invader", this.invaderPool)];
   }
 
   /**
