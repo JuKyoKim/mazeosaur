@@ -6,6 +6,7 @@ import {
   SEND_BUTTON,
   SPEED_BUTTON,
   bankedProfile,
+  canvasPixel,
   cellCenter,
   fastForwardUntilEggsBelow,
   loseOnNextLeak,
@@ -14,6 +15,7 @@ import {
   resultsLineAt,
   resultsShown,
   resultsSummary,
+  rgbOf,
   simSnapshot,
   toastShown,
   trackPageErrors,
@@ -24,6 +26,14 @@ import {
 } from "./helpers.js";
 
 const SEED = 123;
+
+/**
+ * A point inside the Again button's fill and clear of its centred label,
+ * for the one assertion here that reads the canvas instead of the scene.
+ * Derived from `RESULTS.again` like every other coordinate in this suite,
+ * so moving the button in `layout.ts` moves the sample with it.
+ */
+const AGAIN_FILL: [number, number] = [RESULTS.again.x + 20, RESULTS.again.y + RESULTS.again.h / 2];
 
 /**
  * The `board ──won / lost / abandoned──▶ results ──again──▶ board` loop of
@@ -53,6 +63,15 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
   const atStart = await simSnapshot(page);
   expect(atStart).toMatchObject({ phase: "build", dinos: 0, migration: 0 });
 
+  // The control for the pixel assertion further down, taken here because
+  // there is no later moment to take it: `showResults` runs synchronously
+  // off the sim's own `lost` event, so by the time `waitForRunOver` returns
+  // the screen is already up. Mid-build this point is the board's own HUD,
+  // so Again's colour arriving there afterwards is this screen appearing
+  // and not a coincidence of the palette.
+  const duringPlay = await canvasPixel(page, ...AGAIN_FILL);
+  expect(duringPlay).not.toEqual(rgbOf(COLORS.buttonActive));
+
   // Grow nothing and build nothing in the invaders' way: the run has to
   // end, and the pack row's empty case is the one a first run really hits.
   await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
@@ -73,6 +92,28 @@ test("results: a lost run lands on the summary, and Again replays the same seed 
 
   // The handoff itself.
   await waitForResults(page);
+
+  /**
+   * The screen is actually on the screen.
+   *
+   * Every other assertion in this spec reads display objects off the
+   * scene, and a display object exists, carries its text and reports its
+   * colour whether or not one pixel of it is ever composited. `results` is
+   * registered before `board` in `index.ts`, and `showResults` leaves the
+   * board *paused* rather than stopped because §9 wants the valley visible
+   * through the scrim — but a paused scene still renders, so the board
+   * repainted this entire screen every frame with the whole suite green.
+   * `ResultsScene.create` calls `bringToTop()` for that reason, and this is
+   * the assertion that fails if it stops.
+   *
+   * The Again button rather than the headline: it is a flat filled rect, so
+   * a pixel of it is exactly `COLORS.buttonActive` with no antialiasing to
+   * tolerate, while a glyph's edge depends on which fonts the machine
+   * running this happens to have — which is also why `AGAIN_FILL` is inset
+   * from the button's centre rather than being `AGAIN_BUTTON`. The centre
+   * is where the label is, and it reads as a blend of the two.
+   */
+  expect(await canvasPixel(page, ...AGAIN_FILL)).toEqual(rgbOf(COLORS.buttonActive));
 
   // What the screen was told, read off the scene rather than guessed from
   // pixels — this is the assertion that a wrong number would fail, and a
