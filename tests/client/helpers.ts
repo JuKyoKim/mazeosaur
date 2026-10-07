@@ -1,3 +1,4 @@
+import { inflateSync } from "node:zlib";
 import type { ConsoleMessage, Page } from "@playwright/test";
 import type { BoardScene, GameHandle, ResultsScene, RunSummary } from "@mazeosaur/game";
 // From the subpath, not the package root: this file runs in Node, and
@@ -559,4 +560,74 @@ export async function resultsLineAt(page: Page, y: number): Promise<ResultsLine 
 export async function waitForResults(page: Page): Promise<void> {
   await page.waitForFunction(() => window.mazeosaurResults?.().scene.isActive() === true);
   await waitAFrame(page);
+}
+
+/**
+ * One pixel of the canvas as the player's screen has it, after compositing.
+ *
+ * Every other reader in this file goes through the scene graph —
+ * `resultsLines`, `simSnapshot`, `hudTargets` — which is the right default
+ * because it reads what the client *meant*. The gap is that a display
+ * object exists, carries its text and reports its colour whether or not a
+ * single pixel of it survives to the canvas, so the whole suite was blind
+ * to compositing: `results` spent a release rendering underneath the paused
+ * `board`, every assertion about it green, and the player saw the board.
+ *
+ * Phaser runs on WebGL here, so the drawing buffer is not readable from the
+ * page (no `preserveDrawingBuffer`) and `toDataURL` comes back blank.
+ * Playwright's screenshot composites the way the compositor does, which is
+ * the thing being asked about, so the pixel is clipped out of one.
+ *
+ * Coordinates are canvas-internal (the same `layout.ts` numbers every
+ * control here is expressed in) and are mapped through the canvas's own
+ * bounding rect, so a harness viewport that does not happen to match
+ * `CANVAS_W`x`CANVAS_H` 1:1 reads the same pixel rather than a shifted one.
+ */
+export async function canvasPixel(page: Page, x: number, y: number): Promise<{ r: number; g: number; b: number }> {
+  const rect = await page.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    if (!canvas) throw new Error("no canvas on the page: the game has not mounted");
+    const box = canvas.getBoundingClientRect();
+    return { left: box.left, top: box.top, width: box.width, height: box.height, innerW: canvas.width, innerH: canvas.height };
+  });
+  const png = await page.screenshot({
+    clip: {
+      x: rect.left + (x * rect.width) / rect.innerW,
+      y: rect.top + (y * rect.height) / rect.innerH,
+      width: 1,
+      height: 1,
+    },
+  });
+  return decodeOnePixel(png);
+}
+
+/** `COLORS.x` as `canvasPixel` returns it, so a spec compares like with like. */
+export function rgbOf(color: number): { r: number; g: number; b: number } {
+  return { r: (color >> 16) & 0xff, g: (color >> 8) & 0xff, b: color & 0xff };
+}
+
+/**
+ * The RGB of a 1x1 PNG, which is all `canvasPixel` ever decodes.
+ *
+ * A general PNG decoder would have to undo the five scanline filters
+ * against the pixel to the left and the row above. At one pixel there is
+ * neither: `a`, `b` and `c` are 0 for every filter, and Sub, Up, Average
+ * and Paeth all reduce to the stored byte. So the filter byte can be
+ * skipped rather than interpreted, and this stays a few lines instead of
+ * pulling an image library into the harness.
+ */
+function decodeOnePixel(png: Buffer): { r: number; g: number; b: number } {
+  const idat: Buffer[] = [];
+  // 8-byte signature, then length/type/data/CRC chunks.
+  for (let at = 8; at + 8 <= png.length; ) {
+    const length = png.readUInt32BE(at);
+    const type = png.toString("ascii", at + 4, at + 8);
+    if (type === "IDAT") idat.push(png.subarray(at + 8, at + 8 + length));
+    if (type === "IEND") break;
+    at += length + 12;
+  }
+  if (idat.length === 0) throw new Error("screenshot PNG carried no IDAT");
+  const raw = inflateSync(Buffer.concat(idat));
+  // [filter, r, g, b, (a)] — see above for why the filter is skipped.
+  return { r: raw[1]!, g: raw[2]!, b: raw[3]! };
 }
