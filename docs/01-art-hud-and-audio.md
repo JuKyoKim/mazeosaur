@@ -1062,7 +1062,7 @@ is noise.
 
 | effect | what it is | size | duration |
 | --- | --- | --- | --- |
-| hit | a 2px tapered line from the dinosaur to the target, in the dinosaur's hue | 1–3 cells | 80ms |
+| hit | two layers (5.4.1) — a 2px tapered line from the dinosaur to the target in its hue, and the kind's strike on the dinosaur's own cell | 1–3 cells | tracer 80ms, strike 260ms |
 | kill | a 24px expanding ring in the kind hue, plus a meat pip that rises 18px and fades | 1 cell | 260ms |
 | leak | a 40px ring in `refusal` around the nest, egg count flashes | 1 cell | 420ms |
 | blocked | the refused cell fills with 45° `ink` hatching, no movement — §4's preview table is the specification and this row restates it | 1 cell | 200ms |
@@ -1077,13 +1077,14 @@ placement did not happen — animating it would say that it nearly did.
 
 ### 5.4.1 The attack strike: the hit says which kind is hitting
 
-The `hit` row above is a tracer in the dinosaur's hue and nothing else, and
-on a live board that is one shape for all six kinds with the colour doing
-all the work. The owner looked at the demo and said so: *"the elemental
-factors does get reflected well with the color, but the attack animation
-sprite will need to properly reflect this."* Colour is never the only
-channel — section 3 holds that line for the dinosaurs themselves and the
-attack effect was the place it was not held.
+Before this section split it, the `hit` effect was a tracer in the
+dinosaur's hue and nothing else, and on a live board that was one shape for
+all six kinds with the colour doing all the work. The owner looked at the
+demo and said so: *"the elemental factors does get reflected well with the
+color, but the attack animation sprite will need to properly reflect
+this."* Colour is never the only channel — section 3 holds that line for
+the dinosaurs themselves and the attack effect was the place it was not
+held.
 
 So `hit` is two things, with one job each:
 
@@ -1150,17 +1151,65 @@ fade on the last; **never gate the hit behind the clip** — the damage has
 already happened in the sim, and the strike is drawn over the committed
 state exactly as a placement animation is.
 
-Timings, and they are the `hit` row's 80ms spent rather than added to:
+**Timings, and the two layers start together and end apart.** The tracer is
+the `hit` row's 80ms and is not stretched to cover the clip; the strike's
+three steps are the 260ms that row gives it. So the last two thirds of a
+strike are drawn with no tracer under them, which is correct — by then the
+invader it pointed at has already taken the damage.
 
-| step | held |
-| --- | --- |
-| 1 | 50ms |
-| 2 | 90ms |
-| 3 | 120ms, fading to zero alpha |
+| step | held | the tracer, meanwhile |
+| --- | --- | --- |
+| 1 | 50ms | drawn, full alpha |
+| 2 | 90ms | drawn for the first 30ms of it, then gone |
+| 3 | 120ms, fading to zero alpha | gone |
+
+**The timings are on the player's clock, not the game's.** The speed toggle
+scales the sim; it does not scale the eye, so 50/90/120 are the same at 1x
+and at 3x. That is also the clock the other four effects already age on —
+`BoardScene` ages an effect by the frame's own delta rather than by the
+accumulator the speed multiplies, and freezes it while paused. Scaling the
+clip with the speed instead would spend the whole strike in about 87ms at
+3x, one or two rendered frames per step on a 60Hz phone, and the step that
+would get lost is step 2, the only one that carries the kind.
+
+**A dinosaur has one strike, and a second attack sustains it rather than
+restarting it.** While a strike is alive, a further `attack` event from the
+same dinosaur resumes the clip at **step 2**, never at step 1: a weapon
+already out does not wind up again, and the wind-up's only job is to say
+where the weapon came from. Two facts about the sim make that load-bearing
+rather than a nicety.
+
+- **One swing is often several events.** The sim pushes an `attack` per
+  victim, so a flier adult with `targetCount: 3`, and every splash kind,
+  emit two or three of them in the same tick for one swing. Per-event
+  strikes would stack three copies of one silhouette on one cell at triple
+  alpha, and allocate three objects where a swing needs one.
+- **The clip is longer than the shortest cooldown.** The raptor adult's six
+  ticks is 300ms of game time at `TICKS_PER_SECOND`, against a 260ms clip:
+  40ms of gap at 1x, none at 2x or 3x. So the wind-up plays on every attack
+  at 1x, and above 1x it plays once at the start of a burst while full
+  extension holds for as long as the dinosaur keeps attacking. The frame
+  that carries the kind gets *more* screen time exactly when the board is
+  busiest — the opposite of what replaying step 1 per attack does, which is
+  two silhouettes alternating at 10Hz with the kind as the thing that drops
+  out. Step 3 then marks the end of the burst rather than the end of each
+  attack, which is what "the mark left behind" should mean.
+
+**The strike is drawn for a `damage: 0` attack too.** A shield eats the whole
+blow and the sim still reports the attack. The shield ring is what says the
+blow was eaten; dropping the strike there would say the dinosaur never swung.
+
+**Depth: over the animals, under the HUD, and under its own tracer.** The
+tracer is 2px against a full-cell opaque silhouette, so drawn underneath it
+the line starts at the strike's edge instead of at the animal — and with two
+dinosaurs in adjacent cells firing at the same invader, which tracer belongs
+to which attacker is the thing that gets lost.
 
 Under reduced motion (section 7) the clip does not play: step 2 alone is
 drawn for 90ms and fades. It is the frame that carries the kind, so the
-information survives and the movement does not.
+information survives and the movement does not. Sustain costs nothing there:
+step 2 is the only frame drawn either way, so a burst is a steady hold with
+no movement in it at all.
 
 The plate the client implements against is
 `docs/art/toy-box-strikes.png`: all eighteen frames at board scale, each on
@@ -1360,6 +1409,14 @@ Two clips, five frames, on dinosaurs only.
 makes reduced motion (section 7) a renderer that draws frame 0 and stops,
 and it is why a client that ignores animation entirely still draws the right
 picture.
+
+**Both of 5.4.1's timing rules apply here unchanged**, because the attack
+clip is exposed to the speeds the same way the strike is: the timings are
+the player's and the speed toggle does not compress them, and a dinosaur
+that attacks again while its 330ms attack clip is still running resumes at
+the lunge rather than replaying the lean-back. The cooldown arithmetic that
+decides when that happens is in 5.4.1 and is the same arithmetic — above 1x,
+every attacking dinosaur is in a burst.
 
 **How far a pixel actually travels.** One authored pixel is
 `CELL_PX * DRAW_CELLS / authored` logical pixels — 3.00 for Tactics Pixel —
