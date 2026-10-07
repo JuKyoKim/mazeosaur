@@ -605,7 +605,14 @@ export async function waitForResults(page: Page): Promise<void> {
  * Coordinates are canvas-internal (the same `layout.ts` numbers every
  * control here is expressed in) and are mapped through the canvas's own
  * bounding rect, so a harness viewport that does not happen to match
- * `CANVAS_W`x`CANVAS_H` 1:1 reads the same pixel rather than a shifted one.
+ * `CANVAS_W`x`CANVAS_H` 1:1 reads an unshifted point, not an unblended one.
+ * Below 1:1 several canvas-internal pixels collapse into the one CSS pixel
+ * the screenshot clips, so the sample is a neighbourhood average rather than
+ * that pixel's own colour — a 1px grid line has read back as `0x27392d`
+ * instead of `COLORS.gridLine`'s `0x2c4033` for exactly this reason. Sample a
+ * flat fill, never an edge or a 1px feature: the phone-scale capture recipe's
+ * 390px-wide resize is already a 0.54 downscale of `CANVAS_W`, so a sample
+ * taken after it is in the failing case on the first try.
  */
 export async function canvasPixel(page: Page, x: number, y: number): Promise<{ r: number; g: number; b: number }> {
   const rect = await page.evaluate(() => {
@@ -639,16 +646,35 @@ export function rgbOf(color: number): { r: number; g: number; b: number } {
  * and Paeth all reduce to the stored byte. So the filter byte can be
  * skipped rather than interpreted, and this stays a few lines instead of
  * pulling an image library into the harness.
+ *
+ * That shortcut only holds for 8-bit RGB/RGBA: a 16-bit sample is two bytes
+ * wide and a palette entry is an index, not a colour, so either would decode
+ * to a silently wrong number rather than a thrown error. Chromium's own
+ * screenshot encoder emits neither today, but IHDR says what it emitted, so
+ * read it and throw by name rather than let a future encoder change surface
+ * as a mystery colour mismatch three specs away.
  */
 function decodeOnePixel(png: Buffer): { r: number; g: number; b: number } {
   const idat: Buffer[] = [];
+  let bitDepth: number | undefined;
+  let colorType: number | undefined;
   // 8-byte signature, then length/type/data/CRC chunks.
   for (let at = 8; at + 8 <= png.length; ) {
     const length = png.readUInt32BE(at);
     const type = png.toString("ascii", at + 4, at + 8);
+    if (type === "IHDR") {
+      // width(4) height(4) bit depth(1) colour type(1) ...
+      bitDepth = png.readUInt8(at + 8 + 8);
+      colorType = png.readUInt8(at + 8 + 9);
+    }
     if (type === "IDAT") idat.push(png.subarray(at + 8, at + 8 + length));
     if (type === "IEND") break;
     at += length + 12;
+  }
+  // Colour type 2 is truecolor (RGB), 6 is truecolor+alpha (RGBA) — the only
+  // two the byte offsets below are valid for.
+  if (bitDepth !== 8 || (colorType !== 2 && colorType !== 6)) {
+    throw new Error(`canvasPixel only decodes 8-bit RGB/RGBA PNGs; got bit depth ${bitDepth}, colour type ${colorType}`);
   }
   if (idat.length === 0) throw new Error("screenshot PNG carried no IDAT");
   const raw = inflateSync(Buffer.concat(idat));
