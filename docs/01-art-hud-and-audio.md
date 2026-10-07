@@ -1626,6 +1626,7 @@ player wants to look at.
 | meat unspent | y=520, right of centre | `body` with the meat icon |
 | fossils earned | centred, y=600 | `vital` in `checkpoint` yellow when the run was paid, `body` in `textDim` when it was not — below |
 | the pack | y=680, 180 tall | every dinosaur the player grew to adult, as its sprite, in a row — the collection, which is the reason the stages are real genus names |
+| **Title screen** | `196, 923, 328 x 82` | default with a 2px `textDim` outline, `Again`'s box one pause-menu pitch up — below |
 | **Again** | `196, 1019, 328 x 82` | primary, centred in the HUD band |
 
 The pack row is the one piece of this screen that is not a statistic. A
@@ -1635,6 +1636,97 @@ that, and the next run's first thought is about what is missing from it.
 **Again** sits in the HUD band at the bottom, at the same height as the
 Send button, so the thumb does not move between the run that ended and the
 next one.
+
+### The second control
+
+`docs/01-v1-architecture.md` §5.3 gives this screen two exits — *again
+(same seed)* back to `board`, and `results ──▶ title`. Only the first has
+ever been drawn, because `title` did not exist; ARB-217 brings it. This is
+the geometry for the second, settled here rather than invented in the
+renderer, and it is the whole of what that scene's landing needs from this
+document.
+
+**It goes above Again, and Again does not move.** `196, 1019, 328 x 82` is
+not a free number: the pause menu derives its own `x` and `w` from it so
+that a player who ends a run lands on this screen with the button under the
+same thumb, and that chain breaks if Again slides left to make room for a
+neighbour. Side by side also halves the only row on this screen a thumb is
+aimed at, and puts *play this valley again* and *leave this valley* inside
+one sideways slip of the same thumb. Stacking costs one number — a y — and
+changes none of the ones already drawn.
+
+**The pitch is the pause menu's: `MIN_HIT + 14` = 96, so y = 1019 - 96 =
+923.** Three menus in this client, one grid. The pause menu below argues
+that 14px is more separation than any two HUD controls get, because its
+third entry throws a run away; neither of these two throws anything away,
+so here the same gap is generous rather than load-bearing. That is the
+right direction to be wrong in, and it means no reader has to hold two
+pitches in their head. Both boxes are `MIN_HIT` tall and 328 wide, which is
+44.4 x 177.7pt on the reference phone.
+
+**The space is already empty, measured rather than assumed.** Sampled on
+the shipped client at 390pt, on a won screen and a lost one, the 328px
+column Again sits in carries nothing between y=860 and the HUD band except
+the board's own grid lines through the scrim — every row in that span is
+flat to within two values. Two things make it reliable rather than lucky:
+the pack row is `680, 180 tall` and draws its genus labels inside itself (a
+96px block from y=680, the label 8px under it, wrapped at `label` — the
+deepest lands near y=830), and `BoardScene.showResults` calls `hideToast()`
+on the way in, so the 932-988 toast band, where a frozen `-1 egg` would
+otherwise sit for as long as the results screen does, is clear by
+construction. Both captures happened to have an empty pack row, so the
+deep-pack figure is derived and not observed.
+
+So the second control lands on 82px of empty canvas, 63px below the pack
+and 3px above `HUD_Y`, and nothing a player can see today moves. It also
+fills the one hole this screen has: the eye falls off the bottom of the
+pack row and crosses 159px of nothing to reach the only button — about 240
+on a run where no dinosaur reached adult and the row is a single dim line.
+
+**Default, not primary, and outlined.** `button` behind a `body` label,
+against Again's `buttonActive`: one primary per screen, and the player who
+wants another run should find it without reading. `text` on `button` is
+8.5:1, past §1's 4.5 — but the *slab* is the problem here, not the label.
+A `button` fill is **1.6:1** against this screen's own backdrop, because
+the 70% `bg` scrim leaves the board at about `#19261e` and the default
+button is a green a shade above it. Over the HUD band, where every other
+default control in this client lives, that question never came up: `hud` is
+far darker and the slab draws itself. Here it does not, and a filled
+rectangle at 1.6:1 reads as a shadow rather than as something to press —
+visibly so, side by side, on the real capture.
+
+So this one control carries a **2px `textDim` outline**, which puts its
+boundary at 6.2:1 and costs two pixels. Not `selection` and not 3px: both
+of those are spoken for — §4 gives that colour and that weight to "your tap
+landed here" and nothing else may borrow them. The pause menu's three
+entries are the same geometry on a *black* 70% scrim, where the same
+measurement is 2.0:1; that screen is ARB-218's and this edit does not touch
+it, but the number is here so it can be looked at with the same eyes.
+
+**The label is `Title screen`.** It names where it lands, which is the only
+job a second exit's label has. `Menu` was the alternative and is wrong
+here: the pause overlay is also a menu, so the two destinations would share
+a word and a player would have to learn which menu was meant.
+
+**Nothing ships dark.** There is no disabled variant of this control
+waiting for ARB-217 — a control you can read and cannot press is worse than
+no control, which is the same argument that opaquely covers the HUD band
+behind this screen. The row lands with the scene it targets and not before;
+until then Again is alone, in the box it already has.
+
+**Both exits are safe, so neither asks twice.** The board pays the fossil
+award before `results` is ever launched
+([decision 0003](decisions/0003-the-board-pays-the-fossil-award-not-results.md)),
+so the two buttons differ in which seed comes next and in nothing else.
+No confirm, no `danger` fill, no warning — this is not the pause menu's
+third entry.
+
+One behaviour this geometry assumes, for whoever builds it: the board is
+*paused* behind this screen, not stopped, so the title exit has to leave no
+runnable board behind it. A screen that reports a finished run must not be
+able to hand that run back — the same property §5.1 buys by giving
+`results` no `Game`. How that is spelled is `docs/01-v1-architecture.md`
+§5.3's business and ARB-217's.
 
 ### The three headlines
 
