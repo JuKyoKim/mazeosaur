@@ -94,7 +94,12 @@ ports themselves are section 2 of
   rather than two copies. Four lines and not one is the design decision the
   file argues for; `tests/client/dino-sheet.spec.ts` measures all four of
   them for all 18 defs in a running client.
-- `src/theme.ts` — colours and text styles, and nothing geometric.
+- `src/colors.ts` — `COLORS` and `KIND_COLOR`, Phaser-free so `tools/art`
+  can read the shipping palette without Phaser types. `tools/art`'s `BOARD`
+  takes its board and HUD colours from here, and
+  `tools/art/test/palette.test.ts` is what holds the two to the same values.
+- `src/theme.ts` — text styles, and the re-export of `src/colors.ts`. Nothing
+  geometric.
 
 `mountGame` registers `board` and `results` and starts the first of them;
 the save the shell already loaded and migrated goes to `BoardScene`, and a
