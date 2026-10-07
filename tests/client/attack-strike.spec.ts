@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hatchlings } from "@mazeosaur/content";
 import { again } from "@mazeosaur/game/entry";
+import { TICKS_PER_SECOND } from "@mazeosaur/sim";
 import { CELL_PX, SEND_BUTTON, cellCenter, openGame, paletteButtonCenter, setMigration, simSnapshot, startBoard, trackPageErrors, waitAFrame } from "./helpers.js";
 
 /**
@@ -128,6 +129,26 @@ function sampleAClip(page: Page, { timed = false, maxFrames = 600 } = {}): Promi
 
 const step = (s: Drawn) => Number(s.frame.slice(-1));
 
+/**
+ * `STRIKE_STEP_MS` summed, which is `STRIKE_TTL` in `BoardScene.ts`: 50ms of
+ * wind-up, 90ms of full extension, 120ms of the mark left behind.
+ *
+ * Written out here because the multi-victim test below rests on it. At 1x a
+ * clip is only shorter than every cooldown by arithmetic, and the moment it
+ * is not, a clip opening on step 2 stops being evidence of anything — so
+ * that test asserts the gap rather than assuming it.
+ */
+const CLIP_MS = 50 + 90 + 120;
+/** Ticks are 50ms; `TICKS_PER_SECOND` is the sim's, so a content edit moves it. */
+const TICK_MS = 1000 / TICKS_PER_SECOND;
+
+/** The `cooldown` in milliseconds at 1x of the hatchling the tray places for `kind`. */
+function cooldownMs(kind: string): number {
+  const def = hatchlings.find((d) => d.kind === kind);
+  expect(def, `no hatchling for ${kind}`).toBeDefined();
+  return def!.cooldown * TICK_MS;
+}
+
 test("every kind's attack draws its own strike, on its own cell, at the atlas's own scale", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
@@ -205,6 +226,56 @@ test("one swing is one strike, however many victims the sim reports it against",
     return best;
   });
   expect(multi, "the flier never attacked two invaders in one tick, so the line above proved nothing").toBeGreaterThanOrEqual(2);
+  expect(errors.messages, errors.messages.join("\n")).toEqual([]);
+});
+
+test("a multi-victim swing still opens on the wind-up, because its sibling events are not a second swing", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, SEED);
+  await postOneAndSend(page, "flier");
+
+  // The discriminator this test rests on, asserted and not assumed: at 1x a
+  // flier hatchling's cooldown is 600ms against a 260ms clip, so a clip is
+  // always over before the next swing and no *later* attack can sustain one.
+  // A clip that opens on step 2 here therefore has one explanation — a
+  // same-tick sibling of the swing that started it. If a content edit ever
+  // takes `flier-1`'s cooldown under the clip, this line fails rather than
+  // the test quietly going on to prove nothing.
+  expect(cooldownMs("flier"), "a flier's cooldown no longer outlasts the clip, so this test's premise is gone").toBeGreaterThan(CLIP_MS);
+
+  // `timed` for the same reason the three-step test below uses it: a clip
+  // thrown on the frame after a batch of ticks carries the batch's whole
+  // blocking time and lands its first drawn frame on step 2 regardless. So
+  // wait that one out and measure the next, which the migration throws at
+  // ordinary frame deltas.
+  const samples = (await sampleAClip(page, { timed: true })).map((live) => live[0]!);
+  expect(samples.length, "the flier struck nothing").toBeGreaterThan(2);
+  const steps = samples.map(step);
+  // The whole clip, wind-up included. `flier-1` is `targetCount: 2`, so a
+  // swing that finds two invaders is two `attack` events in one tick, and
+  // treating the second as a further attack sustains the strike to 210ms
+  // before its first frame is ever drawn: step 1 is dropped, and the opening
+  // silhouette then depends on how crowded the lane is — the opposite of a
+  // shape a player learns once. Every splash kind does the same.
+  expect(new Set(steps), `steps seen: ${steps.join("")}`).toEqual(new Set([1, 2, 3]));
+  for (let i = 1; i < steps.length; i++) expect(steps[i]!).toBeGreaterThanOrEqual(steps[i - 1]!);
+
+  // ...and that the swing measured really could be a multi-victim one. The
+  // renderer cannot be the witness, because not counting the siblings is the
+  // whole change, so ask the sim: `tick()` and `drainEvents()`, which runs
+  // the sim past the board and is why it is the last thing here.
+  const multi = await page.evaluate(() => {
+    const sim = window.mazeosaurBoard!().sim;
+    let best = 0;
+    for (let n = 0; n < 2000 && best < 2 && (sim.state.phase === "build" || sim.state.phase === "migration"); n++) {
+      sim.tick();
+      let hits = 0;
+      for (const e of sim.drainEvents()) if (e.type === "attack") hits++;
+      best = Math.max(best, hits);
+    }
+    return best;
+  });
+  expect(multi, "the flier never attacked two invaders in one tick, so the clip above proved nothing").toBeGreaterThanOrEqual(2);
   expect(errors.messages, errors.messages.join("\n")).toEqual([]);
 });
 
