@@ -1172,21 +1172,35 @@ clip with the speed instead would spend the whole strike in about 87ms at
 3x, one or two rendered frames per step on a 60Hz phone, and the step that
 would get lost is step 2, the only one that carries the kind.
 
-**A dinosaur has one strike, and a second attack sustains it rather than
-restarting it.** While a strike is alive, a further `attack` event from the
-same dinosaur resumes the clip at **step 2**, never at step 1: a weapon
-already out does not wind up again, and the wind-up's only job is to say
-where the weapon came from. Two facts about the sim make that load-bearing
-rather than a nicety.
+**A dinosaur has one strike, and a second *swing* sustains it rather than
+restarting it.** While a strike is alive, an `attack` event from a **later
+tick** than the one that started it resumes the clip at **step 2**, never at
+step 1: a weapon already out does not wind up again, and the wind-up's only
+job is to say where the weapon came from. Two facts about the sim make that
+load-bearing rather than a nicety.
 
-- **One swing is often several events.** The sim pushes an `attack` per
-  victim, so a flier adult with `targetCount: 3`, and every splash kind,
-  emit two or three of them in the same tick for one swing. Per-event
-  strikes would stack three copies of one silhouette on one cell at triple
-  alpha, and allocate three objects where a swing needs one.
+- **One swing is often several events, and the extra ones are nothing.** The
+  sim pushes an `attack` per victim, so a flier adult with `targetCount: 3`,
+  and every splash kind, emit two or three of them in the same tick for one
+  swing. The second and third are the *same* swing, so they neither start a
+  strike nor sustain one: a tick that has already drawn this dinosaur's
+  strike does nothing further with it. The tick is the discriminator, and
+  the client has it.
+
+  Two mistakes are available here and the sustain rule above is only half a
+  guard against them. Treating the siblings as *new* strikes is the cruder
+  one: three copies of one silhouette on one cell at triple alpha, and three
+  objects where a swing needs one. Treating them as *sustains* is the
+  subtler one, and the first draft of this section invited it by saying "a
+  further attack event" where it meant a further swing — a flier's second
+  event then lands the strike on step 2 on the first frame it is ever
+  drawn, so the wind-up of every flier swing, and of every splash swing that
+  catches two invaders, is never rendered. The opening frame of the
+  silhouette would change with how crowded the lane is, which is the
+  opposite of a shape learned once.
 - **The clip is longer than the shortest cooldown.** The raptor adult's six
   ticks is 300ms of game time at `TICKS_PER_SECOND`, against a 260ms clip:
-  40ms of gap at 1x, none at 2x or 3x. So the wind-up plays on every attack
+  40ms of gap at 1x, none at 2x or 3x. So the wind-up plays on every swing
   at 1x, and above 1x it plays once at the start of a burst while full
   extension holds for as long as the dinosaur keeps attacking. The frame
   that carries the kind gets *more* screen time exactly when the board is
@@ -1412,9 +1426,11 @@ picture.
 
 **Both of 5.4.1's timing rules apply here unchanged**, because the attack
 clip is exposed to the speeds the same way the strike is: the timings are
-the player's and the speed toggle does not compress them, and a dinosaur
-that attacks again while its 330ms attack clip is still running resumes at
-the lunge rather than replaying the lean-back. The cooldown arithmetic that
+the player's and the speed toggle does not compress them, and a dinosaur that
+*swings* again while its 330ms attack clip is still running resumes at the
+lunge rather than replaying the lean-back. The several `attack` events of one
+swing are one swing here too, so a flier's clip does not skip its lean-back
+for having found two targets. The cooldown arithmetic that
 decides when that happens is in 5.4.1 and is the same arithmetic — above 1x,
 every attacking dinosaur is in a burst.
 
