@@ -1769,7 +1769,7 @@ rectangle at 1.6:1 reads as a shadow rather than as something to press —
 visibly so, side by side, on the real capture.
 
 So this one control carries a **2px `textDim` outline**, which puts its
-boundary at 6.2:1 and costs two pixels. Not `selection` and not 3px: both
+boundary at 6.1:1 against that same `#19261e` and costs two pixels. Not `selection` and not 3px: both
 of those are spoken for — §4 gives that colour and that weight to "your tap
 landed here" and nothing else may borrow them. The pause menu's three
 entries are the same geometry on a *black* 70% scrim, where the same
