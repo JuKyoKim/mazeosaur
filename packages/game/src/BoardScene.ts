@@ -150,6 +150,15 @@ interface Strike {
   y: number;
   ttl: number;
   life: number;
+  /**
+   * The sim tick this strike last took an `attack` event on, which is what
+   * tells a *second swing* apart from the *same swing's second victim*.
+   * One swing is one tick however many invaders it catches — `targetCount`
+   * on a flier, `splash` on a longneck or an armoured — and the sim reports
+   * one `attack` per victim, so without this the siblings of one swing
+   * sustain each other and the wind-up is never drawn.
+   */
+  tick: number;
 }
 
 /**
@@ -291,6 +300,10 @@ export class BoardScene extends Phaser.Scene {
    * one swing. Keyed by the thrower, that swing is one strike; keyed by the
    * event it would be three copies of one silhouette stacked on one cell at
    * triple alpha, and three objects allocated where a swing needs one.
+   *
+   * One strike per thrower is not enough on its own, which is why `Strike`
+   * carries its `tick`: the siblings of one swing must be a no-op and not a
+   * sustain, or the wind-up never draws. See `handleEvents`.
    */
   private strikes!: Map<number, Strike>;
   /**
@@ -766,8 +779,20 @@ export class BoardScene extends Phaser.Scene {
           // reads `e.damage`: a shield eats the whole blow and the sim
           // still reports the attack. The shield ring says the blow was
           // eaten; suppressing the strike would say the animal never swung.
+          //
+          // §5.4.1: the sustain is **across swings**, and the tick is what
+          // says which is which. `handleEvents` is called once per tick
+          // from `tickOnce()`, so every event in this batch belongs to one
+          // tick, and one tick is one swing per dinosaur however many
+          // invaders it caught — `targetCount: 2` on a flier, `splash` on a
+          // longneck or an armoured. The sim reports one `attack` per
+          // victim, so a swing on two invaders arrives here twice, and
+          // without the tick the second one sustains the first: the strike
+          // is already 50ms old on the first frame it is ever drawn, step 1
+          // is never rendered, and the opening frame of the silhouette
+          // would depend on how crowded the lane happened to be.
           const live = this.strikes.get(e.dinoId);
-          if (live) {
+          if (live && live.tick !== g.state.tick) {
             // Sustain, not restart. A weapon already out does not wind up
             // again, and the wind-up's only job is to say where the weapon
             // came from — so a further attack from the same dinosaur
@@ -777,9 +802,17 @@ export class BoardScene extends Phaser.Scene {
             // screen for as long as the animal keeps firing instead of
             // alternating two silhouettes at 10Hz.
             live.life = live.ttl - (this.reducedMotion ? 0 : STRIKE_STEP_MS[0]);
-          } else if (this.strikes.size < STRIKE_MAX) {
+            live.tick = g.state.tick;
+          } else if (!live && this.strikes.size < STRIKE_MAX) {
+            // `!live` and not just the `else`: a same-tick sibling changes
+            // nothing, and without this it would fall through and re-create
+            // the record here instead. Today that is invisible — the map is
+            // keyed by the thrower, so the write overwrites itself with the
+            // same kind on the same cell before any frame is drawn — but an
+            // `else` that leans on the key to make a stray write harmless is
+            // one key away from it not being harmless.
             const ttl = this.reducedMotion ? STRIKE_REDUCED_MS : STRIKE_TTL;
-            this.strikes.set(e.dinoId, { kind: g.dinoDef(d).kind, x: from.x, y: from.y, ttl, life: ttl });
+            this.strikes.set(e.dinoId, { kind: g.dinoDef(d).kind, x: from.x, y: from.y, ttl, life: ttl, tick: g.state.tick });
           }
           // §6 fires `hit` on *damage dealt*, and a shield eats the whole
           // attack for `damage: 0` — the ring that draws it is the feedback
