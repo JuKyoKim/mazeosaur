@@ -199,6 +199,10 @@ export async function reloadAndWaitForBoard(page: Page): Promise<void> {
  * deterministic test to depend on: this flushes the current run
  * synchronously first, so the reload that follows is a clean test of load
  * and resume rather than of that race.
+ *
+ * This is the one to call before a reload. `flushAndSnapshot` below reads
+ * back tick/hash/log in the same breath as the flush and deliberately does
+ * not await the write — do not substitute it here.
  */
 export async function flushSave(page: Page): Promise<void> {
   await page.evaluate(() => window.mazeosaurBoard!().flush());
@@ -218,6 +222,13 @@ export async function flushSave(page: Page): Promise<void> {
  * snapshot comes back one tick ahead of what was actually saved. That is
  * ARB-349: `board-entry.spec.ts` compared a resumed run's tick against that
  * inflated snapshot and failed on the coin flip.
+ *
+ * Does NOT await the write (`void board.flush()` inside the evaluate) —
+ * that await is exactly what would let a build-phase tick land between the
+ * flush and the read, the race this helper exists to avoid. That makes it
+ * the wrong helper before a reload: `IndexedDbSaveStore.put` coalesces a
+ * write for up to `COALESCE_MS`, and with the promise discarded nothing
+ * waits for it, so a reload can land on a stale save. Use `flushSave` there.
  */
 export function flushAndSnapshot(page: Page): Promise<{ tick: number; hash: number; log: string }> {
   return page.evaluate(() => {
