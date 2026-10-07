@@ -3,10 +3,13 @@
 // exceeds its budget in bundle-budget.json. Run after `npm run build`;
 // there is nothing to measure before the bundle exists.
 //
-// Matching is extension-agnostic: every file in dist/assets must land in
-// an exclude rule or a budget group, so a new kind of build output (an
-// atlas PNG today, anything else later) has to be budgeted on purpose
-// instead of silently passing because nothing was looking for it.
+// Matching is extension-agnostic: every entry in dist/assets — files and
+// directories alike — must land in an exclude rule or a budget group, so
+// a new kind of build output (an atlas PNG today, anything else later)
+// has to be budgeted on purpose instead of silently passing because
+// nothing was looking for it. A group can also require `minFiles` so a
+// group that is never supposed to be empty (vendor, app) fails loud
+// rather than reporting a vacuous "ok" when its one member goes missing.
 import { gzipSync } from "node:zlib";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -27,11 +30,22 @@ try {
   process.exit(1);
 }
 
-const files = entries.filter((e) => e.isFile()).map((e) => e.name);
-
-if (files.length === 0) {
+if (entries.length === 0) {
   console.error(`no files found in ${assetsDir}`);
   process.exit(1);
+}
+
+const files = [];
+// A directory can never match a filename-matching exclude rule or budget
+// group, so it starts in `unmatched` and stays there — the same failure
+// a stray unbudgeted file gets, not a silent skip.
+const unmatched = new Set();
+for (const entry of entries) {
+  if (entry.isFile()) {
+    files.push(entry.name);
+  } else {
+    unmatched.add(entry.name);
+  }
 }
 
 let failed = false;
@@ -45,7 +59,7 @@ for (const rule of budget.exclude ?? []) {
 }
 
 const remaining = files.filter((f) => !excluded.has(f));
-const unmatched = new Set(remaining);
+for (const f of remaining) unmatched.add(f);
 
 for (const group of budget.groups) {
   const re = new RegExp(group.match);
@@ -58,17 +72,19 @@ for (const group of budget.groups) {
   }, 0);
 
   const over = gzipBytes > group.gzipBudgetBytes;
-  if (over) failed = true;
+  const tooFew = (group.minFiles ?? 0) > members.length;
+  if (over || tooFew) failed = true;
 
-  const status = over ? "OVER" : "ok";
+  const status = over ? "OVER" : tooFew ? "EMPTY" : "ok";
+  const minNote = group.minFiles ? `, min ${group.minFiles} file(s)` : "";
   console.log(
     `[${status}] ${group.name}: ${(gzipBytes / 1000).toFixed(1)} kB gzip ` +
-      `(budget ${(group.gzipBudgetBytes / 1000).toFixed(1)} kB) — ${members.join(", ") || "(no files matched)"}`,
+      `(budget ${(group.gzipBudgetBytes / 1000).toFixed(1)} kB${minNote}) — ${members.join(", ") || "(no files matched)"}`,
   );
 }
 
 if (unmatched.size > 0) {
-  console.error(`file(s) matched no exclude rule or budget group: ${[...unmatched].join(", ")}`);
+  console.error(`entr(y/ies) matched no exclude rule or budget group: ${[...unmatched].join(", ")}`);
   failed = true;
 }
 
