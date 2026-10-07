@@ -6,11 +6,13 @@ import {
   type BuildStamp,
   type DinoDef,
   type GameEvent,
+  type Kind,
   type Refusal,
   type RunSave,
   type SaveDocument,
 } from "@mazeosaur/sim";
 import { content, hatchlings } from "@mazeosaur/content";
+import { ATLAS, STRIKE_FRAMES, TOY_BOX_SCALE, loadToyBox } from "./atlas.js";
 import {
   BOARD_H,
   CANVAS_H,
@@ -131,6 +133,57 @@ interface Effect {
   life: number;
 }
 
+/**
+ * One drawn attack strike: §5.4.1's second `hit` layer, which says *which
+ * kind* is hitting where the tracer says which invader is being hit. Not an
+ * `Effect` because it is drawn with a sprite out of the toy-box atlas
+ * rather than into `dynGfx`, and because its clip outlives the tracer.
+ *
+ * `x`/`y` are the world centre of the dinosaur's own cell, resolved once at
+ * the event. A dinosaur does not move, so there is nothing to re-resolve
+ * per frame, and a strike whose thrower was sold still finishes playing
+ * where the animal stood — which is right: the hit it draws did happen.
+ */
+interface Strike {
+  kind: Kind;
+  x: number;
+  y: number;
+  ttl: number;
+  life: number;
+}
+
+/**
+ * §5.4.1's three steps, in the order they are held: the wind-up for 50ms,
+ * full extension for 90ms, and the mark left behind for 120ms while the
+ * whole thing fades. These are the `hit` row's 80ms *spent* rather than
+ * added to it.
+ *
+ * Held as elapsed-time boundaries compared against one countdown, not as
+ * three timers: a strike ages on `this.effects`' stopped clock, so a
+ * paused board holds its frame instead of finishing the clip behind a
+ * frozen game.
+ */
+const STRIKE_STEP_MS = [50, 90, 120] as const;
+const STRIKE_TTL = STRIKE_STEP_MS[0] + STRIKE_STEP_MS[1] + STRIKE_STEP_MS[2];
+/**
+ * Reduced motion (§7): the clip does not play. Step 2 alone, for its own
+ * 90ms, fading — it is the frame that carries the kind, so the information
+ * survives and the movement does not.
+ */
+const STRIKE_REDUCED_MS = STRIKE_STEP_MS[1];
+/**
+ * How many strikes may be live at once, which is also the cap on the
+ * sprite pool.
+ *
+ * §2's target is ~250 dinosaurs. A strike lives 260ms and the shortest
+ * cooldown in content is 26 ticks — 1.3s, or 433ms at 3x — so one live
+ * strike per dinosaur is the real ceiling and this is it, rounded up.
+ * Past the cap a strike is simply not drawn, and nothing else changes:
+ * §5.4.1 is explicit that the hit is never gated behind the clip, so the
+ * damage, the tracer and the sound have all already landed.
+ */
+const STRIKE_MAX = 256;
+
 interface Button {
   bg: Phaser.GameObjects.Rectangle;
   label: Phaser.GameObjects.Text;
@@ -211,6 +264,36 @@ export class BoardScene extends Phaser.Scene {
   private abandoned!: boolean;
   private prevInvaders!: Map<number, PrevInvader>;
   private effects!: Effect[];
+  /** §5.4.1's live strikes, capped at `STRIKE_MAX`. */
+  private strikes!: Strike[];
+  /**
+   * The strikes' own layer, and depth is the whole reason it exists.
+   * Nothing in this scene sets a depth, so render order is display-list
+   * order — and a sprite allocated lazily during `update()` would be added
+   * after `buildHud()` ran and draw *over* the HUD. A container created
+   * here, between `dynGfx` and the HUD, holds the entire pool at the
+   * board's slot however late a member of it is allocated.
+   */
+  private strikeLayer!: Phaser.GameObjects.Container;
+  /**
+   * Re-used strike sprites, grown to the board's high-water mark and never
+   * freed inside a run. §5.4.1 runs per attack at up to 3x on a phone, so
+   * the draw path allocates nothing: a frame assigns the live strikes to
+   * the front of this pool and hides the tail.
+   *
+   * This and `strikeLayer` both hold display objects that `create()`
+   * destroys, which is §5.2's reset rule and the reason
+   * `tests/client/restart-regression.spec.ts` exists: a restart that
+   * inherited either would draw through a destroyed sprite on its first
+   * attack and freeze the canvas with the sim running underneath.
+   */
+  private strikePool!: Phaser.GameObjects.Sprite[];
+  /**
+   * `prefers-reduced-motion`, read once per run rather than per strike.
+   * Per-run rather than per-instance because `create()` re-runs and the
+   * setting can change between two runs of the same session.
+   */
+  private reducedMotion!: boolean;
 
   /**
    * Section 6's sound table and its limiter. Built fresh here rather than
@@ -371,6 +454,20 @@ export class BoardScene extends Phaser.Scene {
     this.sys.settings.data = {};
   }
 
+  /**
+   * The only thing this scene loads, and Phaser's own contract is that it
+   * completes before `create()` runs — so `create()` may name a frame
+   * without checking whether the texture arrived.
+   *
+   * Where the bytes come from is decision 0005: the bundler, as a
+   * content-hashed URL under `/assets/`, and never out of
+   * `apps/web/public/`. See `atlas.ts`, which also makes this idempotent
+   * across a restart.
+   */
+  preload(): void {
+    loadToyBox(this.load);
+  }
+
   create(): void {
     // scene.restart() re-runs create() on the same instance: every field
     // that refers to a display object or to the previous run must reset
@@ -438,6 +535,11 @@ export class BoardScene extends Phaser.Scene {
     this.abandoned = false;
     this.prevInvaders = new Map();
     this.effects = [];
+    this.strikes = [];
+    // Read here rather than at the declaration so a player who turns the
+    // setting on and taps "Again" gets the reduced clip on the next run
+    // without reloading.
+    this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // A fresh bus per run, which is the whole of the restart hazard for
     // audio: no field here holds a display object, but the limiter's
     // timestamps are per-run state and `this.time.now` does not restart
@@ -472,6 +574,11 @@ export class BoardScene extends Phaser.Scene {
     this.staticGfx = this.add.graphics();
     this.towerGfx = this.add.graphics();
     this.dynGfx = this.add.graphics();
+    // Above the board and below the HUD, which is display-list order and
+    // the reason the pool is parented rather than added to the scene: see
+    // `strikeLayer`. Created here, so `buildHud()` below still wins.
+    this.strikeLayer = this.add.container(0, 0);
+    this.strikePool = [];
     this.drawStatic();
     this.buildHud();
     this.wireInput();
@@ -524,10 +631,17 @@ export class BoardScene extends Phaser.Scene {
     if (!this.paused) {
       for (const e of this.effects) e.life -= delta;
       this.effects = this.effects.filter((e) => e.life > 0);
+      for (const s of this.strikes) s.life -= delta;
+      this.strikes = this.strikes.filter((s) => s.life > 0);
     }
 
     if (this.towersDirty) this.drawTowers();
     this.drawDynamic(alpha);
+    // Outside the `paused` guard on purpose: a paused board still has to
+    // re-assert where its strikes are, because the pool is shared and the
+    // sprite one of them is using may have been handed to a different
+    // strike on the frame the pause landed.
+    this.drawStrikes();
     this.refreshHud();
   }
 
@@ -594,6 +708,22 @@ export class BoardScene extends Phaser.Scene {
           const to = inv ? this.worldFromMilli(inv.px, inv.py) : from;
           const hue = KIND_COLOR[g.dinoDef(d).kind];
           this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: hue, ttl: 120, life: 120 });
+          // §5.4.1: `hit` is two layers with one job each, and both are
+          // drawn. The tracer above says *which invader* — on its own it is
+          // one shape for all six kinds with the colour doing all the work,
+          // which is the gap the owner named on the demo. The strike says
+          // *which kind*: the animal's own weapon, on the animal's own
+          // cell, never pointed, because the tracer already carries the
+          // direction and an isometric block render cannot be rotated
+          // without reading as a second camera.
+          //
+          // Capped rather than queued. Past `STRIKE_MAX` the strike is
+          // dropped and nothing else is: the damage is already committed in
+          // the sim, and the tracer and the sound are unaffected.
+          if (this.strikes.length < STRIKE_MAX) {
+            const ttl = this.reducedMotion ? STRIKE_REDUCED_MS : STRIKE_TTL;
+            this.strikes.push({ kind: g.dinoDef(d).kind, x: from.x, y: from.y, ttl, life: ttl });
+          }
           // §6 fires `hit` on *damage dealt*, and a shield eats the whole
           // attack for `damage: 0` — the ring that draws it is the feedback
           // there, and a tick that did no damage has no tick to make. This
@@ -977,6 +1107,68 @@ export class BoardScene extends Phaser.Scene {
           break;
       }
     }
+  }
+
+  /**
+   * §5.4.1's strike layer. One pooled sprite per live strike, taken from
+   * the front of the pool in order and the tail hidden, so a frame
+   * allocates only when the board has more strikes up at once than it has
+   * ever had before — and never past `STRIKE_MAX`.
+   *
+   * Which sprite draws which strike is deliberately not stable between
+   * frames. Nothing about a strike is carried on the sprite: the frame, the
+   * position, the alpha and the visibility are all written every frame from
+   * the `Strike` record, so a sprite handed from an expiring strike to a
+   * new one cannot bring anything of the old one with it.
+   */
+  private drawStrikes(): void {
+    let used = 0;
+    for (const s of this.strikes) {
+      const sprite = this.strikePool[used] ?? this.newStrikeSprite();
+      const elapsed = s.ttl - s.life;
+      // Reduced motion pins step 2 — the frame that reads, and the one that
+      // carries the kind. Otherwise the three steps run on the elapsed
+      // boundaries, holding step 3 to the end: it is the mark left behind
+      // and holds no weapon, which is what lets the fade sit on it without
+      // the clip looking like it rewinds.
+      const step = this.reducedMotion
+        ? 1
+        : elapsed < STRIKE_STEP_MS[0]
+          ? 0
+          : elapsed < STRIKE_STEP_MS[0] + STRIKE_STEP_MS[1]
+            ? 1
+            : 2;
+      // One expression for both modes: the fade is the last step's own
+      // duration, and during the steps before it `life` is larger than that
+      // so this clamps to fully opaque.
+      const fade = this.reducedMotion ? STRIKE_REDUCED_MS : STRIKE_STEP_MS[2];
+      sprite.setFrame(STRIKE_FRAMES[s.kind][step]);
+      sprite.setPosition(s.x, s.y);
+      sprite.setAlpha(Math.min(1, s.life / fade));
+      sprite.setVisible(true);
+      used++;
+    }
+    for (let i = used; i < this.strikePool.length; i++) this.strikePool[i]?.setVisible(false);
+  }
+
+  /**
+   * Grows the pool by one. The scale is the atlas's own — `TOY_BOX_SCALE`,
+   * which is 45/64 and **not** 45/128: a strike frame is two authored
+   * squares wide to buy the swing its reach, at the animal's own world
+   * scale, so reading the frame's 128 draws every strike at half the size
+   * of the dinosaur throwing it.
+   *
+   * The origin is the cell centre rather than a pair of feet, which is the
+   * one line of §5.5's rule that a strike changes: it is anchored on the
+   * cell, not stood on the ground.
+   */
+  private newStrikeSprite(): Phaser.GameObjects.Sprite {
+    const sprite = this.add.sprite(0, 0, ATLAS.strikes, STRIKE_FRAMES.raptor[1]).setOrigin(0.5, 0.5).setScale(TOY_BOX_SCALE);
+    // Reparented, not merely positioned: `add.sprite` appends to the
+    // scene's display list, which by now is after the HUD.
+    this.strikeLayer.add(sprite);
+    this.strikePool.push(sprite);
+    return sprite;
   }
 
   // ----------------------------------------------------------------- HUD
