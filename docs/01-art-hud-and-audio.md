@@ -1077,13 +1077,14 @@ placement did not happen — animating it would say that it nearly did.
 
 ### 5.4.1 The attack strike: the hit says which kind is hitting
 
-The `hit` row above is a tracer in the dinosaur's hue and nothing else, and
-on a live board that is one shape for all six kinds with the colour doing
-all the work. The owner looked at the demo and said so: *"the elemental
-factors does get reflected well with the color, but the attack animation
-sprite will need to properly reflect this."* Colour is never the only
-channel — section 3 holds that line for the dinosaurs themselves and the
-attack effect was the place it was not held.
+Before this section split it, the `hit` effect was a tracer in the
+dinosaur's hue and nothing else, and on a live board that was one shape for
+all six kinds with the colour doing all the work. The owner looked at the
+demo and said so: *"the elemental factors does get reflected well with the
+color, but the attack animation sprite will need to properly reflect
+this."* Colour is never the only channel — section 3 holds that line for
+the dinosaurs themselves and the attack effect was the place it was not
+held.
 
 So `hit` is two things, with one job each:
 
