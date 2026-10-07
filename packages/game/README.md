@@ -94,6 +94,23 @@ ports themselves are section 2 of
   rather than two copies. Four lines and not one is the design decision the
   file argues for; `tests/client/dino-sheet.spec.ts` measures all four of
   them for all 18 defs in a running client.
+- `src/atlas.ts` — the toy-box art's load path: `loadToyBox()`, which
+  queues all three atlases in one call, the `ATLAS` texture keys,
+  `TOY_BOX_SCALE` and the `STRIKE_FRAMES` table. The PNGs are imported as
+  `?url` so the bundler emits them content-hashed under `/assets/`, and the
+  JSON is imported by value and handed straight to Phaser's loader; nothing
+  is copied into `apps/web/public/`, which `sw.js` would not cache.
+  [Decision 0005](../../docs/decisions/0005-atlases-reach-the-client-through-the-bundler.md)
+  is why. `TOY_BOX_SCALE` is read off the atlas's own `meta` rather than
+  retyped, which is what makes section 5.5's two traps survivable: a strike
+  frame is two authored squares wide, and the denominator is still the
+  authored 64. `test/atlas.test.ts` pins the geometry and both directions
+  of the frame table.
+- `src/assets.d.ts` — the ambient `*.png?url` module. This package sets
+  `"types": []` and so cannot take this from `vite/client`; `src/atlas.ts`
+  pulls the file in with a triple-slash reference, which is what makes one
+  declaration serve the `packages/game`, `apps/web` and `tests/client`
+  typechecks rather than only the first.
 - `src/theme.ts` — colours and text styles, and nothing geometric.
 
 `mountGame` registers `board` and `results` and starts the first of them;
@@ -129,6 +146,9 @@ the transitions between them — is section 5 of
 
 ## Verifying a change
 
+`test/atlas.test.ts` covers the toy-box atlases' geometry and the strike
+frame table in both directions — a kind with no art, or art the client
+cannot name, fails there in milliseconds rather than in a browser;
 `test/profile.test.ts` covers the pure accounting in `src/profile.ts`,
 `test/resume.test.ts` covers the resume-vs-replay decision in
 `src/resume.ts`, `test/audio.test.ts` covers the `hit`/`kill` cap in
@@ -141,6 +161,11 @@ driving it (`npm run dev`, then port 5173) or by a browser spec under
 actually built — `hud-hit-targets.spec.ts` exists because
 `test/layout.test.ts` was green for the whole period in which every
 control on screen was under the 44pt floor, and nothing compared the two.
+`attack-strike.spec.ts` is the same shape for section 5.4.1: it reads
+`strikeLayerDrawn` and `boardLayerOrder` off a running client, because
+`test/atlas.test.ts` cannot see a renderer that names the right frame on a
+sprite it never shows, scales by the strike frame's own 128 instead of the
+authored 64, or draws the tracer under the silhouette instead of over it.
 Three things have produced false conclusions:
 
 - **Tap a tray card and check it did not also cancel.** Placement is two
