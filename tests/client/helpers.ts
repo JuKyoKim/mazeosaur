@@ -230,12 +230,15 @@ export function selectionSnapshot(page: Page): Promise<{ kindId: string | null; 
 }
 
 /**
- * Every HUD control's geometry as the renderer built it
- * (`BoardScene.hudTargets`), which is the only thing that can tell a
- * layout constant from the box actually on screen.
+ * The profile `flush()` last wrote: the award a finished run actually
+ * banked.
+ *
+ * `runsStarted` is in the shape because it is what keeps "the profile did
+ * not move" from being vacuous across a re-entry: a spec that drives
+ * `Again` can assert the two banked figures held while the counter that
+ * *should* move did.
  */
-/** The profile `flush()` last wrote: the award a finished run actually banked. */
-export function bankedProfile(page: Page): Promise<{ fossilsEarned: number; runsFinished: number }> {
+export function bankedProfile(page: Page): Promise<{ fossilsEarned: number; runsFinished: number; runsStarted: number }> {
   return page.evaluate(() => window.mazeosaurBoard!().bankedProfile);
 }
 
@@ -244,6 +247,11 @@ export function toastShown(page: Page): Promise<boolean> {
   return page.evaluate(() => window.mazeosaurBoard!().toastShown);
 }
 
+/**
+ * Every HUD control's geometry as the renderer built it
+ * (`BoardScene.hudTargets`), which is the only thing that can tell a
+ * layout constant from the box actually on screen.
+ */
 export function hudTargets(page: Page): Promise<{ name: string; x: number; y: number; w: number; h: number }[]> {
   return page.evaluate(() => window.mazeosaurBoard!().hudTargets);
 }

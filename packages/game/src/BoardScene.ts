@@ -1940,24 +1940,6 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Every control a finger is supposed to be able to hit, as the renderer
-   * actually built it: the live rectangle's position and size, read off the
-   * display object rather than off `layout.ts`.
-   *
-   * The point is the gap between those two things.
-   * `packages/game/test/layout.test.ts` already proves the *constants*
-   * clear the 44pt floor, and they did while every control on screen was
-   * under it — because `buildHud` was writing its own numbers and nothing
-   * compared the two. That is the defect ARB-186 fixed, and this is what
-   * makes it unable to come back quietly:
-   * `tests/client/hud-hit-targets.spec.ts` reads this out of a running
-   * client and measures it.
-   *
-   * Both trays are reported, whichever is on screen: a hidden control still
-   * has its geometry, and the alternative is a test that silently measures
-   * five of the seven.
-   */
-  /**
    * The profile as `flush()` last wrote it, for tests and for the console.
    *
    * Exists so a browser spec can hold the award on the results screen
@@ -1978,6 +1960,24 @@ export class BoardScene extends Phaser.Scene {
     return this.toastPanel.visible;
   }
 
+  /**
+   * Every control a finger is supposed to be able to hit, as the renderer
+   * actually built it: the live rectangle's position and size, read off the
+   * display object rather than off `layout.ts`.
+   *
+   * The point is the gap between those two things.
+   * `packages/game/test/layout.test.ts` already proves the *constants*
+   * clear the 44pt floor, and they did while every control on screen was
+   * under it — because `buildHud` was writing its own numbers and nothing
+   * compared the two. That is the defect ARB-186 fixed, and this is what
+   * makes it unable to come back quietly:
+   * `tests/client/hud-hit-targets.spec.ts` reads this out of a running
+   * client and measures it.
+   *
+   * Both trays are reported, whichever is on screen: a hidden control still
+   * has its geometry, and the alternative is a test that silently measures
+   * five of the seven.
+   */
   get hudTargets(): { name: string; x: number; y: number; w: number; h: number }[] {
     const box = (name: string, r: Phaser.GameObjects.Rectangle) => ({
       name,

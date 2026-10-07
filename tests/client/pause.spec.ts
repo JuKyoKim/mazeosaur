@@ -290,6 +290,13 @@ test("Again after a quit gives back a board that takes a tap", async ({ page }) 
   const errors = trackPageErrors(page);
   await openGame(page, SEED);
 
+  // Read before the quit so the assertion after `Again` spans the whole
+  // re-entry. The test above stops at the quit, which leaves the question
+  // this one answers open: `create()` writes the profile on the fresh-run
+  // branch, so "an ended run pays nothing" has to survive the write that
+  // starting the next one makes.
+  const banked = await bankedProfile(page);
+
   await place(page, CELL);
   expect((await simSnapshot(page)).dinos).toBe(1);
 
@@ -311,6 +318,15 @@ test("Again after a quit gives back a board that takes a tap", async ({ page }) 
   expect(await page.evaluate(() => window.mazeosaurBoard!().sim.seed)).toBe(SEED);
   expect(await clockSnapshot(page)).toMatchObject({ paused: false, abandoned: false, speed: 1 });
   await waitForTickAdvance(page, fresh.tick);
+
+  // The quit still paid nothing, one re-entry later. Not `toEqual`: the
+  // next run is a `runsStarted`, and that counter moving is what says the
+  // profile was rewritten rather than read back unchanged — the two banked
+  // figures holding across a write is the claim, not the profile sitting
+  // untouched.
+  const afterAgain = await bankedProfile(page);
+  expect(afterAgain).toMatchObject({ fossilsEarned: banked.fossilsEarned, runsFinished: banked.runsFinished });
+  expect(afterAgain.runsStarted).toBe(banked.runsStarted + 1);
 
   // The assertion the regression turns on: two taps, one dinosaur. A
   // stale `overlay` makes this 0 while everything above still passes.
