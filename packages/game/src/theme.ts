@@ -32,7 +32,14 @@ export const COLORS = {
   refusalText: "#e74c3c",
   attack: 0xfdfefe,
   button: 0x2e4a38,
-  buttonActive: 0x3f7a55,
+  /**
+   * Send, the timer bar, Resume and the results screen's Again. §1 of
+   * docs/01-art-hud-and-audio.md puts a 4.5:1 floor under HUD body text, and
+   * M2's 0x3f7a55 held `text` at 4.44:1 — under it. This value is 5.57:1.
+   * `packages/game/test/palette-agreement.test.ts` is what keeps it equal to
+   * the art tool's copy, which is the copy `npm run art:check` measures.
+   */
+  buttonActive: 0x37694b,
   buttonDanger: 0x7a3f3f,
   hpBack: 0x2c3e50,
   hpFront: 0x2ecc71,
