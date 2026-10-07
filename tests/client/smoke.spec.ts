@@ -163,12 +163,14 @@ test("full run: four select+tap pairs, grow, sell, send, leak, lose, play again 
   // leak loses the nest, the board hands off to `results`, and the test
   // clicks the real "Again" button on it.
   //
-  // Calling `scene.restart()` straight out of a live migration would not
-  // test this any more. Since saves landed, `flush()` keeps the in-flight
-  // run on `doc`, and a restart mid-run therefore *resumes* it (see the
-  // restart note in `BoardScene.create()`) — which is correct, and is why
-  // the only way back into `board` is through a screen that cannot appear
-  // until the won/lost `flush()` has written `run: null`.
+  // Restarting the scene straight out of a live migration would not test
+  // this any more, and no longer for the reason it once didn't: since
+  // §5.3's entry mode landed, an `again` does not read `doc.run` at all, so
+  // a mid-run restart is a fresh run on the same seed whatever the document
+  // holds (`pause.spec.ts` drives that path from its button, and
+  // `board-entry.spec.ts` drives the modes directly). What is left here
+  // that nothing else covers is the player's own route out of a lost run:
+  // the handoff to `results` and the real "Again" on it.
   await loseOnNextLeak(page);
   await fastForwardUntilRunOver(page);
   await waitAFrame(page);

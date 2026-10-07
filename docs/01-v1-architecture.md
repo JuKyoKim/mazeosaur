@@ -784,20 +784,24 @@ forgotten. One assignment site, no judgement call.
 
 **A resume is start-shaped, not instance-shaped.** `MountOptions.save.run`
 and `MountOptions.resumed` describe the *first* `create()` of `board` and
-nothing after it. `scene.restart()` is "again (same seed)" in section 5.3 —
-a fresh `Game` on `runSeed` — so the second `create()` must not read either
-one again. A field that still holds the mount's run on the second pass
-resurrects the run that just ended every time Play again is pressed, and
-once `resumed` exists it hands back a `Game` that run already played to
-its end.
+nothing after it, so a field that still holds the mount's run on the second
+pass resurrects the run that just ended every time Again is pressed — and
+`resumed` hands back a `Game` that run already played to its end.
 
-The shape that gets this right is **consume once**: `create()` reads the
-resume and clears it in the same block, so the restart path falls through
-to the fresh-run branch by construction rather than by a flag somebody has
-to remember to check. `BoardScene` does this with `initialDoc`. It is the
-same rule as the one above — the second `create()` sees only what
-`create()` assigned — applied to the values that come from the mount
-rather than from the scene.
+Two shapes keep that true, and neither is a flag somebody has to remember
+to check. `MountOptions.resumed` is **consumed once**: `create()` reads it
+and clears it in the same block, so a later entry cannot receive it whatever
+mode it arrives in. And the mount's document is not a second field at all —
+it is the first value of `doc`, assigned in the constructor, which `flush()`
+keeps current from then on. There is no `initialDoc` for a re-entry to read
+instead, so there is nothing to resurrect. Which run a `create()` plays is
+section 5.3's entry mode and nothing else.
+
+`doc` is the one field here the declaration rule's *spirit* does not reach,
+and deliberately: it is not per-run state. It spans every run a mount plays,
+because `profile` accumulates across them. The rule as written still holds
+for it — no initialiser at the declaration — and the hazard the rule exists
+for cannot apply, because `doc` holds no display object.
 
 `no-restricted-syntax` enforces the declaration rule over
 `packages/game/src/**/*Scene.ts`.
@@ -833,19 +837,51 @@ with the first, and the in-board overlay that used to hold the quit path
 had already grown its own geometry, its own button and a reset contract
 only it depended on.
 
-**Every way into `board` says which way it is.** There are three — a fresh
-run from `title`, a resume from `title`, and *again* from `results` — and
-what separates them is only where the seed comes from. Phaser hands
-`init(data)` whatever `scene.start("board", data)` passed, so the entry
-intent is **data on the transition, not state on the scene**: `board`
-takes `{ mode: "fresh" | "resume" | "again" }` and `create()` reads the
-seed from the mode. `BoardScene` infers it today from `hasStarted`, an
-instance field assigned in the constructor, and that is sound only while
-`scene.restart()` is the single way back in. The second entry point splits
-"this is not my first `create()`" from "keep the seed", which is the same
-mistake as section 5.2's in a different field, and `hasStarted` answers
-the wrong one of the two. Whichever of `title` and `results` lands first
-converts it, and the one that lands second is then only a new caller.
+**Every way into `board` says which way it is.** There are three, and what
+separates them is only where the seed comes from. Phaser hands `init(data)`
+whatever `scene.start("board", data)` passed, so the entry intent is **data
+on the transition, not state on the scene**: `board` takes a `BoardEntry`
+(`packages/game/src/entry.ts`).
+
+| mode | the seed | the document's run |
+| --- | --- | --- |
+| `{ mode: "fresh" }` | `nextSeed()` | ignored, whatever it holds |
+| `{ mode: "resume" }` | `doc.run.seed` | played; a document with none falls through to a fresh run |
+| `{ mode: "again", seed }` | the seed passed | ignored |
+
+Two consequences, and they are the reason for the shape:
+
+- **Only `resume` reads `doc.run`.** Nothing has to clear the document's run
+  before entering `board` to avoid resuming by accident. That used to be the
+  contract, kept by convention at each producer — `showResults()` ordered
+  its two statements for it, `restartRun()` called `abandonRun()` for it —
+  and `title`'s New run is the caller that would have broken it, because it
+  sits on top of exactly the save it must not resume.
+- **The seed rides the transition.** An `again` is handed its seed rather
+  than finding it on a field the previous run left behind, so `create()`
+  reads no per-run state across a restart at all. That is section 5.2's rule
+  applied to the one field that used to be allowed to break it, and it is
+  what makes `again` expressible by a scene that did not play the run.
+
+The entry is **consumed** in `init()`, not merely read. Phaser keeps
+`settings.data` from the previous start, so a caller that passes nothing
+inherits the last caller's mode instead of arriving as `undefined`;
+`BoardScene.init` clears it after reading, which turns a bare
+`scene.start("board")` into a throw from `boardEntry()` at the transition
+that got it wrong. That is what closes the *third producer* hazard: before
+the mode, an entry made without having finished a run first resumed mid-run
+instead of restarting, silently, and the symptom looked like the save system
+rather than like a transition.
+
+The producers today are `mountGame` (`RESUME` when the loaded document has a
+run, `FRESH` when it does not), `results`' Again (`again`, on the seed
+section 5.4 put in the `RunSummary`), and the pause menu's Restart run
+(`again`, on the seed in play). `title` is the fourth and needs no change
+here: New run is `FRESH`, Continue is `RESUME`, and `mountGame` starts
+`title` rather than `board`. Note what `mountGame` has to do to pass an
+entry at all — Phaser's config auto-start has no data channel, so the scene
+list is empty and `scene.add(key, scene, true, entry)` registers `board`
+with its entry instead.
 
 ### 5.4 The run is paid for in `board`, before `results` is reached
 

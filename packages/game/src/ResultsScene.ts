@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { CANVAS_H, CANVAS_W, GUTTER, HUD_H, HUD_Y, RESULTS, TYPE } from "./layout.js";
 import { COLORS, KIND_COLOR, hexCss, text } from "./theme.js";
+import { again } from "./entry.js";
 import type { RunSummary } from "./summary.js";
 
 /**
@@ -100,17 +101,20 @@ export class ResultsScene extends Phaser.Scene {
     // Again sits in the HUD band at the same height Send was, so the thumb
     // does not move between the run that ended and the next one (§9).
     this.button(RESULTS.again, "Again", () => {
-      // Back through `board`, which rebuilds the `Game`. §5.3 is "again
-      // (same seed)": `BoardScene` keeps `runSeed` across a re-entry and
-      // only asks `nextSeed()` on its first create(), so the seed is the
-      // scene's to hold and not this screen's to pass.
+      // Back through `board`, which rebuilds the `Game`. §5.3's `again
+      // (same seed)`, with the seed passed rather than assumed: it is data
+      // on the transition, which is what lets `board` stop inferring the
+      // entry from a field that outlived the previous run. The summary
+      // already carries the number — §5.4 put `seed` there so a run can be
+      // reproduced — so this screen hands back what it was given rather
+      // than learning anything new.
       //
       // `start` and not `resume`: the board is *paused* behind this screen
       // (see `BoardScene.showResults`), and resuming it would hand the
       // player back the run they just finished — or, on the `abandoned`
       // path, the one they chose to walk out of. `start` re-runs its `create()`,
       // which is the fresh run — and stops this scene on the way out.
-      this.scene.start("board");
+      this.scene.start("board", again(s.seed));
     });
 
     // §5.3's `results ──▶ title` exit is not here, and that is deliberate

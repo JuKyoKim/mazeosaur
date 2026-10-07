@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BoardScene } from "./BoardScene.js";
 import { ResultsScene } from "./ResultsScene.js";
+import { FRESH, RESUME } from "./entry.js";
 import { CANVAS_H, CANVAS_W } from "./layout.js";
 import { COLORS } from "./theme.js";
 import { SERVICES_KEY, type GameHandle, type MountOptions } from "./platform.js";
@@ -27,12 +28,32 @@ export function mountGame(opts: MountOptions): GameHandle {
     // preBoot runs before the first scene's create(), so the services are
     // in the registry by the time anything asks for them.
     callbacks: { preBoot: (game) => game.registry.set(SERVICES_KEY, opts.services) },
-    // `board` first: Phaser auto-starts only the first scene in the list,
-    // so `results` is registered and idle until `board` hands it a
-    // `RunSummary`. §5.1's third scene, `title`, joins this list when it
-    // lands and takes the first slot with it.
-    scene: [scene, new ResultsScene()],
+    // Empty, and the scenes are added below instead. Phaser auto-starts
+    // the first scene in this list with no data channel — `settings.data`
+    // for a config auto-start is `{}` — and §5.3 requires every entry into
+    // `board` to carry its mode, the mount's first one included. So the
+    // list stays empty and `add()` does the registering, because that is
+    // the overload that takes the data.
+    scene: [],
   });
+
+  // `results` first, so it is registered before anything can hand it a
+  // `RunSummary`, and idle until something does: `autoStart` is false.
+  phaser.scene.add("results", new ResultsScene());
+  // §5.3: the mount is an entry into `board` like any other, so it says
+  // which way it is. Either there is a run to resume or there is not — the
+  // shell has already dropped an unresumable one (§1.5), so that is the
+  // whole of the question here. `add()` carries the data through both of
+  // Phaser's paths: pre-boot it is held and injected into `settings.data`
+  // when the scene is created, and post-boot (a game whose boot already
+  // finished synchronously) it is assigned before the start. Either way
+  // `init()` sees it.
+  //
+  // §5.1's third scene, `title`, takes this slot when it lands: it becomes
+  // the scene the mount starts, with `FRESH`/`RESUME` becoming its
+  // decision to make and to pass on. `board` does not change to acquire
+  // that caller, which is what the mode being data buys.
+  phaser.scene.add("board", scene, true, opts.save.run ? RESUME : FRESH);
 
   return {
     phaser,
@@ -43,6 +64,10 @@ export function mountGame(opts: MountOptions): GameHandle {
 
 export { BoardScene } from "./BoardScene.js";
 export { ResultsScene } from "./ResultsScene.js";
+// §5.3's entry contract. Exported because the callers of `board` are not
+// all in this package: the client harness drives the transitions a finger
+// cannot reach, and `title` will be the third producer.
+export { FRESH, RESUME, again, boardEntry, type BoardEntry } from "./entry.js";
 export { packFrom, runSummary, type PackEntry, type RunSummary } from "./summary.js";
 export {
   cloudFeatures,
