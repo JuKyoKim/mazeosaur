@@ -155,15 +155,34 @@ interface Strike {
 /**
  * §5.4.1's three steps, in the order they are held: the wind-up for 50ms,
  * full extension for 90ms, and the mark left behind for 120ms while the
- * whole thing fades. These are the `hit` row's 80ms *spent* rather than
- * added to it.
+ * whole thing fades.
  *
  * Held as elapsed-time boundaries compared against one countdown, not as
- * three timers: a strike ages on `this.effects`' stopped clock, so a
- * paused board holds its frame instead of finishing the clip behind a
- * frozen game.
+ * three timers: a strike ages on the same per-frame `delta` the other four
+ * effects do, so a paused board holds its frame instead of finishing the
+ * clip behind a frozen game.
+ *
+ * **On the player's clock, not the game's.** `update()` multiplies only
+ * the tick accumulator by `this.speed`; effect life is decremented by the
+ * raw frame delta, and these numbers are therefore the same at 1x and at
+ * 3x. Scaling them with the speed would spend the whole strike in about
+ * 87ms at 3x — one or two rendered frames a step on a 60Hz phone — and the
+ * step that would get lost is step 2, the only one that carries the kind.
  */
 const STRIKE_STEP_MS = [50, 90, 120] as const;
+/**
+ * §5.4 gives the tracer 80ms and §5.4.1's table derives from it: the
+ * tracer is drawn through step 1 and the first 30ms of step 2, which is
+ * 80 − 50. The two layers start together and end apart, so the last two
+ * thirds of a strike have no tracer under them — correct, because by then
+ * the invader it pointed at has already taken the damage.
+ *
+ * This was 120 in the code and 80 in the doc before the strike landed. The
+ * gap predated §5.4.1 and did not matter while the tracer was the whole
+ * effect; it does now, because that "first 30ms of step 2" is false by
+ * 40ms against a 120ms tracer.
+ */
+const TRACER_MS = 80;
 const STRIKE_TTL = STRIKE_STEP_MS[0] + STRIKE_STEP_MS[1] + STRIKE_STEP_MS[2];
 /**
  * Reduced motion (§7): the clip does not play. Step 2 alone, for its own
@@ -175,12 +194,12 @@ const STRIKE_REDUCED_MS = STRIKE_STEP_MS[1];
  * How many strikes may be live at once, which is also the cap on the
  * sprite pool.
  *
- * §2's target is ~250 dinosaurs. A strike lives 260ms and the shortest
- * cooldown in content is 26 ticks — 1.3s, or 433ms at 3x — so one live
- * strike per dinosaur is the real ceiling and this is it, rounded up.
- * Past the cap a strike is simply not drawn, and nothing else changes:
- * §5.4.1 is explicit that the hit is never gated behind the clip, so the
- * damage, the tracer and the sound have all already landed.
+ * Keying by dinosaur already bounds this at one per dinosaur, and §2's
+ * target is ~250 of them; this is that, rounded up, as a ceiling on the
+ * pool rather than as the mechanism. Past it a strike is not drawn and
+ * nothing else changes: §5.4.1 is explicit that the hit is never gated
+ * behind the clip, so the damage, the tracer and the sound have all
+ * already landed.
  */
 const STRIKE_MAX = 256;
 
@@ -264,8 +283,16 @@ export class BoardScene extends Phaser.Scene {
   private abandoned!: boolean;
   private prevInvaders!: Map<number, PrevInvader>;
   private effects!: Effect[];
-  /** §5.4.1's live strikes, capped at `STRIKE_MAX`. */
-  private strikes!: Strike[];
+  /**
+   * §5.4.1's live strikes, **by dinosaur id and not one per event**.
+   *
+   * The sim pushes an `attack` per victim, so a `flier-3`'s `targetCount:
+   * 3` and every splash kind emit two or three events in the same tick for
+   * one swing. Keyed by the thrower, that swing is one strike; keyed by the
+   * event it would be three copies of one silhouette stacked on one cell at
+   * triple alpha, and three objects allocated where a swing needs one.
+   */
+  private strikes!: Map<number, Strike>;
   /**
    * The strikes' own layer, and depth is the whole reason it exists.
    * Nothing in this scene sets a depth, so render order is display-list
@@ -275,6 +302,18 @@ export class BoardScene extends Phaser.Scene {
    * board's slot however late a member of it is allocated.
    */
   private strikeLayer!: Phaser.GameObjects.Container;
+  /**
+   * The attack tracers, and the only effect not drawn into `dynGfx`.
+   *
+   * §5.4.1 puts the tracer *over* the strike: it is a 2px line against a
+   * full-cell opaque silhouette, so underneath one it appears to start at
+   * the silhouette's edge rather than at the animal — and with two
+   * dinosaurs in adjacent cells firing at the same invader, which tracer
+   * belongs to which attacker is exactly what is lost. The strike in turn
+   * is over the animals and under the HUD, so the three have to be three
+   * display-list slots and this is the top one.
+   */
+  private tracerGfx!: Phaser.GameObjects.Graphics;
   /**
    * Re-used strike sprites, grown to the board's high-water mark and never
    * freed inside a run. §5.4.1 runs per attack at up to 3x on a phone, so
@@ -535,7 +574,7 @@ export class BoardScene extends Phaser.Scene {
     this.abandoned = false;
     this.prevInvaders = new Map();
     this.effects = [];
-    this.strikes = [];
+    this.strikes = new Map();
     // Read here rather than at the declaration so a player who turns the
     // setting on and taps "Again" gets the reduced clip on the next run
     // without reloading.
@@ -574,11 +613,13 @@ export class BoardScene extends Phaser.Scene {
     this.staticGfx = this.add.graphics();
     this.towerGfx = this.add.graphics();
     this.dynGfx = this.add.graphics();
-    // Above the board and below the HUD, which is display-list order and
-    // the reason the pool is parented rather than added to the scene: see
-    // `strikeLayer`. Created here, so `buildHud()` below still wins.
+    // §5.4.1's three depths, as three display-list slots in order: the
+    // animals in `dynGfx` above, then the strikes over them, then each
+    // strike's own tracer over that. `buildHud()` below takes the next
+    // slot, so all three stay under the HUD.
     this.strikeLayer = this.add.container(0, 0);
     this.strikePool = [];
+    this.tracerGfx = this.add.graphics();
     this.drawStatic();
     this.buildHud();
     this.wireInput();
@@ -631,8 +672,12 @@ export class BoardScene extends Phaser.Scene {
     if (!this.paused) {
       for (const e of this.effects) e.life -= delta;
       this.effects = this.effects.filter((e) => e.life > 0);
-      for (const s of this.strikes) s.life -= delta;
-      this.strikes = this.strikes.filter((s) => s.life > 0);
+      // The same raw `delta`, which is §5.4.1's "the player's clock, not
+      // the game's": only `acc` above is multiplied by `this.speed`.
+      for (const [id, s] of this.strikes) {
+        s.life -= delta;
+        if (s.life <= 0) this.strikes.delete(id);
+      }
     }
 
     if (this.towersDirty) this.drawTowers();
@@ -707,7 +752,7 @@ export class BoardScene extends Phaser.Scene {
           const from = this.cellCenter(d.x, d.y);
           const to = inv ? this.worldFromMilli(inv.px, inv.py) : from;
           const hue = KIND_COLOR[g.dinoDef(d).kind];
-          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: hue, ttl: 120, life: 120 });
+          this.effects.push({ kind: "attack", x: from.x, y: from.y, x2: to.x, y2: to.y, color: hue, ttl: TRACER_MS, life: TRACER_MS });
           // §5.4.1: `hit` is two layers with one job each, and both are
           // drawn. The tracer above says *which invader* — on its own it is
           // one shape for all six kinds with the colour doing all the work,
@@ -717,12 +762,24 @@ export class BoardScene extends Phaser.Scene {
           // direction and an isometric block render cannot be rotated
           // without reading as a second camera.
           //
-          // Capped rather than queued. Past `STRIKE_MAX` the strike is
-          // dropped and nothing else is: the damage is already committed in
-          // the sim, and the tracer and the sound are unaffected.
-          if (this.strikes.length < STRIKE_MAX) {
+          // Drawn for a `damage: 0` attack too, which is why nothing here
+          // reads `e.damage`: a shield eats the whole blow and the sim
+          // still reports the attack. The shield ring says the blow was
+          // eaten; suppressing the strike would say the animal never swung.
+          const live = this.strikes.get(e.dinoId);
+          if (live) {
+            // Sustain, not restart. A weapon already out does not wind up
+            // again, and the wind-up's only job is to say where the weapon
+            // came from — so a further attack from the same dinosaur
+            // resumes at step 2, the frame that carries the kind. Above 1x
+            // the clip outlives the cooldown (raptor-3 is 6 ticks, 300ms,
+            // against 260ms), so this is what holds full extension on
+            // screen for as long as the animal keeps firing instead of
+            // alternating two silhouettes at 10Hz.
+            live.life = live.ttl - (this.reducedMotion ? 0 : STRIKE_STEP_MS[0]);
+          } else if (this.strikes.size < STRIKE_MAX) {
             const ttl = this.reducedMotion ? STRIKE_REDUCED_MS : STRIKE_TTL;
-            this.strikes.push({ kind: g.dinoDef(d).kind, x: from.x, y: from.y, ttl, life: ttl });
+            this.strikes.set(e.dinoId, { kind: g.dinoDef(d).kind, x: from.x, y: from.y, ttl, life: ttl });
           }
           // §6 fires `hit` on *damage dealt*, and a shield eats the whole
           // attack for `damage: 0` — the ring that draws it is the feedback
@@ -1078,12 +1135,17 @@ export class BoardScene extends Phaser.Scene {
     }
 
     // effects
+    //
+    // All but one into `dynGfx`. The attack tracer goes to `tracerGfx`
+    // instead, because §5.4.1 puts it above the strike layer and this
+    // graphics object is below it — see `tracerGfx`.
+    this.tracerGfx.clear();
     for (const e of this.effects) {
       const t = e.life / e.ttl;
       switch (e.kind) {
         case "attack":
-          gfx.lineStyle(2, e.color, t);
-          gfx.lineBetween(e.x, e.y, e.x2 as number, e.y2 as number);
+          this.tracerGfx.lineStyle(2, e.color, t);
+          this.tracerGfx.lineBetween(e.x, e.y, e.x2 as number, e.y2 as number);
           break;
         case "kill":
           gfx.lineStyle(2, e.color, t);
@@ -1123,7 +1185,7 @@ export class BoardScene extends Phaser.Scene {
    */
   private drawStrikes(): void {
     let used = 0;
-    for (const s of this.strikes) {
+    for (const s of this.strikes.values()) {
       const sprite = this.strikePool[used] ?? this.newStrikeSprite();
       const elapsed = s.ttl - s.life;
       // Reduced motion pins step 2 — the frame that reads, and the one that
@@ -2150,6 +2212,61 @@ export class BoardScene extends Phaser.Scene {
    */
   get toastShown(): boolean {
     return this.toastPanel.visible;
+  }
+
+  /**
+   * §5.4.1's strike layer as the renderer actually built it: one entry per
+   * live strike, with the frame, the scale and the position read off the
+   * pooled sprite rather than recomputed from the `Strike` record.
+   *
+   * The point is the gap between those two things, as with `hudTargets`.
+   * `packages/game/test/atlas.test.ts` proves the frame *names* exist and
+   * that the scale rule is 45/64; none of that notices a renderer that
+   * names the right frame on a sprite it never shows, scales by the
+   * frame's own 128 instead of the authored 64, or anchors the strike
+   * anywhere but the thrower's cell. `tests/client/attack-strike.spec.ts`
+   * reads this out of a running client and checks all four, for all six
+   * kinds.
+   *
+   * Read off the pool's *visible* sprites and not off `strikes`, which is
+   * what makes it honest in both directions. A strike the renderer decided
+   * not to show is absent here rather than reported from the record that
+   * wanted it drawn, and between an `attack` event and the next
+   * `drawStrikes()` there is simply nothing yet — a live strike with no
+   * sprite assigned to it is a frame that has not happened, not an error.
+   * The kind is not a field for the same reason: the frame name carries
+   * it, so a caller that wants it reads what was drawn.
+   */
+  get strikeLayerDrawn(): { frame: string; x: number; y: number; scale: number; alpha: number }[] {
+    return this.strikePool
+      .filter((sprite) => sprite.visible)
+      .map((sprite) => ({
+        frame: String(sprite.frame.name),
+        x: sprite.x,
+        y: sprite.y,
+        scale: sprite.scaleX,
+        alpha: sprite.alpha,
+      }));
+  }
+
+  /**
+   * §5.4.1's depth rule, as the renderer will actually resolve it: the four
+   * layers sorted by their real display-list index.
+   *
+   * Nothing in this scene sets a `depth`, so render order *is* display-list
+   * order, and the order these four objects are constructed in `create()`
+   * is the whole mechanism. That makes it the kind of rule a later edit
+   * breaks by adding one `this.add` in the wrong place — with no error, and
+   * with a board that still looks almost right.
+   */
+  get boardLayerOrder(): string[] {
+    const named: [string, Phaser.GameObjects.GameObject][] = [
+      ["animals", this.dynGfx],
+      ["strikes", this.strikeLayer],
+      ["tracers", this.tracerGfx],
+      ["hud", this.hudGfx],
+    ];
+    return named.sort((a, b) => this.children.getIndex(a[1]) - this.children.getIndex(b[1])).map(([name]) => name);
   }
 
   /**
