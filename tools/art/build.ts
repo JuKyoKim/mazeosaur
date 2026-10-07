@@ -18,6 +18,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSy
 import { dirname, join } from "node:path";
 import { content, hatchlings } from "@mazeosaur/content";
 import { assetDir, atlasDrift, atlasFiles, describeProblem } from "./atlas.js";
+import { EXEMPT, gatedResults, staleExemptions } from "./graphical-pairs.js";
 import { ARCHETYPES, ARCHETYPE_TELL, KIND_SILHOUETTE_NOTE } from "./bestiary.js";
 import {
   BOARD,
@@ -801,6 +802,25 @@ function doCheck(): void {
     const ok = ratio >= 4.5;
     if (!ok) bad++;
     console.log(`  ${ok ? "ok  " : "FAIL"} ${what.padEnd(16)} ${ratio.toFixed(2)}`);
+  }
+
+  // 1.4.11 is a different question from the 4.5 block above: those are
+  // labels, these are shapes whose colour *is* the information. There was no
+  // 3:1 block here at all, which is how the build timer bar reached 2.34:1
+  // with every check green. `tools/art/test/graphical-pairs.test.ts` is what
+  // gates this (`npm run check` does not run `art:check`); below is the same
+  // measurement surfaced for a human running the CLI.
+  console.log("\ngraphical pairs (WCAG 1.4.11, 3:1)");
+  for (const r of gatedResults()) {
+    if (!r.ok) bad++;
+    console.log(`  ${r.ok ? "ok  " : "FAIL"} ${r.what.padEnd(24)} ${r.ratio.toFixed(2)}`);
+  }
+  for (const e of EXEMPT) {
+    console.log(`  exempt ${e.what.padEnd(21)} ${contrastRatio(e.fg, e.bg).toFixed(2)}  -- ${e.why}`);
+  }
+  for (const s of staleExemptions()) {
+    bad++;
+    console.error(`  FAIL ${s.what} is ${s.ratio.toFixed(2)} and no longer needs its exemption`);
   }
 
   console.log("\nhit targets (44 CSS points is the floor)");

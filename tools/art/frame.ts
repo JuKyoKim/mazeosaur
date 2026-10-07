@@ -779,8 +779,16 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
 
   // the build timer, as a bar across the top of the HUD
   const frac = s.phase === "build" ? s.buildTimer / content.rules.buildPhaseTicks : 0;
-  r.fill(rect(ROW1.timerBar.x, ROW1.timerBar.y, ROW1.timerBar.w, ROW1.timerBar.h), darken(BOARD.buttonActive, 0.6), 1, 1);
-  if (frac > 0) r.fill(rect(0, ROW1.timerBar.y, Math.round(CANVAS_W * frac), ROW1.timerBar.h), BOARD.buttonActive, 1, 1);
+  // The client's own two tokens, not a darkened button. `BoardScene.buildRow1`
+  // draws this track as `hudPanel` and this fill as `meatFill`; the plates
+  // used `darken(buttonActive, 0.6)` over `buttonActive`, so no plate in
+  // `docs/art/` has ever shown the bar the client actually draws.
+  //
+  // Same class of drift as ARB-364, one level in: that guard pins the two
+  // palettes' *values*, and nothing pins which token a surface reaches for,
+  // which is how this survived a green `art:check`.
+  r.fill(rect(ROW1.timerBar.x, ROW1.timerBar.y, ROW1.timerBar.w, ROW1.timerBar.h), BOARD.hudPanel, 1, 1);
+  if (frac > 0) r.fill(rect(0, ROW1.timerBar.y, Math.round(CANVAS_W * frac), ROW1.timerBar.h), BOARD.meat, 1, 1);
   if (s.phase === "migration") {
     // in a migration the same bar shows how much of it is left to arrive
     const left = s.invaders.length + s.spawnQueue.length;
