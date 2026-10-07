@@ -34,6 +34,28 @@ export class ResultsScene extends Phaser.Scene {
   create(): void {
     const s = this.summary;
 
+    // This screen is drawn *over* a board that is paused, not stopped —
+    // `BoardScene.showResults` keeps it rendering on purpose, because §9
+    // wants the valley visible through the scrim. But a paused scene still
+    // renders, and Phaser composites scenes in scene-list order, so which
+    // of the two the player actually sees is settled by registration order
+    // in `index.ts` and by nothing else. `results` is registered first
+    // there — it has to exist before `board` can hand it a summary — which
+    // put it *underneath*: the board repainted this entire screen every
+    // frame and the player saw none of it.
+    //
+    // So the scene that has to be on top says so itself, on every entry,
+    // instead of depending on the order its siblings were added in.
+    // `title` (ARB-217) joins that list later and must not be able to
+    // change what this screen looks like by being registered first.
+    //
+    // Nothing in the suite could see this: every assertion about this
+    // screen reads display objects off the scene, and those exist and
+    // carry the right text whether or not one pixel of them reaches the
+    // canvas. `tests/client/results.spec.ts` samples the canvas for
+    // exactly that reason.
+    this.scene.bringToTop();
+
     // The scrim is 70% rather than opaque so the valley reads through it.
     // `setInteractive()` with no handler is deliberate: it swallows taps
     // that would otherwise fall through to whatever is behind, and this

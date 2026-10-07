@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { FRESH, RESUME, again } from "@mazeosaur/game/entry";
 import {
   cellCenter,
-  flushSave,
+  flushAndSnapshot,
   openGame,
   paletteButtonCenter,
   replaySnapshot,
@@ -36,11 +36,15 @@ async function place(page: Page): Promise<void> {
  * assigns `doc` synchronously, so after this the board's own document has
  * a non-null `run` — which is the state the entry modes have to disagree
  * about, and the state `title`'s New run will sit on top of.
+ *
+ * Reads the flushed tick with `flushAndSnapshot` rather than `flushSave`
+ * plus a separate `replaySnapshot`: the board keeps ticking in `build`
+ * phase, so two round trips can straddle a tick boundary and read one tick
+ * ahead of what was actually saved (ARB-349).
  */
 async function aRunOnTheDocument(page: Page): Promise<{ tick: number; hash: number; log: string }> {
   await place(page);
-  await flushSave(page);
-  const mid = await replaySnapshot(page);
+  const mid = await flushAndSnapshot(page);
   expect(JSON.parse(mid.log)).toHaveLength(1);
   expect((await simSnapshot(page)).dinos).toBe(1);
   return mid;
