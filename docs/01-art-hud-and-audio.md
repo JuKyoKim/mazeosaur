@@ -281,6 +281,64 @@ M2's `buttonActive` `#3f7a55` put `#ecf0f1` at **4.44:1** — just under. It
 is now `#37694b` at 5.57:1. The Send button is the one control a player
 reads under time pressure and is not the place to be borderline.
 
+### Non-text contrast
+
+Those ten pairs are all text, and until ARB-364 no *graphical* pair was
+measured anywhere. The gap had already cost something. The build timer bar's
+fill was `buttonActive` on a `hudPanel` track: **2.94:1** at M2's value and
+**2.34:1** at the value that fixed Send, against the **3:1** WCAG 1.4.11 asks
+of a graphical object whose colour carries information. Fixing a labelled
+control made the HUD's one *unlabelled* readout harder to see, and nothing
+could say so, because `buttonActive` was doing two jobs — a slab behind a
+5.57:1 label, and a quantity with no label at all.
+
+So the bar's fill is **`meatFill` `#e67e22`** on the same `hudPanel` track.
+That is not a new colour and not an arbitrary one: what is left on the bar
+*is* the early-send bonus, and the bonus is meat — `earlySendBonus()` is
+`floor(buildTimer / TICKS_PER_SECOND) * rules.earlyBonusPerSecond` and `send`
+adds it straight to `state.meat`, so the bar's length is proportional to meat
+the player has not claimed yet. Orange keeps one meaning instead of gaining a
+second. It reads **5.26:1** on its track and **4.81:1** against `boardBg`
+above the seam, which is the bar's only boundary — the track is 1.09:1 on the
+board and delineates nothing. The brighter candidates were rejected for
+meaning, not for ratio: `checkpoint` amber is the lane's marker and is loud
+across 720px every build phase, `hpFront` green already means invader health
+on two dozen bars at once, and §4 reserves exactly one near-white for board
+marks.
+
+These are the pairs where a graphical object's colour carries the reading, and
+the floor is 3:1:
+
+| pair | ratio |
+| --- | --- |
+| timer bar fill / its `hudPanel` track | 5.26:1 |
+| timer bar fill / `boardBg` above the seam | 4.81:1 |
+| hp bar full / its back | 5.23:1 |
+| meat icon / `hud` | 6.40:1 |
+| egg icon / `hud` | 16.89:1 |
+| `spawn` tile / `boardBg` | 3.29:1 |
+| `checkpoint` tile / `boardBg` | 8.25:1 |
+| `nest` tile / `boardBg` | 11.94:1 |
+| `selection` mark / `boardBg` | 11.94:1 |
+| growth pip `ink` / each of the six kind fills | 3.22:1 at the tightest, `horned` |
+
+And these sit below 3:1 and stay there, each for a reason, because an
+exemption has to be a decision somebody made and not a pair nobody wrote
+down:
+
+| pair | ratio | why it is exempt |
+| --- | --- | --- |
+| `gridLine` / `boardBg` | 1.23:1 | A grid line is texture, not an indicator. What says where a tap may land is the preview and the `selection` ring at 11.94:1. Raising it makes the board graph paper and fights every sprite drawn on it. |
+| hp bar back / `boardBg` | 1.25:1 | The front's length is the reading. It does cost something, and ARB-378 holds what. |
+| `hpLow` / hp bar back | 2.87:1 | A real failure, and marginal. The fix is geometry as well as palette and wants the invader art to argue against: ARB-378. |
+| `hpFront` / `hpLow` | 1.82:1 | The table above makes bar length threat's first channel and the hue its second. Green against red at 1.82:1 is the familiar dichromacy problem, and length is the reason it is not the only channel. |
+| `selection` / each kind fill | 1.86:1 at `raptor` | The mark is a ring and a cell outline, delineated on its *outer* edge against `boardBg` at 11.94:1. One adjacent side at 3:1 is what 1.4.11 asks for. |
+| `buttonActive` / `button` | 1.53:1 | Send active against Send idle is a change over time, not two things side by side, and the `+25` second line is the channel that is not hue. The last second of a build phase is the one window where the bonus is 0 and the fill is the only difference — and sending early is worth nothing in it. |
+| any button fill / `hud` | 1.87:1 at `button` | A filled slab under a visible label at 8.50:1 is identified by its label. A boundary is what the 1.4.11 exemption exists for. |
+
+ARB-377 carries both tables into `art:check` as a second graded block, and the
+bar's fill with them.
+
 ---
 
 ## 4. The HUD
@@ -345,7 +403,9 @@ row at any width, and adding one means taking the space from somewhere
 seam between board and HUD is legible without being read, which is the
 point — during a build phase the player is looking at the grid, not at the
 HUD. The digits are not shown at all. The bar is also the early-send
-affordance: the amount left *is* the bonus.
+affordance: the amount left *is* the bonus. It is `meatFill` on a `hudPanel`
+track, because the bonus is meat and the bar has no label to carry the
+reading for it; §3's non-text table is where those two tokens are argued.
 
 Meat and eggs are an icon plus a count rather than a labelled field, for
 the same reason. 214 and 14 are read as shapes.
