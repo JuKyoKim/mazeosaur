@@ -205,6 +205,30 @@ export async function flushSave(page: Page): Promise<void> {
 }
 
 /**
+ * Flushes and reads back the tick, hash and log `flush()` just stamped into
+ * the document, in one round trip rather than two.
+ *
+ * `flush()` builds the `RunSave` synchronously, before its own `await` on
+ * the store write, so a `sim` read on the very next line of the same
+ * `page.evaluate` sees exactly the state that was stamped — nothing else can
+ * run on the page's single JS thread in between. `flushSave` followed by a
+ * *separate* `replaySnapshot` call does not have that guarantee: the board
+ * keeps ticking in `build`/`migration` phase between the two round trips, so
+ * occasionally one more tick lands before the second one reads, and the
+ * snapshot comes back one tick ahead of what was actually saved. That is
+ * ARB-349: `board-entry.spec.ts` compared a resumed run's tick against that
+ * inflated snapshot and failed on the coin flip.
+ */
+export function flushAndSnapshot(page: Page): Promise<{ tick: number; hash: number; log: string }> {
+  return page.evaluate(() => {
+    const board = window.mazeosaurBoard!();
+    void board.flush();
+    const sim = board.sim;
+    return { tick: sim.state.tick, hash: sim.hash(), log: JSON.stringify(sim.log) };
+  });
+}
+
+/**
  * The mounted scene exposes its sim via `BoardScene.sim` ("for tests and
  * debugging from the console"), and the shell exposes the `GameHandle` as
  * `window.mazeosaur` in dev builds. This is that console, automated.
