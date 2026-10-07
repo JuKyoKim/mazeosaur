@@ -44,6 +44,12 @@ function markdownFiles(dir, out = []) {
  * `playwright-report/` are gitignored generated output, not docs; walking
  * them the same as `dist` means every future generated directory needs this
  * list too, so defer to .gitignore instead of growing a parallel one here.
+ *
+ * That means this check now needs a working `git check-ignore`, and it is
+ * not optional: a missing `git` binary or a tree with no `.git` must not
+ * read as "nothing is ignored", because that silently puts generated output
+ * like `dist/**` back under checks 1 and 2. Either failure is a hard stop,
+ * not a fallback.
  */
 function gitIgnored(paths) {
   if (paths.length === 0) return new Set();
@@ -52,6 +58,15 @@ function gitIgnored(paths) {
     input: paths.map((p) => relative(root, p)).join("\n"),
     encoding: "utf8",
   });
+  if (result.error || (result.status !== 0 && result.status !== 1)) {
+    const reason = result.error
+      ? result.error.message
+      : `exited ${result.status}${result.stderr?.trim() ? `: ${result.stderr.trim()}` : ""}`;
+    process.stderr.write(
+      `check:readmes: \`git check-ignore\` failed (${reason}); cannot tell which files are generated.\n`,
+    );
+    process.exit(1);
+  }
   return new Set(result.stdout.split("\n").filter(Boolean));
 }
 
