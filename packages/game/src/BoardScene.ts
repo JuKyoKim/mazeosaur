@@ -1358,7 +1358,22 @@ export class BoardScene extends Phaser.Scene {
   private buildRow1(): void {
     const bar = ROW1.timerBar;
     this.add.rectangle(bar.x, bar.y, bar.w, bar.h, COLORS.hudPanel).setOrigin(0, 0);
-    this.timerBar = this.add.rectangle(bar.x, bar.y, bar.w, bar.h, COLORS.buttonActive).setOrigin(0, 0);
+    // `meatFill` and not `buttonActive`: this is the one readout in the HUD
+    // with no label on it, so WCAG 1.4.11's 3:1 for a graphical object is the
+    // whole of its legibility — and `buttonActive` on the `hudPanel` track is
+    // 2.34:1. It was 2.94:1 before ARB-364 darkened it, so it was already
+    // under; `buttonActive` was carrying two jobs that pull opposite ways, a
+    // slab behind a 5.57:1 label and a quantity with no label at all.
+    //
+    // Orange rather than a brighter green or the amber, because the bar's
+    // length *is* meat: `earlySendBonus()` is the remaining build timer in
+    // seconds times `rules.earlyBonusPerSecond`, and `send` adds it to
+    // `state.meat`, so what is left on the bar is exactly the bonus not yet
+    // claimed. `meatFill` keeps one meaning rather than gaining a second, and
+    // being an existing token it needs no new palette classification.
+    // 5.26:1 on the track, 4.81:1 against `boardBg` above the seam, 6.40:1
+    // against `hud` below it — the three pairs `art:check` now gates.
+    this.timerBar = this.add.rectangle(bar.x, bar.y, bar.w, bar.h, COLORS.meatFill).setOrigin(0, 0);
 
     // Meat and eggs are an icon and a count rather than a labelled field:
     // 214 and 14 are read as shapes. Flat placeholders until the atlas
