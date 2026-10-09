@@ -301,26 +301,22 @@ export const ROW3 = {
   sell: { x: 540, y: HUD_Y + 163, w: 164, h: 82 },
 } as const;
 
-/**
- * Row 3's button labels, as wraps. Same reason as `ROW1_WRAP`: a label here
- * is content — Grow names the genus it grows into, Sell names a refund — so
- * the bound on it has to be geometry rather than a string somebody counted.
+/*
+ * Row 3's buttons deliberately have no `ROW1_WRAP` twin. A wrap is what
+ * bounds row 1, where the over-long thing is a field with spaces in it; the
+ * over-long thing on Grow is a single genus, and Phaser's `wordWrap` breaks
+ * on spaces only. Measured in a client: `Micropachycephalosaurus` on its
+ * own line draws 247px in the 192px `ROW3.grow` with a 180px wrap set and
+ * 247px with none. The wrap would read as a bound it is not.
  *
- * This one is load-bearing rather than belt-and-braces. A Grow label is
- * *centred* on its button, so it does not run off one end the way a
- * left-aligned row-1 field does: it spills out of both, over the sheet
- * column on one side and onto Sell on the other, and at the longest genus
- * the content ships it did exactly that. `sheet.ts`'s `growLabel` is the
- * shape that fits; this is what keeps a longer genus than today's inside
- * the button instead of silently back over its neighbours.
- *
- * 12 is a 6px margin each side, which is the padding `tools/art`'s
- * `drawButton` already lays a label out against.
+ * What bounds these two is `sheet.ts`'s `growLabel` — one fact per line, so
+ * the genus is measured alone rather than after `Grow → ` — and
+ * `tests/client/hud-hit-targets.spec.ts`, which re-measures the label in a
+ * running client at every genus the content can grow into. A genus longer
+ * than today's longest fails there with the px, which is the conversation
+ * to have (shorten the display name) rather than something the renderer
+ * can quietly absorb.
  */
-export const ROW3_WRAP = {
-  grow: ROW3.grow.w - 12, // 180
-  sell: ROW3.sell.w - 12, // 152
-} as const;
 
 export function kindButtonX(i: number): number {
   return GUTTER + i * (ROW3.kindButton.w + ROW3.kindButton.gap);

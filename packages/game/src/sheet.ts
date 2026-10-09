@@ -82,11 +82,13 @@ export function sheetLines(def: DinoDef): SheetLines {
  * 192px button, and 236px at `Argentinosaurus` — which, centred on
  * `ROW3.grow`, starts 10px inside the sheet column and ends 10px inside
  * Sell. Stacked, the widest line over all twelve grow targets is the genus
- * at 157px, which leaves 35px inside `ROW3.grow.w`. Both figures are this
+ * at 157px, which leaves 35px inside `ROW3.grow.w`. Those figures are this
  * machine's `system-ui` fallback and are quoted to say which shape fits,
- * not as constants: `ROW3_WRAP.grow` is the enforceable bound and
- * `tests/client/hud-hit-targets.spec.ts` re-takes the measurement in a real
- * client on every run.
+ * not as constants: `tests/client/hud-hit-targets.spec.ts` re-takes the
+ * measurement in a real client, at every genus the content can grow into,
+ * on every run. It is the only thing that can — the string is content and
+ * the face is the platform's — and a wrap cannot stand in for it, because
+ * a genus is one word and Phaser breaks lines on spaces.
  *
  * The arrow ends line 1 rather than beginning line 2 because it costs the
  * line that is already shortest instead of the one that is already longest.

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { content } from "@mazeosaur/content";
 import { CELL, TICKS_PER_SECOND } from "@mazeosaur/sim";
 import { growLabel, sheetLines } from "../src/sheet.js";
-import { ROW3, ROW3_WRAP, SHEET_COL_W, TYPE } from "../src/layout.js";
+import { SHEET_COL_W, TYPE } from "../src/layout.js";
 
 const defs = Object.values(content.dinos);
 
@@ -150,9 +150,9 @@ describe("the Grow button's label", () => {
   /**
    * Caps, with what each line measured in one running client beside it.
    * Those px are that box's `system-ui` fallback, not a property of the
-   * code — `ROW3_WRAP.grow` is the portable bound and the browser spec is
-   * what enforces it. These are what fail in under a second when a content
-   * edit lengthens a genus.
+   * code — the browser spec is what enforces the width. This is what fails
+   * in under a second when a content edit lengthens a genus, so that the
+   * slow answer is a confirmation rather than the first news.
    */
   it("holds every line to the length the button was measured against", () => {
     const lineLengths = parents.flatMap((p) => growLabel(target(p)).split("\n").map((l) => l.length));
@@ -161,6 +161,5 @@ describe("the Grow button's label", () => {
     // One line of the one-line form, for contrast: `Grow → Argentinosaurus`
     // is the string that did not fit, and it is 22.
     expect(Math.max(...parents.map((p) => `Grow → ${target(p).name}`.length))).toBe(22);
-    expect(ROW3_WRAP.grow).toBeLessThan(ROW3.grow.w);
   });
 });

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { content, hatchlings } from "@mazeosaur/content";
-import { CONTENT_RIGHT, HUD_Y, MIN_HIT, ROW1, ROW3, ROW3_WRAP, SCALE, pt } from "@mazeosaur/game/layout";
+import { CONTENT_RIGHT, HUD_Y, MIN_HIT, ROW1, ROW3, SCALE, pt } from "@mazeosaur/game/layout";
 import { growLabel } from "@mazeosaur/game/sheet";
 import { cellCenter, type HudLabel, hudLabels, hudTargets, openGame, paletteButtonCenter, trackPageErrors, waitAFrame } from "./helpers.js";
 
@@ -154,14 +154,13 @@ test("every HUD button's label fits its button, at every genus the content can g
     expect(grow.text, `the Grow label for a ${parent.name}`).toBe(growLabel(next));
     console.log(`Grow → ${next.name}: ${Math.round(grow.w)}px of ${grow.box.w}, ${grow.lines} lines`);
     fits(grow);
-    // `ROW3_WRAP` turns an over-wide label into a wrapped one rather than a
-    // spilled one, so width alone stops being the whole question the moment
-    // it exists: four lines is 88px in an 82px button. Three is the shape
-    // `growLabel` writes, and the shape that fits.
+    // Width is not the whole question, because a label that gains a line
+    // gets taller rather than wider: three lines is 66px of Grow's 82 and
+    // four is 88, out of the button. Three is the shape `growLabel` writes.
     expect(grow.lines, `the Grow label for a ${parent.name} wrapped: ${JSON.stringify(grow.text)}`).toBe(3);
     if (!widest || grow.w > widest.w) widest = grow;
   }
-  console.log(`widest Grow label: ${JSON.stringify(widest?.text)} at ${Math.round(widest?.w ?? 0)}px of ${ROW3.grow.w}, wrap ${ROW3_WRAP.grow}`);
+  console.log(`widest Grow label: ${JSON.stringify(widest?.text)} at ${Math.round(widest?.w ?? 0)}px of ${ROW3.grow.w}`);
 
   expect(errors.messages).toEqual([]);
 });
