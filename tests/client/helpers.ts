@@ -639,21 +639,50 @@ export async function waitForResults(page: Page): Promise<void> {
  * taken after it is in the failing case on the first try.
  */
 export async function canvasPixel(page: Page, x: number, y: number): Promise<{ r: number; g: number; b: number }> {
+  return (await canvasRow(page, x, y, 1))[0]!;
+}
+
+/**
+ * `width` canvas pixels starting at (`x`, `y`), left to right, in **one**
+ * screenshot.
+ *
+ * Every caveat on `canvasPixel` applies here unchanged — this is the function
+ * it is built on. What this one adds is a budget: a `page.screenshot` is a
+ * round trip to the browser and costs about 0.4 s on a 2-core CI runner, so a
+ * spec that samples a pixel at a time pays that per sample. Eighteen growth
+ * pips cost seven seconds that way and put `growth-pip.spec.ts` over the 60 s
+ * per-test timeout on CI while passing locally in 16.5 s.
+ *
+ * Several samples that share a row are therefore worth asking for together,
+ * and a row is the useful unit rather than a rectangle because one scanline is
+ * the case where PNG's filters stay trivial: there is no row above, so `b` and
+ * `c` are 0 and all five reduce to a function of the byte and its left
+ * neighbour. See `decodeOneRow`.
+ */
+export async function canvasRow(page: Page, x: number, y: number, width: number): Promise<{ r: number; g: number; b: number }[]> {
   const rect = await page.evaluate(() => {
     const canvas = document.querySelector("canvas");
     if (!canvas) throw new Error("no canvas on the page: the game has not mounted");
     const box = canvas.getBoundingClientRect();
     return { left: box.left, top: box.top, width: box.width, height: box.height, innerW: canvas.width, innerH: canvas.height };
   });
+  const scale = rect.width / rect.innerW;
   const png = await page.screenshot({
     clip: {
-      x: rect.left + (x * rect.width) / rect.innerW,
+      x: rect.left + x * scale,
       y: rect.top + (y * rect.height) / rect.innerH,
-      width: 1,
+      width: width * scale,
       height: 1,
     },
   });
-  return decodeOnePixel(png);
+  const row = decodeOneRow(png);
+  // A device scale factor other than 1 would hand back two device pixels per
+  // CSS pixel and silently shift every index the caller reads. Say so by name
+  // rather than return a row whose nth entry is not the nth pixel asked for.
+  if (row.length !== width) {
+    throw new Error(`canvasRow asked for ${width} pixels and the screenshot decoded ${row.length}; check the viewport's device scale factor`);
+  }
+  return row;
 }
 
 /** `COLORS.x` as `canvasPixel` returns it, so a spec compares like with like. */
@@ -662,24 +691,33 @@ export function rgbOf(color: number): { r: number; g: number; b: number } {
 }
 
 /**
- * The RGB of a 1x1 PNG, which is all `canvasPixel` ever decodes.
+ * The RGB of every pixel in a **one-scanline** PNG, which is all this harness
+ * ever decodes.
  *
- * A general PNG decoder would have to undo the five scanline filters
- * against the pixel to the left and the row above. At one pixel there is
- * neither: `a`, `b` and `c` are 0 for every filter, and Sub, Up, Average
- * and Paeth all reduce to the stored byte. So the filter byte can be
- * skipped rather than interpreted, and this stays a few lines instead of
- * pulling an image library into the harness.
+ * A general PNG decoder has to undo the five scanline filters against the
+ * pixel to the left (`a`), the row above (`b`) and the pixel above-left
+ * (`c`). One row removes two of those three: `b` and `c` are 0, so Up is the
+ * stored byte, Average is `raw + (a >> 1)`, and Paeth's predictor
+ * `p = a + b - c` is just `a`, which always wins its own comparison. Every
+ * filter is then a function of the byte and its left neighbour, which is
+ * already in hand decoding left to right — so this stays a few lines instead
+ * of pulling an image library into the harness.
  *
- * That shortcut only holds for 8-bit RGB/RGBA: a 16-bit sample is two bytes
- * wide and a palette entry is an index, not a colour, so either would decode
- * to a silently wrong number rather than a thrown error. Chromium's own
- * screenshot encoder emits neither today, but IHDR says what it emitted, so
- * read it and throw by name rather than let a future encoder change surface
- * as a mystery colour mismatch three specs away.
+ * The height is checked rather than assumed, because the moment a caller
+ * clips two rows this arithmetic is wrong on every pixel of the second one
+ * and wrong quietly: Up would read zeroes for the row above.
+ *
+ * The same holds for the sample format: 8-bit RGB/RGBA only, since a 16-bit
+ * sample is two bytes wide and a palette entry is an index, not a colour, so
+ * either would decode to a silently wrong number rather than a thrown error.
+ * Chromium's own screenshot encoder emits neither today, but IHDR says what
+ * it emitted, so read it and throw by name rather than let a future encoder
+ * change surface as a mystery colour mismatch three specs away.
  */
-function decodeOnePixel(png: Buffer): { r: number; g: number; b: number } {
+function decodeOneRow(png: Buffer): { r: number; g: number; b: number }[] {
   const idat: Buffer[] = [];
+  let width: number | undefined;
+  let height: number | undefined;
   let bitDepth: number | undefined;
   let colorType: number | undefined;
   // 8-byte signature, then length/type/data/CRC chunks.
@@ -688,6 +726,8 @@ function decodeOnePixel(png: Buffer): { r: number; g: number; b: number } {
     const type = png.toString("ascii", at + 4, at + 8);
     if (type === "IHDR") {
       // width(4) height(4) bit depth(1) colour type(1) ...
+      width = png.readUInt32BE(at + 8);
+      height = png.readUInt32BE(at + 8 + 4);
       bitDepth = png.readUInt8(at + 8 + 8);
       colorType = png.readUInt8(at + 8 + 9);
     }
@@ -698,10 +738,24 @@ function decodeOnePixel(png: Buffer): { r: number; g: number; b: number } {
   // Colour type 2 is truecolor (RGB), 6 is truecolor+alpha (RGBA) — the only
   // two the byte offsets below are valid for.
   if (bitDepth !== 8 || (colorType !== 2 && colorType !== 6)) {
-    throw new Error(`canvasPixel only decodes 8-bit RGB/RGBA PNGs; got bit depth ${bitDepth}, colour type ${colorType}`);
+    throw new Error(`canvasRow only decodes 8-bit RGB/RGBA PNGs; got bit depth ${bitDepth}, colour type ${colorType}`);
   }
+  if (height !== 1) throw new Error(`canvasRow only decodes a single scanline; got a ${width}x${height} PNG`);
   if (idat.length === 0) throw new Error("screenshot PNG carried no IDAT");
   const raw = inflateSync(Buffer.concat(idat));
-  // [filter, r, g, b, (a)] — see above for why the filter is skipped.
-  return { r: raw[1]!, g: raw[2]!, b: raw[3]! };
+  // [filter, then width * bpp bytes].
+  const bpp = colorType === 6 ? 4 : 3;
+  const filter = raw[0]!;
+  if (filter > 4) throw new Error(`screenshot PNG used filter type ${filter}, which is not one of PNG's five`);
+  const line = Buffer.alloc(width! * bpp);
+  for (let i = 0; i < line.length; i++) {
+    const a = i >= bpp ? line[i - bpp]! : 0;
+    const v = raw[1 + i]!;
+    // None and Up (b is 0) are the byte itself; Sub and Paeth (the predictor
+    // reduces to `a`) add the left neighbour; Average adds half of it.
+    line[i] = filter === 0 || filter === 2 ? v : filter === 3 ? (v + (a >> 1)) & 0xff : (v + a) & 0xff;
+  }
+  const out: { r: number; g: number; b: number }[] = [];
+  for (let i = 0; i < width!; i++) out.push({ r: line[i * bpp]!, g: line[i * bpp + 1]!, b: line[i * bpp + 2]! });
+  return out;
 }

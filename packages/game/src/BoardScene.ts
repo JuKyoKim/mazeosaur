@@ -41,7 +41,7 @@ import {
 } from "./layout.js";
 import { MIGRATION_LABEL, migrationCounter } from "./row1.js";
 import { growLabel, sheetLines } from "./sheet.js";
-import { COLORS, KIND_COLOR, text, wrapped } from "./theme.js";
+import { CARD_TINT, COLORS, KIND_COLOR, PIP_INK, text, wrapped } from "./theme.js";
 import { SfxBus } from "./audio.js";
 import { again, boardEntry, type BoardEntry } from "./entry.js";
 import { services } from "./platform.js";
@@ -999,8 +999,14 @@ export class BoardScene extends Phaser.Scene {
       const y = this.cellY(d.y);
       gfx.fillStyle(KIND_COLOR[def.kind], 1);
       gfx.fillRoundedRect(x + 3, y + 3, CELL_PX - 6, CELL_PX - 6, 6);
-      // growth stage as pips
-      gfx.fillStyle(COLORS.ink, 0.85);
+      // Growth stage as a count of pips, in `PIP_INK` and opaque. Both of
+      // those are a rule and not a preference: the pip count is the only
+      // channel carrying stage until the atlas gives each stage its own
+      // silhouette, a 6px dot is 3.3pt on the reference phone, and this draw
+      // shipped a fixed `ink` at alpha 0.85, which composited to 2.88:1 on
+      // `horned` — under 1.4.11's floor for a graphical object that carries
+      // information. `theme.ts` has the six measurements.
+      gfx.fillStyle(PIP_INK[def.kind], 1);
       for (let i = 0; i < def.stage; i++) gfx.fillCircle(x + 9 + i * 9, y + CELL_PX - 8, 3);
     }
     this.towersDirty = false;
@@ -1447,7 +1453,7 @@ export class BoardScene extends Phaser.Scene {
       const cx = x + kb.w / 2;
       const hue = KIND_COLOR[def.kind];
 
-      const bg = this.add.rectangle(x, kb.y, kb.w, kb.h, hue, 0.22).setOrigin(0, 0);
+      const bg = this.add.rectangle(x, kb.y, kb.w, kb.h, hue, CARD_TINT).setOrigin(0, 0);
       this.onTap(bg, () => this.selectDef(def));
 
       // The silhouette, as a flat shape in the kind's hue until the atlas
@@ -1466,7 +1472,7 @@ export class BoardScene extends Phaser.Scene {
       pip.fillStyle(COLORS.meatFill, 1);
       pip.fillCircle(0, 0, ROW3.kindCost.pipR);
       const cost = this.add
-        .text(cx + ROW3.kindCost.pipGap, kb.y + ROW3.kindCost.dy, `${def.cost}`, text(TYPE.label, COLORS.meat))
+        .text(cx + ROW3.kindCost.pipGap, kb.y + ROW3.kindCost.dy, `${def.cost}`, text(TYPE.label))
         .setOrigin(0.5, 0);
 
       const parts: CardPart[] = [bg, art, name, pip, cost];
@@ -1578,8 +1584,16 @@ export class BoardScene extends Phaser.Scene {
       // card is still a label, just not yet a purchase. On a `no-meat`
       // refusal the cost flashes `refusal`, because that is where the cause
       // is — see `flashCardCost`.
+      //
+      // `text` and not `meat` for the affordable state. It is the pair §4
+      // names ("dims its cost to `textDim`") and the pair Grow already uses
+      // twenty lines down, so the HUD has one affordability convention and
+      // not two; and a card's background is a kind hue at `CARD_TINT`, six
+      // different backgrounds, where `meat` ran to 4.51:1 on `armored`
+      // against `text`'s 11.21:1. The meat pip beside the number is what
+      // says the price is in meat — that channel was never the digits.
       const flashing = this.cardFlashDefId === card.def.id && this.playedMs() < this.cardFlashUntil;
-      card.cost.setColor(flashing ? COLORS.refusalText : s.meat >= card.def.cost ? COLORS.meat : COLORS.textDim);
+      card.cost.setColor(flashing ? COLORS.refusalText : s.meat >= card.def.cost ? COLORS.text : COLORS.textDim);
     }
 
     if (this.selectedDino !== null) {
