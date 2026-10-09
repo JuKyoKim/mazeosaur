@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { contrastRatio } from "../raster.js";
 import { BOARD, KINDS } from "../directions.js";
-import { EXEMPT, GATED, GRAPHICAL_FLOOR, gatedResults, graphicalFailures, staleExemptions, tightestPip } from "../graphical-pairs.js";
+import { EXEMPT, GATED, GRAPHICAL_FLOOR, gatedResults, graphicalFailures, staleExemptions, tightestPip, tightestSelection } from "../graphical-pairs.js";
 
 describe("graphical pairs (WCAG 1.4.11, 3:1)", () => {
   it("every gated pair clears the floor", () => {
@@ -44,6 +44,27 @@ describe("graphical pairs (WCAG 1.4.11, 3:1)", () => {
   // empty reason is a pair somebody skipped rather than decided.
   it("every exemption says why", () => {
     for (const e of EXEMPT) expect(e.why.length, e.what).toBeGreaterThan(40);
+  });
+
+  // `GATED` has had a length assertion since this file was written and
+  // `EXEMPT` had none, so a dropped exemption row passed every test here —
+  // which is how §3's seventh row went missing from the code while the doc
+  // on `main` claimed "ARB-377 carries both tables into `art:check`". The
+  // count is the part no per-row assertion can check, because the failure is
+  // a row that is not there to be iterated over.
+  it("carries all seven of §3's exemption rows, not six", () => {
+    expect(EXEMPT).toHaveLength(7);
+    expect(EXEMPT.map((p) => p.what)).toContain("selection / tightest kind fill");
+  });
+
+  // The exemption's bound, so it cannot rot into a row that exempts a pair
+  // already clearing the floor. `tightestSelection()` is the minimum across
+  // the six kinds: if a hue edit lifts even that one over 3:1, every kind is
+  // over and the mark does not need exempting any more.
+  it("the selection mark still needs its exemption", () => {
+    const t = tightestSelection();
+    expect(t.ratio).toBeLessThan(GRAPHICAL_FLOOR);
+    expect(t.what).toBe("selection / armored");
   });
 
   // The pair closest to the floor, so a palette edit that eats the margin

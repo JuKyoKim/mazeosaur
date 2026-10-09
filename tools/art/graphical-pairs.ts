@@ -97,6 +97,21 @@ export const EXEMPT: readonly (Pair & { readonly why: string })[] = [
     bg: BOARD.hud,
     why: "a filled slab under a visible 8.50:1 label is identified by its label, which is what 1.4.11's exemption is for.",
   },
+  // §3's seventh exemption row, which this list was missing. It is one row
+  // and not six because the mark is one decision: the ring and the cell
+  // outline are delineated on their *outer* edge against `boardBg`, and one
+  // adjacent side at 3:1 is what 1.4.11 asks for. A per-kind fan-out would
+  // also be two stale exemptions the day it landed — `tyrant` and `horned`
+  // clear the floor against `selection` on both palettes — and an exemption
+  // that does not exempt anything is the noise `staleExemptions()` exists to
+  // keep out. So the row is the tightest kind, which is the only one that
+  // needs exempting; `tightestSelection()` is what stops it going stale.
+  {
+    what: "selection / tightest kind fill",
+    fg: BOARD.nest,
+    bg: rgb(KIND_HUE.armored),
+    why: "the mark is a ring and a cell outline delineated on its outer edge against `boardBg` at 11.94:1, and one adjacent side at 3:1 is what 1.4.11 asks for. `armored` is the tightest of the six; see `tightestSelection()` for why §3's figure is a different number.",
+  },
 ];
 
 export interface Result {
@@ -148,4 +163,28 @@ export function staleExemptions(): Result[] {
 export function tightestPip(): Result {
   const pips = gatedResults().filter((r) => r.what.startsWith("pip / "));
   return pips.reduce((a, b) => (b.ratio < a.ratio ? b : a));
+}
+
+/**
+ * The tightest `selection`-against-a-kind-fill pair, which is the one the
+ * exemption row above is written for. Exported so the exemption's bound is a
+ * measurement rather than a number typed into a `why` string.
+ *
+ * **Measured on `KIND_HUE`, the art tool's palette**, for the same reason
+ * `tightestPip()` is — and with the same disagreement, larger here. §3 says
+ * "1.86:1 at `raptor`", which is a *client* number: against `KIND_COLOR` in
+ * `packages/game/src/theme.ts` the tightest is `raptor` at 1.86:1, and
+ * against the hues this file can see it is `armored` at **1.13:1**. Both are
+ * far under the floor, so the exemption holds either way and the row does not
+ * have to pick a palette to be true. ARB-386 owns reconciling the two sets;
+ * what this function guarantees is narrower and is the part that can rot — if
+ * a hue edit lifts every kind over 3:1, the mark no longer needs exempting
+ * and the test below says so.
+ */
+export function tightestSelection(): Result {
+  const ratios = KINDS.map((k) => {
+    const ratio = contrastRatio(BOARD.nest, rgb(KIND_HUE[k]));
+    return { what: `selection / ${k}`, ratio, ok: ratio >= GRAPHICAL_FLOOR };
+  });
+  return ratios.reduce((a, b) => (b.ratio < a.ratio ? b : a));
 }
