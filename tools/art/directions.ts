@@ -15,15 +15,22 @@ export type Kind = "raptor" | "tyrant" | "armored" | "horned" | "longneck" | "fl
 export const KINDS: readonly Kind[] = ["raptor", "tyrant", "armored", "horned", "longneck", "flier"];
 
 /**
- * The kind hues, and a proposed revision of KIND_COLOR in
- * packages/game/src/theme.ts. Six families need six colours that are still
- * six colours in a 20pt cell and to the ~8% of men who cannot separate red
- * from green, so these were not picked by eye: `art:check` measures every
- * one of the 60 pairs (six kinds, four kinds of vision) and requires each
- * pair to be separated either by hue distance or by lightness. The values
- * below are the result of a constrained search that kept every kind inside
- * its own hue family and above a visibility floor against the board
- * background, and they clear the thresholds with 23% to spare.
+ * The kind hues. Six families need six colours that are still six colours in
+ * a 20pt cell and to the ~8% of men who cannot separate red from green, so
+ * these were not picked by eye: `art:check` measures every one of the 60
+ * pairs (six kinds, four kinds of vision) and requires each pair to be
+ * separated either by hue distance or by lightness. The values below are the
+ * result of a constrained search that kept every kind inside its own hue
+ * family and above a visibility floor against the board background, and they
+ * clear the thresholds with 23% to spare.
+ *
+ * They are also `KIND_COLOR` in packages/game/src/theme.ts, and
+ * `packages/game/test/palette-agreement.test.ts` is what keeps that true.
+ * This comment read "a proposed revision of KIND_COLOR" for the whole of M2
+ * while the renderer went on shipping the six values listed below as what
+ * each of these replaced — the ones the search was run because they fail. The
+ * plates, the atlas and §3 all moved and the client did not. ARB-386 closed
+ * that, and nothing here is proposed any more.
  *
  * What changed from M2 and why:
  *   raptor    e0a83a -> f4a82a  brighter, to sit a clear step above longneck
@@ -85,6 +92,19 @@ export const BOARD = {
   stun: rgb(0xf1c40f),
   shield: rgb(0xecf0f1),
 } as const;
+
+/**
+ * `CARD_TINT` in packages/game/src/theme.ts: how much of its kind's hue a
+ * tray card's background carries over `hud`. The comment there says why the
+ * value is what it is; this copy exists because `tools` cannot import
+ * `theme.ts` — see `palette-agreement.test.ts`, which pins the two equal.
+ *
+ * The mock drew it as `mix(hue, hud, 0.68)`, a tint of 0.32, while the client
+ * drew 0.22 — so §4's generated picture and the running game disagreed about
+ * a background that decides whether a text pair passes. At 0.32, `textDim` on
+ * `armored`'s card is 2.84:1.
+ */
+export const CARD_TINT = 0.14;
 
 /** The seven slots every silhouette part can ask for. */
 export interface Palette {

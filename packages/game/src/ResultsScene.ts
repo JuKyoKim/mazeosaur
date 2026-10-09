@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { CANVAS_H, CANVAS_W, GUTTER, HUD_H, HUD_Y, RESULTS, TYPE } from "./layout.js";
-import { COLORS, KIND_COLOR, hexCss, text } from "./theme.js";
+import { COLORS, KIND_COLOR, PIP_INK, hexCss, text } from "./theme.js";
 import { again } from "./entry.js";
 import type { RunSummary } from "./summary.js";
 
@@ -183,8 +183,11 @@ export class ResultsScene extends Phaser.Scene {
       gfx.fillStyle(KIND_COLOR[entry.kind], 1);
       gfx.fillRoundedRect(x, y, cell, cell, Math.round(cell / 6));
       // Three pips: an adult is stage 3, and the pips are what say so on
-      // the valley too.
-      gfx.fillStyle(COLORS.ink, 0.85);
+      // the valley too — so they take the valley's rule, `PIP_INK` and
+      // opaque. See `theme.ts`: one fixed ink at 0.85 was 2.88:1 on the
+      // tightest fill, and this screen draws its blocks larger than the
+      // board does, which makes a low-contrast pip bigger and not righter.
+      gfx.fillStyle(PIP_INK[entry.kind], 1);
       const pipR = Math.max(2, Math.round(cell / 12));
       for (let p = 0; p < 3; p++) gfx.fillCircle(x + cell / 2 + (p - 1) * pipR * 3, y + cell - pipR * 3, pipR);
 

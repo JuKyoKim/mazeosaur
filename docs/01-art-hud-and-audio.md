@@ -235,8 +235,15 @@ because they are the two most distinct silhouettes on the board — the only
 tall one and the only wide one — and the measured pair still passes. For
 those two, colour is the second channel and not the first.
 
-This table is a proposed replacement for `KIND_COLOR` in
-`packages/game/src/theme.ts`.
+This table **is** `KIND_COLOR` in `packages/game/src/theme.ts`, and
+`packages/game/test/palette-agreement.test.ts` holds it there. It was a
+*proposed* replacement for the whole of M2, which meant the measurement above
+and every atlas frame used the v1 column while the renderer drew the "M2 was"
+one — the six values this search was run because they fail. The client loads
+that atlas, so a player saw both palettes in one glance: a strike sprite in
+one hue over a cell fill in the other.
+[Decision 0006](decisions/0006-the-pip-takes-the-better-ink-and-the-client-takes-the-hues.md)
+is the ruling and what adopting the column cost.
 
 **The hues are not what every direction draws.** Those six values are what
 the HUD chips and the kind buttons use. Each direction then repaints them —
@@ -276,10 +283,20 @@ one itself.
 ### HUD contrast
 
 Every text-on-panel pair the HUD can produce is measured against WCAG AA
-body text (4.5:1) by `art:check`. All ten pass. One of them had to move:
+body text (4.5:1) by `art:check`. All sixteen pass. Two of them had to move:
 M2's `buttonActive` `#3f7a55` put `#ecf0f1` at **4.44:1** — just under. It
 is now `#37694b` at 5.57:1. The Send button is the one control a player
 reads under time pressure and is not the place to be borderline.
+
+Ten of the sixteen are panel colours. The other six are the tray cards, and
+they were missing until ARB-386: a card's background is its kind's hue at
+`CARD_TINT` over `hud`, so it is the one background in the HUD that is a
+variable, and the lightest kind decides whether the dimmest state passes.
+`armored`'s v1 value held `textDim` at **3.92:1** at the tint the client
+shipped and **2.84:1** at the one the mock drew into the picture below. The
+tint is now one constant, **0.14**, and the floor across the six is 5.03:1 on
+`armored`. A card keeps its kind channel either way: §4 puts the hue at full
+strength in the silhouette the card is mostly made of.
 
 ### Non-text contrast
 
@@ -320,7 +337,21 @@ the floor is 3:1:
 | `checkpoint` tile / `boardBg` | 8.25:1 |
 | `nest` tile / `boardBg` | 11.94:1 |
 | `selection` mark / `boardBg` | 11.94:1 |
-| growth pip `ink` / each of the six kind fills | 3.22:1 at the tightest, `horned` |
+| growth pip / the kind fill it sits on | 4.94:1 at the tightest, `horned` |
+| kind chip / `hud` | 3.06:1 at the tightest, `tyrant` |
+
+**The growth pip is a rule and not a colour.** It takes whichever of `ink` and
+`selection` contrasts more with its own kind's fill — ink for four kinds, the
+light value for `tyrant` and `horned`, which are the two dark hues — and it is
+drawn opaque. One fixed `ink` is what the pips shipped as, at alpha 0.85,
+which composited to **2.88:1** on `horned`; `ink` is already `#111111`, so
+darkening it is worth 11% and then there is nothing left. A pip can do better
+than one value because, unlike the refusal hatching, it knows what it is
+landing on: its own dinosaur's cell, one of six. The floor is 4.94:1 today and
+4.01:1 against any fill a future hue revision could produce, which is the
+property a literal does not have. That it is `selection` on two kinds is not a
+second selection mark — §4 carries selection on weight and geometry, and a
+filled 6px dot at the foot of a cell is neither a stroke nor a ring.
 
 And these sit below 3:1 and stay there, each for a reason, because an
 exemption has to be a decision somebody made and not a pair nobody wrote
@@ -332,7 +363,9 @@ down:
 | hp bar back / `boardBg` | 1.25:1 | The front's length is the reading. It does cost something, and ARB-378 holds what. |
 | `hpLow` / hp bar back | 2.87:1 | A real failure, and marginal. The fix is geometry as well as palette and wants the invader art to argue against: ARB-378. |
 | `hpFront` / `hpLow` | 1.82:1 | The table above makes bar length threat's first channel and the hue its second. Green against red at 1.82:1 is the familiar dichromacy problem, and length is the reason it is not the only channel. |
-| `selection` / each kind fill | 1.86:1 at `raptor` | The mark is a ring and a cell outline, delineated on its *outer* edge against `boardBg` at 11.94:1. One adjacent side at 3:1 is what 1.4.11 asks for. |
+| `selection` / each kind fill | 1.13:1 at `armored` | The mark is a ring and a cell outline, delineated on its *outer* edge against `boardBg` at 11.94:1. One adjacent side at 3:1 is what 1.4.11 asks for. |
+| invader fill / `boardBg` | 2.30:1 at `tyrant` | An invader is a shape on a dark board in its kind's hue, and two of the six hues are dark. It pre-dates the v1 set and is not meaningfully changed by it — M2's six were 2.34:1 at `horned`. Raising it means moving `tyrant` and `horned`, which re-opens the 60-pair search above, so it is its own decision: ARB-387. What carries an invader today is its silhouette and the hp bar only it has. |
+| refusal flash / each card's tint | 3.37:1 at `armored` | The cost flashing `refusal` on a no-meat tap is a change over time, not a number to read: the digits do not move and have already been read. Which card flashed is the information, and the flash carries that over 1.4.11's floor. §4's toast and the board hatching are the refusal's own channels. |
 | `buttonActive` / `button` | 1.53:1 | Send active against Send idle is a change over time, not two things side by side, and the `+25` second line is the channel that is not hue. The last second of a build phase is the one window where the bonus is 0 and the fill is the only difference — and sending early is worth nothing in it. |
 | any button fill / `hud` | 1.87:1 at `button` | A filled slab under a visible label at 8.50:1 is identified by its label. A boundary is what the 1.4.11 exemption exists for. |
 
@@ -491,6 +524,14 @@ the floor. Each carries the kind's silhouette in its hue, the kind name in
 `label`, and the hatchling's cost with a meat pip. A button the player
 cannot currently afford dims its cost to `textDim` and keeps the
 silhouette at full strength — it is still a label, just not yet a purchase.
+
+The card's background is its kind's hue at `CARD_TINT` = **0.14** over `hud`,
+and the cost's affordable state is `text`. Both are ARB-386's: the tint was
+0.22 in the client and 0.32 in the mock that draws the picture above, and the
+cost was `meat`, which on the lightest card is 4.51:1 against `text`'s
+11.21:1. `text`/`textDim` is also the pair **Grow** uses for the same
+question, so affordability now reads one way across the HUD, and the meat pip
+beside the number is still what says the price is in meat.
 
 **The sheet tray.**
 
