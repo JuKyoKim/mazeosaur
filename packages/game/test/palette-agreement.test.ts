@@ -34,6 +34,7 @@
 
 import { describe, expect, it } from "vitest";
 import { BOARD, CARD_TINT as ART_CARD_TINT, KINDS, KIND_HUE } from "../../../tools/art/directions.js";
+import { pipInk } from "../../../tools/art/graphical-pairs.js";
 import { contrastRatio, mix, rgb, type Rgb } from "../../../tools/art/raster.js";
 import { CARD_TINT, COLORS, KIND_COLOR, PIP_INK, hexCss } from "../src/theme.js";
 
@@ -195,6 +196,24 @@ describe("the kind palette, and the marks drawn on it", () => {
       return PIP_INK[k] !== better;
     });
     expect(wrong).toEqual([]);
+  });
+
+  /**
+   * And the art tool's copy of the same rule. `art:check`'s `pip / <kind>`
+   * pairs are graded against `pipInk()` in `tools/art/graphical-pairs.ts`,
+   * which exists because `tools` cannot import `theme.ts`. A second copy of
+   * a rule is how the hues drifted for the whole of M2, so it is pinned the
+   * same way the colours are: if the two implementations ever disagree about
+   * a kind, `art:check`'s 3:1 measurement stops being a measurement of the
+   * pip the renderer draws, which is exactly the hole ARB-386 found.
+   */
+  it("agrees with the art tool on which ink each pip takes", () => {
+    const drift = KINDS.map((k) => {
+      const mine = rgb(PIP_INK[k]);
+      const theirs = pipInk(k);
+      return mine.every((c, i) => c === theirs[i]!) ? "" : `${k}: theme ${hexCss(PIP_INK[k])} vs art ${theirs.join()}`;
+    }).filter(Boolean);
+    expect(drift.join("\n")).toBe("");
   });
 
   /**

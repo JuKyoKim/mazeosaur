@@ -10,11 +10,31 @@
 // `art:check`, so a guard only the CLI ran would gate nothing. `build.ts`
 // prints these and `test/graphical-pairs.test.ts` fails on them.
 
-import { BOARD, KIND_HUE, KINDS } from "./directions.js";
+import { BOARD, KIND_HUE, KINDS, type Kind } from "./directions.js";
 import { contrastRatio, rgb, type Rgb } from "./raster.js";
 
 /** WCAG 1.4.11's floor for a graphical object that carries information. */
 export const GRAPHICAL_FLOOR = 3;
+
+/**
+ * `PIP_INK` in packages/game/src/theme.ts, restated here because `tools`
+ * cannot import `theme.ts` — the same reason `directions.ts` restates the
+ * colours. `packages/game/test/palette-agreement.test.ts` pins the two equal
+ * and re-derives the rule from the hues, so neither copy is a literal table
+ * somebody has to keep in step by hand.
+ *
+ * The rule: whichever of `ink` and `text` — the board's dark and §4's one
+ * permitted near-white, `COLORS.ink` and `COLORS.selection` on the client,
+ * which `palette-agreement.test.ts` already pins equal to `COLORS.text` —
+ * contrasts more with the kind fill the pip sits on. A pip lands on its own
+ * dinosaur's cell, one of six known at the call site, so it can take the
+ * better of two values where the refusal hatching cannot. ARB-386 ruled it;
+ * decision 0006 says why, and what the alternatives cost.
+ */
+export function pipInk(k: Kind): Rgb {
+  const fill = rgb(KIND_HUE[k]);
+  return contrastRatio(BOARD.ink, fill) >= contrastRatio(BOARD.text, fill) ? BOARD.ink : BOARD.text;
+}
 
 export interface Pair {
   readonly what: string;
@@ -46,9 +66,9 @@ export const GATED: readonly Pair[] = [
   { what: "nest / board", fg: BOARD.nest, bg: BOARD.boardBg },
   { what: "selection / board", fg: BOARD.nest, bg: BOARD.boardBg },
   // Growth stage is pips on the animal, so the pip has to clear the fill it
-  // is laid on for all six kinds. See `tightestPip()` for which one is
-  // closest to the floor, and for why the client's own number is lower.
-  ...KINDS.map((k) => ({ what: `pip / ${k}`, fg: BOARD.ink, bg: rgb(KIND_HUE[k]) })),
+  // is laid on for all six kinds. The colour is `pipInk()` and not a fixed
+  // ink — see there for why, and `tightestPip()` for which kind is closest.
+  ...KINDS.map((k) => ({ what: `pip / ${k}`, fg: pipInk(k), bg: rgb(KIND_HUE[k]) })),
 ];
 
 /**
@@ -135,15 +155,13 @@ export function staleExemptions(): Result[] {
  * changes: it is the pair closest to the floor and so the first to fall
  * through a palette edit.
  *
- * **It is measured on `KIND_HUE`, which is the art tool's palette.** The
- * client draws pips over `KIND_COLOR` in `packages/game/src/theme.ts`, and
- * those six values are *not* the same six — `palette-agreement.test.ts` pins
- * the board and HUD colours but not the kind hues. Against the client's set
- * the tightest is `horned` at 3.22:1 rather than `tyrant` at 3.17:1, and the
- * client additionally draws the pip at **alpha 0.85**, which composites to
- * 2.88:1 on `horned` — under the floor. That is a real defect and it is
- * ARB-386's, not this file's: gating a number here that no renderer produces
- * would be worse than gating the one the art tool actually draws.
+ * It is measured on `KIND_HUE`, and since ARB-386 that is also the client's
+ * `KIND_COLOR`: the two differed on all six kinds when this function was
+ * written, so the tightest pair here was `tyrant` at 3.17:1 while the
+ * renderer's was `horned` at 3.22:1, and the renderer drew the pip at alpha
+ * 0.85 on top of that, composited to **2.88:1** — under the floor, on screen,
+ * while this list passed. Both halves of that are closed: the hues agree, and
+ * `pipInk()` plus an opaque draw puts the tightest pair at 4.94:1.
  */
 export function tightestPip(): Result {
   const pips = gatedResults().filter((r) => r.what.startsWith("pip / "));

@@ -48,9 +48,21 @@ describe("graphical pairs (WCAG 1.4.11, 3:1)", () => {
 
   // The pair closest to the floor, so a palette edit that eats the margin
   // fails here with the kind named rather than somewhere downstream.
+  //
+  // The band was `[3, 3.5)` when this file was written, which is where one
+  // fixed `ink` put it — and `packages/game/test/palette-agreement.test.ts`
+  // records that the client was below the floor at the time, composited. Both
+  // numbers moved on ARB-386: `pipInk()` takes the better of the board's dark
+  // and its near-white per kind, so the tightest is `horned` and the band is
+  // the one the rule can actually produce. Its lower edge is not 3 any more
+  // because the rule has a floor of its own — the worst fill it can be handed
+  // is the mid grey where the two values meet, at 4.01:1 — and asserting 3
+  // here would stop saying that.
   it("names the tightest growth pip", () => {
     const t = tightestPip();
+    expect(t.what).toBe("pip / horned");
     expect(t.ratio).toBeGreaterThanOrEqual(GRAPHICAL_FLOOR);
-    expect(t.ratio).toBeLessThan(3.5);
+    expect(t.ratio).toBeGreaterThan(4);
+    expect(t.ratio).toBeLessThan(5.2);
   });
 });
