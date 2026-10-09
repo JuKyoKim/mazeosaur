@@ -709,9 +709,11 @@ by weight and geometry — 3px, a range ring, a 5px lift — not by hue, which i
 section 3's rule applied to a state, so nothing is lost by giving up the
 brighter value.
 
-`ghost` `#ffffff` is what the board's rings used to be. Nothing reads it today
-— the rings that still look white hold the literal, not the token — so it
-should go rather than sit in `theme.ts` as the obvious thing to reach for.
+`ghost` `#ffffff` is what the board's rings used to be, and it is gone from
+`theme.ts` rather than left sitting there as the obvious thing to reach for.
+The two rings that still held the literal — the selected dinosaur's range ring
+and its 3px cell outline — take `COLORS.selection` with it, so the convention
+above is now a statement about the code and not only about the intent.
 
 **The selection does not survive the placement.** Settled by the owner on
 2026-10-05: **one-shot, the PvZ-exact behaviour.** A successful place returns
