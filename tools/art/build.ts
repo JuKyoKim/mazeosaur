@@ -22,6 +22,7 @@ import { EXEMPT, gatedResults, staleExemptions } from "./graphical-pairs.js";
 import { ARCHETYPES, ARCHETYPE_TELL, KIND_SILHOUETTE_NOTE } from "./bestiary.js";
 import {
   BOARD,
+  CARD_TINT,
   CHOSEN,
   DIRECTIONS,
   KINDS,
@@ -39,7 +40,7 @@ import { describeProblem as describeDocProblem, geometryDrift, readDoc } from ".
 import { blitScaled, drawText, effectsPlate, renderBoardFrame, strikesPlate } from "./frame.js";
 import { CANVAS_H, CANVAS_W, CELL_PX, DRAW_CELLS, SCALE, fontScale, layoutTable, pt, TYPE } from "./layout.js";
 import { encodeApng, encodePng, pngHasPixels } from "./png.js";
-import { Raster, contrastRatio, darken, rect, rgb, type Rgb } from "./raster.js";
+import { Raster, contrastRatio, darken, mix, rect, rgb, type Rgb } from "./raster.js";
 import { dinoSprite, inkBox, invaderSprite, pack, strikeEntries } from "./sprites.js";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -796,6 +797,16 @@ function doCheck(): void {
     ["text on Sell", BOARD.text, BOARD.buttonDanger],
     ["text on button", BOARD.text, BOARD.button],
     ["text on toast", BOARD.text, darken(rgb(0x0b120d), 0)],
+    // The tray cards. Everywhere else in the HUD the background is a fixed
+    // panel colour, and the ten pairs above were the whole set on that
+    // assumption; a card's background is its kind's hue at `CARD_TINT`, so
+    // there are six more and the lightest kind decides whether the dimmest
+    // state passes. They were not on this list until ARB-386, and at the 0.32
+    // the mock drew, `armored` held `textDim` at 2.84:1 — a failing pair in a
+    // section that said all ten passed, because it was never one of the ten.
+    ...KINDS.map(
+      (k) => [`dim on ${k} card`, BOARD.textDim, mix(rgb(KIND_HUE[k]), BOARD.hud, 1 - CARD_TINT)] as [string, Rgb, Rgb],
+    ),
   ];
   for (const [what, fg, bg] of pairs) {
     const ratio = contrastRatio(fg, bg);

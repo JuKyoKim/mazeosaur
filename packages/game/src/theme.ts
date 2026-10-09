@@ -56,11 +56,15 @@ export const COLORS = {
    */
   selection: 0xecf0f1,
   /**
-   * The board's dark ink: the growth pips, and the refused preview's
-   * hatching. Both are marks laid over a cell whose colour the mark does
-   * not control — a pip sits on any kind's fill, hatching on any terrain —
-   * so both need a value that contrasts with all of them rather than with
-   * one. Everything on this board is mid-to-bright, so dark is that value.
+   * The board's dark ink: the refused preview's hatching, and the dark half
+   * of `PIP_INK`. Hatching is laid over a cell whose colour it does not
+   * control — any terrain, any kind's fill, the lane marks — so it needs one
+   * value that contrasts with all of them rather than with one. Everything on
+   * this board is mid-to-bright, so dark is that value.
+   *
+   * It is as dark as that argument can get. `#000000` would buy 11% — 3.22:1
+   * to 3.58:1 on the tightest kind fill — and there is nothing after it,
+   * which is why `PIP_INK` is a rule and not a darker literal.
    *
    * §4 of docs/01-art-hud-and-audio.md specifies the hatching's width and
    * spacing but not its colour; this is the gap, raised on ARB-168.
@@ -68,14 +72,103 @@ export const COLORS = {
   ink: 0x111111,
 } as const;
 
+/**
+ * The six kind hues, and the palette `art:check` measures.
+ *
+ * These are §3 of docs/01-art-hud-and-audio.md's v1 table: the output of a
+ * constrained search over all 60 pairs (six kinds, normal vision plus three
+ * kinds of colour blindness) requiring every pair to separate either by hue
+ * distance or by lightness. The client shipped M2's six until ARB-386 —
+ * `e0a83a c0392b 95a5a6 8e44ad 27ae60 3498db`, the values the search was run
+ * to replace — while `tools/art` drew every plate and every atlas frame from
+ * the table below. Both palettes were therefore on screen at once: a strike
+ * sprite out of the atlas in one hue, over a cell fill in the other.
+ *
+ * `test/palette-agreement.test.ts` pins these equal to `KIND_HUE` in
+ * `tools/art/directions.ts`, which is what makes `art:check`'s 60-pair
+ * measurement a measurement of the client.
+ */
 export const KIND_COLOR: Record<Kind, number> = {
-  raptor: 0xe0a83a,
-  tyrant: 0xc0392b,
-  armored: 0x95a5a6,
-  horned: 0x8e44ad,
-  longneck: 0x27ae60,
-  flier: 0x3498db,
+  raptor: 0xf4a82a,
+  tyrant: 0xbd2b1d,
+  armored: 0xdbe4e6,
+  horned: 0x8a44c4,
+  longneck: 0x52a87e,
+  flier: 0x3ab1ea,
 };
+
+/**
+ * The growth pip's colour, per kind. Growth stage on the board is a count of
+ * pips on the animal, so a pip is a graphical object carrying information and
+ * owes WCAG 1.4.11's 3:1 against the fill it is drawn on.
+ *
+ * **A pip is not the hatching, and that is the whole rule.** `ink` has to be
+ * one fixed value because hatching lands on a cell nobody chose — any
+ * terrain, any lane mark. A pip lands on its own dinosaur's cell fill, a
+ * closed set of six known at the call site, so it can take the better of two
+ * values and still be one rule: **whichever of `ink` and `selection`
+ * contrasts more with `KIND_COLOR[kind]`**. Four kinds are bright enough for
+ * ink; `tyrant` and `horned` are the two dark hues and take the light value.
+ *
+ * What the rule buys, re-derived in `test/palette-agreement.test.ts`:
+ *
+ * | kind | fill | on ink | on selection | pip |
+ * | --- | --- | --- | --- | --- |
+ * | raptor | `f4a82a` | 9.42 | 1.75 | ink, 9.42:1 |
+ * | tyrant | `bd2b1d` | 3.17 | 5.19 | selection, 5.19:1 |
+ * | armored | `dbe4e6` | 14.61 | 1.13 | ink, 14.61:1 |
+ * | horned | `8a44c4` | 3.33 | 4.94 | selection, 4.94:1 |
+ * | longneck | `52a87e` | 6.53 | 2.52 | ink, 6.53:1 |
+ * | flier | `3ab1ea` | 7.78 | 2.11 | ink, 7.78:1 |
+ *
+ * The floor is `horned` at 4.94:1, which clears AA body text and not just
+ * 1.4.11 — and a hue revision cannot drop it far: the worst fill the
+ * better-of rule can be handed is the mid grey where the two values meet, and
+ * that is still 4.01:1. One fixed ink has no such floor. ARB-386 found the
+ * pips shipping at **2.88:1** on `horned`, because `ink` was 3.22:1 there and
+ * the draw composited it at alpha 0.85.
+ *
+ * Which is the second half of the rule: **the pips are drawn opaque.** An
+ * alpha on a mark whose job is to be counted spends the contrast the count is
+ * read with, and 0.85 was spending 11% of it to soften an edge.
+ *
+ * Using `selection` for two of the six is not a second selection mark. §4 of
+ * docs/01-art-hud-and-audio.md is explicit that selection is carried by
+ * weight and geometry — a 3px stroke, a range ring, a 5px lift — and a filled
+ * 6px dot at the foot of a cell is none of those. The alternative was a
+ * seventh near-white literal, which the same section forbids.
+ */
+export const PIP_INK: Record<Kind, number> = {
+  raptor: COLORS.ink,
+  tyrant: COLORS.selection,
+  armored: COLORS.ink,
+  horned: COLORS.selection,
+  longneck: COLORS.ink,
+  flier: COLORS.ink,
+};
+
+/**
+ * How much of its kind's hue a tray card's background carries, over `hud`.
+ *
+ * Here and not in `layout.ts` because it is not geometry: it is the only
+ * thing in the HUD whose *background* colour is a variable, and so the only
+ * place where a kind hue decides whether a text pair passes. Every card's
+ * label and cost is drawn on `hue × this + hud × (1 - this)` — six different
+ * backgrounds, and the lightest kind sets the floor for all six. §3's ten
+ * measured text pairs are all fixed panel colours and never covered these.
+ *
+ * 0.14 is where the dimmest state on the lightest card keeps a real margin:
+ * `textDim` on `armored`'s card is 5.03:1, against 3.92:1 at the 0.22 the
+ * client shipped and 2.84:1 at the 0.32 `tools/art` drew into §4's own
+ * picture. Those were three values of one constant, which is why it is a
+ * constant now — `test/palette-agreement.test.ts` pins it to the art tool's
+ * copy the way the colours are pinned.
+ *
+ * The card does not lose its kind channel to this. §4 puts the hue at full
+ * strength in the silhouette the card is mostly made of; the wash behind it
+ * was never the thing that said raptor.
+ */
+export const CARD_TINT = 0.14;
 
 export const FONT = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
 

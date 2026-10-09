@@ -17,7 +17,7 @@ import { MIGRATION_LABEL, migrationCounter } from "@mazeosaur/game/row1";
 import { sheetLines } from "@mazeosaur/game/sheet";
 import { clipFrames, type Clip } from "./animate.js";
 import { ARCHETYPE_SILHOUETTE, type Archetype } from "./bestiary.js";
-import { BOARD, KIND_HUE, KINDS, type Direction, type Kind } from "./directions.js";
+import { BOARD, CARD_TINT, KIND_HUE, KINDS, type Direction, type Kind } from "./directions.js";
 import { CAP_H, GLYPH_W, glyph } from "./font.js";
 import {
   BOARD_H,
@@ -854,7 +854,7 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
       };
       const affordable = s.meat >= def.cost;
       if (sel) r.fill(roundRect(b.x, b.y, b.w, b.h, 10).expand(SELECT_BORDER), rgb(0xf6f3ea), 0.95);
-      r.fill(roundRect(b.x, b.y, b.w, b.h, 10), mix(rgb(KIND_HUE[kind]), BOARD.hud, 0.68));
+      r.fill(roundRect(b.x, b.y, b.w, b.h, 10), mix(rgb(KIND_HUE[kind]), BOARD.hud, 1 - CARD_TINT));
       blitScaled(r, sheet.dino(kind, 1), b.x + b.w / 2, b.y + 34, sel ? 60 : 56, affordable ? 1 : 0.45);
       // The button is labelled with the *kind*, not the genus. The kind
       // chart is the six facts the player has to learn; the genus is on the
@@ -862,7 +862,11 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
       // in 109px and shortening it to "Velocir" teaches nothing.
       drawText(r, b.x + b.w / 2, b.y + 66, kind, TYPE.label, affordable ? BOARD.text : BOARD.textDim, "center");
       meatIcon(r, b.x + b.w / 2 - 30, b.y + 88, 20, 20);
-      drawText(r, b.x + b.w / 2 - 4, b.y + 93, String(def.cost), TYPE.body, affordable ? BOARD.meat : BOARD.textDim);
+      // `text` and not `meat` when affordable: a card's background is a kind
+      // hue, six of them, and `meat` on the lightest is 4.51:1 against
+      // `text`'s 11.21:1. The meat pip to its left says the price is in meat.
+      // Same pair as Grow, and as `refreshHud` in `BoardScene`.
+      drawText(r, b.x + b.w / 2 - 4, b.y + 93, String(def.cost), TYPE.body, affordable ? BOARD.text : BOARD.textDim);
     });
   } else {
     const dn = scene.selected;
