@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { content } from "@mazeosaur/content";
 import { CELL, TICKS_PER_SECOND } from "@mazeosaur/sim";
-import { sheetLines } from "../src/sheet.js";
+import { growLabel, sheetLines } from "../src/sheet.js";
 import { SHEET_COL_W, TYPE } from "../src/layout.js";
 
 const defs = Object.values(content.dinos);
@@ -92,5 +92,74 @@ describe("the dinosaur sheet's four lines", () => {
     expect(longest((l) => l.extras), "a longneck adult's modifiers, 296px at TYPE.label").toBe(31);
     expect(SHEET_COL_W).toBeGreaterThanOrEqual(296);
     expect(TYPE.title).toBeGreaterThan(TYPE.body);
+  });
+});
+
+/**
+ * The Grow button's label is the fifth string built from content and drawn
+ * into a fixed box, and it is the one that was not checked. It shipped as
+ * `Grow → Deinonychus` on one line: 202px in a 192px button, and 236px at
+ * `Argentinosaurus`. Centred, so it did not clip or run off one edge — it
+ * spilled over the sheet column on the left and onto Sell on the right.
+ *
+ * Width cannot be asserted here either, for the same reason as the sheet's
+ * four lines: there is no canvas and the face is the platform's.
+ * `tests/client/hud-hit-targets.spec.ts` measures it for all twelve grow
+ * targets in a running client. What is assertable without a browser is the
+ * shape — which fact is on which line, and a character budget — and the
+ * shape is the part that regresses: putting the three back on one line is
+ * the obvious tidy-up, and it is the defect.
+ */
+describe("the Grow button's label", () => {
+  const parents = defs.filter((d) => d.growsTo);
+
+  /** The def a parent grows into, and a failure rather than a skip if the id dangles. */
+  const target = (parent: (typeof parents)[number]) => {
+    const next = content.dinos[parent.growsTo as string];
+    if (!next) throw new Error(`${parent.id} grows into ${parent.growsTo}, which is not in content`);
+    return next;
+  };
+
+  it("covers every dinosaur that can grow", () => {
+    expect(parents.length).toBe(12);
+  });
+
+  it("gives the verb, the genus and the price a line each", () => {
+    for (const parent of parents) {
+      const next = target(parent);
+      expect(growLabel(next).split("\n")).toEqual(["Grow →", next.name, `${next.cost} meat`]);
+    }
+  });
+
+  // The genus alone on its line is the whole fix: it is the longest of the
+  // three and the only one that grows with the content. `Grow →
+  // Argentinosaurus` as one line is 15 + 7 characters and does not fit;
+  // `Argentinosaurus` on its own does, with room to spare.
+  it("never shares the genus line", () => {
+    for (const parent of parents) {
+      const next = target(parent);
+      expect(growLabel(next).split("\n")[1]).toBe(next.name);
+    }
+  });
+
+  it("says so rather than disappearing when there is nothing to grow into", () => {
+    expect(growLabel(undefined)).toBe("Fully grown");
+    expect(growLabel(undefined).split("\n").length).toBe(1);
+  });
+
+  /**
+   * Caps, with what each line measured in one running client beside it.
+   * Those px are that box's `system-ui` fallback, not a property of the
+   * code — the browser spec is what enforces the width. This is what fails
+   * in under a second when a content edit lengthens a genus, so that the
+   * slow answer is a confirmation rather than the first news.
+   */
+  it("holds every line to the length the button was measured against", () => {
+    const lineLengths = parents.flatMap((p) => growLabel(target(p)).split("\n").map((l) => l.length));
+    // `Argentinosaurus`, 157px at TYPE.label in a 192px button.
+    expect(Math.max(...lineLengths)).toBe(15);
+    // One line of the one-line form, for contrast: `Grow → Argentinosaurus`
+    // is the string that did not fit, and it is 22.
+    expect(Math.max(...parents.map((p) => `Grow → ${target(p).name}`.length))).toBe(22);
   });
 });

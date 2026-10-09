@@ -40,7 +40,7 @@ import {
   rowAt,
 } from "./layout.js";
 import { MIGRATION_LABEL, migrationCounter } from "./row1.js";
-import { sheetLines } from "./sheet.js";
+import { growLabel, sheetLines } from "./sheet.js";
 import { CARD_TINT, COLORS, KIND_COLOR, PIP_INK, text, wrapped } from "./theme.js";
 import { SfxBus } from "./audio.js";
 import { again, boardEntry, type BoardEntry } from "./entry.js";
@@ -1308,9 +1308,16 @@ export class BoardScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * `setAlign` is here rather than at each `setText` because three of these
+   * five labels are multi-line and a centred button whose second line is
+   * left-aligned looks like a layout bug. It was repeated at the call sites
+   * until the Grow label grew a third line (ARB-296) and one of them would
+   * have had to be repeated again.
+   */
   private button(x: number, y: number, w: number, h: number, label: string, onClick: () => void, size = 20): Button {
     const bg = this.add.rectangle(x, y, w, h, COLORS.button).setOrigin(0, 0);
-    const t = this.add.text(x + w / 2, y + h / 2, label, text(size)).setOrigin(0.5);
+    const t = this.add.text(x + w / 2, y + h / 2, label, text(size)).setOrigin(0.5).setAlign("center");
     this.onTap(bg, onClick);
     return { bg, label: t };
   }
@@ -1599,9 +1606,9 @@ export class BoardScene extends Phaser.Scene {
         this.panelStats.setText(lines.stats);
         this.panelExtras.setText(lines.extras);
         const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
-        this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "Fully grown").setAlign("center");
+        this.growButton.label.setText(growLabel(next));
         this.growButton.label.setColor(next && s.meat >= next.cost ? COLORS.text : COLORS.textDim);
-        this.sellButton.label.setText(`Sell\n+${g.sellValue(d)}`).setAlign("center");
+        this.sellButton.label.setText(`Sell\n+${g.sellValue(d)}`);
       }
     }
   }
@@ -2384,6 +2391,45 @@ export class BoardScene extends Phaser.Scene {
       ...this.trayCards.map((c, i) => box(`kind card ${i}`, c.bg)),
       box("Grow", this.growButton.bg),
       box("Sell", this.sellButton.bg),
+    ];
+  }
+
+  /**
+   * The same five buttons as `hudTargets`, read from the other side: what
+   * the label on each one came to, against the box it has to fit in.
+   *
+   * `hudTargets` can only say the button is big enough for a finger, and it
+   * was green for the whole period in which Grow drew 202px of label in a
+   * 192px button — the box was right and the string was not. A centred
+   * label that outgrows its button does not clip and does not run off one
+   * edge: it spills out of both, which at the content's longest genus is
+   * 236px, 10px into the sheet column and 10px into Sell (ARB-296).
+   *
+   * `lines` is reported because width alone is not the whole question: a
+   * label that gains a line gets taller rather than wider, and three lines
+   * is 66px of Grow's 82 where four is 88 and out of the button. It is the
+   * shape `growLabel` writes, so a spec can assert it rather than infer it
+   * from a height that happens to pass.
+   *
+   * This is the *current* label, so a spec that wants the widest value a
+   * content edit could produce has to drive the client to it — as
+   * `tests/client/hud-row1-widths.spec.ts` does for row 1.
+   */
+  get hudLabels(): { name: string; text: string; w: number; h: number; lines: number; box: { w: number; h: number } }[] {
+    const of = (name: string, b: Button) => ({
+      name,
+      text: b.label.text,
+      w: b.label.width,
+      h: b.label.height,
+      lines: b.label.getWrappedText(b.label.text).length,
+      box: { w: b.bg.displayWidth, h: b.bg.displayHeight },
+    });
+    return [
+      of("Send", this.sendButton),
+      of("Pause", this.pauseButton),
+      of("speed toggle", this.speedButton),
+      of("Grow", this.growButton),
+      of("Sell", this.sellButton),
     ];
   }
 

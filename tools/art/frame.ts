@@ -891,6 +891,14 @@ function drawHud(r: Raster, scene: Scene, d: Direction): void {
       drawText(r, ROW3.sheetExtras.x, ROW3.sheetExtras.y + i * (capHeight(TYPE.label) + 6), row, TYPE.label, BOARD.textDim);
     });
     const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
+    // The plate's own two-slot string, not the client's, which is three
+    // lines from `growLabel` (`@mazeosaur/game/sheet`). `drawButton` lays a
+    // label out through `fitSize`, which shrinks it until it fits, so a
+    // string that overflows in the client still looks fine on a plate —
+    // that is how the Grow label drew 202px in a 192px button for the whole
+    // of M2 with the generated frames green (ARB-296). Sharing `growLabel`
+    // means teaching `drawButton` to stop shrinking and regenerating all 38
+    // frames: a mock change, not a client one, and not this issue's.
     drawButton(r, ROW3.grow, next ? BOARD.buttonActive : BOARD.button, next ? "GROW" : "FULLY GROWN", TYPE.body, BOARD.text, next ? `${next.name} · ${next.cost}` : undefined);
     drawButton(r, ROW3.sell, BOARD.buttonDanger, "SELL", TYPE.body, BOARD.text, `+${g.sellValue(dn)} meat`);
   }
