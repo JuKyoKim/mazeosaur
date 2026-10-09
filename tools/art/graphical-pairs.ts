@@ -105,15 +105,17 @@ export const EXEMPT: readonly (Pair & { readonly why: string })[] = [
     bg: BOARD.hpLow,
     why: "bar length is threat's first channel and hue its second (§3's second-channel table), so green-against-red is not carrying this alone.",
   },
-  // §3 writes this row as "`selection` / each kind fill, 1.86:1 at `raptor`",
-  // and 1.86 is a `KIND_COLOR` number — the client's palette, not the one this
-  // file measures. Against `KIND_HUE` the tightest is `armored` at 1.13:1 and
-  // `raptor` is 1.75:1; two of the six (`tyrant` 5.19, `horned` 4.94) clear the
-  // floor outright, so listing all six here would make `staleExemptions()`
-  // fire on a pair §3 deliberately exempts. One row at the tightest kind is
-  // the same discipline `tightestPip()` uses, and for the same reason: gate the
-  // number the art tool actually draws. Reconciling the two palettes is
-  // ARB-386's, not this file's.
+  // §3 writes this row as "`selection` / each kind fill, 1.13:1 at `armored`",
+  // and that is the number this file measures: ARB-386 gave the client
+  // `KIND_HUE`'s six values, so `theme.ts`'s `KIND_COLOR` and `KIND_HUE` are
+  // now one palette and a figure computed here is a figure the player sees.
+  //
+  // One row rather than six, though. Two of the six — `tyrant` at 5.19 and
+  // `horned` at 4.94 — clear 3:1 outright, so listing all six would make
+  // `staleExemptions()` fire on a pair §3 deliberately exempts. The tightest
+  // kind is the one that has to be named, and for the same reason
+  // `tightestPip()` names one: a row that already passes is not an exemption,
+  // and a palette edit that lowers the floor further has to fail somewhere.
   {
     what: "selection / armored fill",
     fg: BOARD.nest,
