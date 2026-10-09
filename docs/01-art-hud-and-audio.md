@@ -577,9 +577,24 @@ bound is the spec's own assertion, every line inside `SHEET_COL_W` in
 whatever font the client resolves, backed by the character caps in
 `packages/game/test/sheet.test.ts`.
 
-**Grow** shows the cost when affordable, dims to `FULLY GROWN` at stage 3,
-and dims to the cost when it is not affordable — the player should be able
-to read the price of the thing they cannot buy yet. **Sell** always shows
+**Grow** shows what you get and what it costs, on three lines: `Grow →`,
+the genus, and the price in meat. It dims rather than greys out when the
+meat is short, and says `Fully grown` on one line at stage 3 — the player
+should be able to read the price of the thing they cannot buy yet, and a
+control that vanishes reads as a dropped tap.
+
+The genus gets a line to itself for the same reason it does on the sheet:
+it is the longest of the three and the only one a content edit lengthens.
+On one line it did not fit — 202px at Deinonychus and 236px at
+Argentinosaurus in a 192px button — and because the label is centred it
+did not clip or run off one edge, it spilled over the sheet column on the
+left and onto Sell on the right at ten of the twelve grow targets. The
+string is built in one place, `growLabel` in `packages/game/src/sheet.ts`;
+`tests/client/hud-hit-targets.spec.ts` measures it in a running client at
+every genus the content can grow into, and `packages/game/test/sheet.test.ts`
+caps the lines without a font.
+
+**Sell** always shows
 the refund in meat, which is different during a build phase (80%) and
 during a migration (60%), so the number itself teaches that juggling costs
 something.

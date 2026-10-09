@@ -301,6 +301,23 @@ export const ROW3 = {
   sell: { x: 540, y: HUD_Y + 163, w: 164, h: 82 },
 } as const;
 
+/*
+ * Row 3's buttons deliberately have no `ROW1_WRAP` twin. A wrap is what
+ * bounds row 1, where the over-long thing is a field with spaces in it; the
+ * over-long thing on Grow is a single genus, and Phaser's `wordWrap` breaks
+ * on spaces only. Measured in a client: `Micropachycephalosaurus` on its
+ * own line draws 247px in the 192px `ROW3.grow` with a 180px wrap set and
+ * 247px with none. The wrap would read as a bound it is not.
+ *
+ * What bounds these two is `sheet.ts`'s `growLabel` — one fact per line, so
+ * the genus is measured alone rather than after `Grow → ` — and
+ * `tests/client/hud-hit-targets.spec.ts`, which re-measures the label in a
+ * running client at every genus the content can grow into. A genus longer
+ * than today's longest fails there with the px, which is the conversation
+ * to have (shorten the display name) rather than something the renderer
+ * can quietly absorb.
+ */
+
 export function kindButtonX(i: number): number {
   return GUTTER + i * (ROW3.kindButton.w + ROW3.kindButton.gap);
 }
