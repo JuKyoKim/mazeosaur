@@ -1121,9 +1121,9 @@ export class BoardScene extends Phaser.Scene {
       if (d) {
         const def = g.dinoDef(d);
         const c = this.cellCenter(d.x, d.y);
-        gfx.lineStyle(2, 0xffffff, 0.5);
+        gfx.lineStyle(2, COLORS.selection, 0.5);
         gfx.strokeCircle(c.x, c.y, (def.range * CELL_PX) / CELL);
-        gfx.lineStyle(3, 0xffffff, 0.9);
+        gfx.lineStyle(3, COLORS.selection, 0.9);
         gfx.strokeRect(d.x * CELL_PX + 1, this.cellY(d.y) + 1, CELL_PX - 2, CELL_PX - 2);
       } else {
         this.selectedDino = null;

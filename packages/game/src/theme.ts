@@ -44,7 +44,6 @@ export const COLORS = {
   hpBack: 0x2c3e50,
   hpFront: 0x2ecc71,
   hpLow: 0xe74c3c,
-  ghost: 0xffffff,
   /**
    * One selection convention, so the player learns it once. Every mark that
    * means "selected" or "your tap landed here" is this colour: the selected

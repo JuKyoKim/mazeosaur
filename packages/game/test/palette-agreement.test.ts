@@ -63,7 +63,6 @@ const CLIENT_ONLY: Record<string, string> = {
   refusalText: "COLORS.refusal as a CSS string; pinned as a twin below",
   selection: "COLORS.text as a number; pinned as a twin below",
   attack: "the attack flash, a board effect the frame generator does not draw",
-  ghost: "the placement ghost, which is an input affordance and not in a frame",
 };
 
 /** `#rrggbb` or 0xrrggbb, as one 24-bit number. */
