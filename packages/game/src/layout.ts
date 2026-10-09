@@ -301,6 +301,27 @@ export const ROW3 = {
   sell: { x: 540, y: HUD_Y + 163, w: 164, h: 82 },
 } as const;
 
+/**
+ * Row 3's button labels, as wraps. Same reason as `ROW1_WRAP`: a label here
+ * is content — Grow names the genus it grows into, Sell names a refund — so
+ * the bound on it has to be geometry rather than a string somebody counted.
+ *
+ * This one is load-bearing rather than belt-and-braces. A Grow label is
+ * *centred* on its button, so it does not run off one end the way a
+ * left-aligned row-1 field does: it spills out of both, over the sheet
+ * column on one side and onto Sell on the other, and at the longest genus
+ * the content ships it did exactly that. `sheet.ts`'s `growLabel` is the
+ * shape that fits; this is what keeps a longer genus than today's inside
+ * the button instead of silently back over its neighbours.
+ *
+ * 12 is a 6px margin each side, which is the padding `tools/art`'s
+ * `drawButton` already lays a label out against.
+ */
+export const ROW3_WRAP = {
+  grow: ROW3.grow.w - 12, // 180
+  sell: ROW3.sell.w - 12, // 152
+} as const;
+
 export function kindButtonX(i: number): number {
   return GUTTER + i * (ROW3.kindButton.w + ROW3.kindButton.gap);
 }

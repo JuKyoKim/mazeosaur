@@ -73,3 +73,30 @@ export function sheetLines(def: DinoDef): SheetLines {
     extras: extras.join(" · "),
   };
 }
+
+/**
+ * The Grow button's label: the verb, the genus it becomes, and the price.
+ *
+ * Three lines and not one, for the same reason the sheet above is four. The
+ * one-line form `Grow → Deinonychus` measures 202px at `TYPE.label` in a
+ * 192px button, and 236px at `Argentinosaurus` — which, centred on
+ * `ROW3.grow`, starts 10px inside the sheet column and ends 10px inside
+ * Sell. Stacked, the widest line over all twelve grow targets is the genus
+ * at 157px, which leaves 35px inside `ROW3.grow.w`. Both figures are this
+ * machine's `system-ui` fallback and are quoted to say which shape fits,
+ * not as constants: `ROW3_WRAP.grow` is the enforceable bound and
+ * `tests/client/hud-hit-targets.spec.ts` re-takes the measurement in a real
+ * client on every run.
+ *
+ * The arrow ends line 1 rather than beginning line 2 because it costs the
+ * line that is already shortest instead of the one that is already longest.
+ * `→ Argentinosaurus` is 179px, which fits today and leaves 13px — one
+ * character — for a content edit to spend.
+ *
+ * `undefined` is stage 3: there is nothing to grow into and the button says
+ * so rather than disappearing, because a control that vanishes reads as a
+ * dropped tap.
+ */
+export function growLabel(next: DinoDef | undefined): string {
+  return next ? `Grow →\n${next.name}\n${next.cost} meat` : "Fully grown";
+}

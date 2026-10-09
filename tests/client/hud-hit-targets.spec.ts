@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { hatchlings } from "@mazeosaur/content";
-import { CONTENT_RIGHT, HUD_Y, MIN_HIT, ROW1, ROW3, SCALE, pt } from "@mazeosaur/game/layout";
-import { cellCenter, hudTargets, openGame, paletteButtonCenter, trackPageErrors, waitAFrame } from "./helpers.js";
+import { content, hatchlings } from "@mazeosaur/content";
+import { CONTENT_RIGHT, HUD_Y, MIN_HIT, ROW1, ROW3, ROW3_WRAP, SCALE, pt } from "@mazeosaur/game/layout";
+import { growLabel } from "@mazeosaur/game/sheet";
+import { cellCenter, type HudLabel, hudLabels, hudTargets, openGame, paletteButtonCenter, trackPageErrors, waitAFrame } from "./helpers.js";
 
 /**
  * Every control a finger is supposed to be able to hit clears 44 CSS points
@@ -76,5 +77,91 @@ test("every HUD control clears the 44pt hit floor on the rendered canvas", async
   // `SCALE` is the conversion the whole floor rests on: if it is not the
   // reference phone's, every pt above is measuring something else.
   expect(SCALE).toBeCloseTo(390 / 720, 10);
+  expect(errors.messages).toEqual([]);
+});
+
+/**
+ * The other half of the same question. The test above says every button is
+ * big enough for a finger; this one says every label is small enough for
+ * its button.
+ *
+ * Both are needed, because Grow passed the first one for the whole of M2
+ * while failing this one. `ROW3.grow` is 192 wide and is correct; the label
+ * was `Grow → Deinonychus` at 202px, and at `Argentinosaurus`, the longest
+ * genus the content can grow into, 236px. A button label is *centred*, so
+ * that overflow is not a clip and not a run off one edge — it spills out of
+ * both, 10px into the sheet column on the left and 10px into Sell on the
+ * right.
+ *
+ * Nothing could see it. `packages/game/test/layout.test.ts` is green
+ * because the constants are right, and `tools/art`'s plates are green
+ * because `drawButton` calls `fitSize`, which shrinks a label until it fits
+ * and so draws a button the client does not have. That is ARB-296, and a
+ * measurement in a running client is the only thing that answers it — the
+ * string is content, the face is the platform's, and a character count is
+ * not a width. The px are printed rather than pinned, because they are one
+ * machine's `system-ui` fallback.
+ *
+ * The sweep is over every grow target in the content and not over the one
+ * this test happens to select, because "it fits at Deinonychus" is exactly
+ * what was true while it did not fit at nine of the other eleven.
+ */
+test("every HUD button's label fits its button, at every genus the content can grow into", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await openGame(page, 123);
+
+  const cell = { x: 1, y: 3 };
+  await page.mouse.click(paletteButtonCenter(0).x, paletteButtonCenter(0).y);
+  await page.mouse.click(cellCenter(cell.x, cell.y).x, cellCenter(cell.x, cell.y).y);
+  await waitAFrame(page);
+  await page.mouse.click(cellCenter(cell.x, cell.y).x, cellCenter(cell.x, cell.y).y);
+  await waitAFrame(page);
+
+  const labels = await hudLabels(page);
+  // The list and not its length, for the same reason as the test above: a
+  // button that stopped reporting its label would otherwise drop out of
+  // every assertion here silently.
+  expect(labels.map((l) => l.name)).toEqual(["Send", "Pause", "speed toggle", "Grow", "Sell"]);
+
+  const fits = (l: HudLabel) => {
+    const what = JSON.stringify(l.text);
+    expect(l.w, `${l.name}'s label ${what} is ${Math.round(l.w)}px in a ${l.box.w}px button`).toBeLessThanOrEqual(l.box.w);
+    expect(l.h, `${l.name}'s label ${what} is ${Math.round(l.h)}px tall in a ${l.box.h}px button`).toBeLessThanOrEqual(l.box.h);
+  };
+  for (const l of labels) fits(l);
+
+  // The client builds the shared string rather than one of its own. Without
+  // this, the sweep below would measure `growLabel`'s shape while the HUD
+  // drew something else — which is the failure mode `sheet.ts` already
+  // exists to prevent for the four sheet lines.
+  const placed = hatchlings[0] as (typeof hatchlings)[number];
+  expect(labels.find((l) => l.name === "Grow")?.text).toBe(growLabel(content.dinos[placed.growsTo as string]));
+
+  // Every genus a player can ever see on this button. `defId` is the one
+  // mutable field on a placed dinosaur, so pointing the selected one at
+  // each parent in turn drives `refreshHud` down its real path rather than
+  // setting the label text from the outside.
+  const parents = Object.values(content.dinos).filter((d) => d.growsTo);
+  expect(parents.length).toBe(12);
+  let widest: HudLabel | undefined;
+  for (const parent of parents) {
+    await page.evaluate((defId) => {
+      window.mazeosaurBoard!().sim.state.dinos[0]!.defId = defId;
+    }, parent.id);
+    await waitAFrame(page);
+    const grow = (await hudLabels(page)).find((l) => l.name === "Grow") as HudLabel;
+    const next = content.dinos[parent.growsTo as string] as (typeof content.dinos)[string];
+    expect(grow.text, `the Grow label for a ${parent.name}`).toBe(growLabel(next));
+    console.log(`Grow → ${next.name}: ${Math.round(grow.w)}px of ${grow.box.w}, ${grow.lines} lines`);
+    fits(grow);
+    // `ROW3_WRAP` turns an over-wide label into a wrapped one rather than a
+    // spilled one, so width alone stops being the whole question the moment
+    // it exists: four lines is 88px in an 82px button. Three is the shape
+    // `growLabel` writes, and the shape that fits.
+    expect(grow.lines, `the Grow label for a ${parent.name} wrapped: ${JSON.stringify(grow.text)}`).toBe(3);
+    if (!widest || grow.w > widest.w) widest = grow;
+  }
+  console.log(`widest Grow label: ${JSON.stringify(widest?.text)} at ${Math.round(widest?.w ?? 0)}px of ${ROW3.grow.w}, wrap ${ROW3_WRAP.grow}`);
+
   expect(errors.messages).toEqual([]);
 });

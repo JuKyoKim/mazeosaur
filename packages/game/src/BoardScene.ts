@@ -29,6 +29,7 @@ import {
   ROW2,
   ROW2_TEXT_WRAP,
   ROW3,
+  ROW3_WRAP,
   SELECT_BORDER,
   SELECT_LIFT,
   SHEET_COL_W,
@@ -40,7 +41,7 @@ import {
   rowAt,
 } from "./layout.js";
 import { MIGRATION_LABEL, migrationCounter } from "./row1.js";
-import { sheetLines } from "./sheet.js";
+import { growLabel, sheetLines } from "./sheet.js";
 import { COLORS, KIND_COLOR, text, wrapped } from "./theme.js";
 import { SfxBus } from "./audio.js";
 import { again, boardEntry, type BoardEntry } from "./entry.js";
@@ -1302,9 +1303,17 @@ export class BoardScene extends Phaser.Scene {
     });
   }
 
-  private button(x: number, y: number, w: number, h: number, label: string, onClick: () => void, size = 20): Button {
+  /**
+   * `wrap` is the width no line of the label may exceed, for the two
+   * buttons whose label is built out of content. A button label is centred,
+   * so an over-wide one does not clip and does not run off one edge — it
+   * spills out of both, which on row 3 is the sheet column on the left and
+   * Sell on the right. See `ROW3_WRAP`.
+   */
+  private button(x: number, y: number, w: number, h: number, label: string, onClick: () => void, size = 20, wrap?: number): Button {
     const bg = this.add.rectangle(x, y, w, h, COLORS.button).setOrigin(0, 0);
-    const t = this.add.text(x + w / 2, y + h / 2, label, text(size)).setOrigin(0.5);
+    const style = wrap === undefined ? text(size) : wrapped(size, wrap);
+    const t = this.add.text(x + w / 2, y + h / 2, label, style).setOrigin(0.5).setAlign("center");
     this.onTap(bg, onClick);
     return { bg, label: t };
   }
@@ -1475,8 +1484,13 @@ export class BoardScene extends Phaser.Scene {
     this.panelKind = this.add.text(ROW3.sheetKind.x, ROW3.sheetKind.y, "", wrapped(TYPE.label, SHEET_COL_W, COLORS.textDim));
     this.panelStats = this.add.text(ROW3.sheetStats.x, ROW3.sheetStats.y, "", wrapped(TYPE.body, SHEET_COL_W));
     this.panelExtras = this.add.text(ROW3.sheetExtras.x, ROW3.sheetExtras.y, "", wrapped(TYPE.label, SHEET_COL_W, COLORS.textDim));
-    this.growButton = this.button(ROW3.grow.x, ROW3.grow.y, ROW3.grow.w, ROW3.grow.h, "Grow", () => this.grow(), TYPE.label);
-    this.sellButton = this.button(ROW3.sell.x, ROW3.sell.y, ROW3.sell.w, ROW3.sell.h, "Sell", () => this.sell(), TYPE.label);
+    // Both wrap: their labels name a genus and a refund, both of which are
+    // content, and a centred label that outgrows its button lands on both
+    // of its neighbours rather than off one edge. See `ROW3_WRAP`.
+    const grow = () => this.grow();
+    const sell = () => this.sell();
+    this.growButton = this.button(ROW3.grow.x, ROW3.grow.y, ROW3.grow.w, ROW3.grow.h, "Grow", grow, TYPE.label, ROW3_WRAP.grow);
+    this.sellButton = this.button(ROW3.sell.x, ROW3.sell.y, ROW3.sell.w, ROW3.sell.h, "Sell", sell, TYPE.label, ROW3_WRAP.sell);
     this.sellButton.bg.setFillStyle(COLORS.buttonDanger);
   }
 
@@ -1585,9 +1599,9 @@ export class BoardScene extends Phaser.Scene {
         this.panelStats.setText(lines.stats);
         this.panelExtras.setText(lines.extras);
         const next = def.growsTo ? content.dinos[def.growsTo] : undefined;
-        this.growButton.label.setText(next ? `Grow → ${next.name}\n${next.cost} meat` : "Fully grown").setAlign("center");
+        this.growButton.label.setText(growLabel(next));
         this.growButton.label.setColor(next && s.meat >= next.cost ? COLORS.text : COLORS.textDim);
-        this.sellButton.label.setText(`Sell\n+${g.sellValue(d)}`).setAlign("center");
+        this.sellButton.label.setText(`Sell\n+${g.sellValue(d)}`);
       }
     }
   }
@@ -2370,6 +2384,44 @@ export class BoardScene extends Phaser.Scene {
       ...this.trayCards.map((c, i) => box(`kind card ${i}`, c.bg)),
       box("Grow", this.growButton.bg),
       box("Sell", this.sellButton.bg),
+    ];
+  }
+
+  /**
+   * The same five buttons as `hudTargets`, read from the other side: what
+   * the label on each one came to, against the box it has to fit in.
+   *
+   * `hudTargets` can only say the button is big enough for a finger, and it
+   * was green for the whole period in which Grow drew 202px of label in a
+   * 192px button — the box was right and the string was not. A centred
+   * label that outgrows its button does not clip and does not run off one
+   * edge: it spills out of both, which at the content's longest genus is
+   * 236px, 10px into the sheet column and 10px into Sell (ARB-296).
+   *
+   * `lines` is reported because fitting stops being the whole question the
+   * moment `ROW3_WRAP` exists: a label that has grown too wide now wraps
+   * instead of spilling, so it passes a width check and fails a height one.
+   * Three lines is 66px of Grow's 82; four is 88 and out of the button.
+   *
+   * This is the *current* label, so a spec that wants the widest value a
+   * content edit could produce has to drive the client to it — as
+   * `tests/client/hud-row1-widths.spec.ts` does for row 1.
+   */
+  get hudLabels(): { name: string; text: string; w: number; h: number; lines: number; box: { w: number; h: number } }[] {
+    const of = (name: string, b: Button) => ({
+      name,
+      text: b.label.text,
+      w: b.label.width,
+      h: b.label.height,
+      lines: b.label.getWrappedText(b.label.text).length,
+      box: { w: b.bg.displayWidth, h: b.bg.displayHeight },
+    });
+    return [
+      of("Send", this.sendButton),
+      of("Pause", this.pauseButton),
+      of("speed toggle", this.speedButton),
+      of("Grow", this.growButton),
+      of("Sell", this.sellButton),
     ];
   }
 

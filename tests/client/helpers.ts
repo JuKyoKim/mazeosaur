@@ -292,6 +292,19 @@ export function hudTargets(page: Page): Promise<{ name: string; x: number; y: nu
   return page.evaluate(() => window.mazeosaurBoard!().hudTargets);
 }
 
+/** One HUD button's label, as the renderer laid it out. */
+export type HudLabel = { name: string; text: string; w: number; h: number; lines: number; box: { w: number; h: number } };
+
+/**
+ * What each HUD button's label came to, against the box it has to fit in
+ * (`BoardScene.hudLabels`). The sibling of `hudTargets`: that one says the
+ * button is big enough for a finger, this one says the string is small
+ * enough for the button.
+ */
+export function hudLabels(page: Page): Promise<HudLabel[]> {
+  return page.evaluate(() => window.mazeosaurBoard!().hudLabels);
+}
+
 /**
  * Whether the fliers' air route is drawn, at which of its two strengths,
  * where its lights' blink has got to, and the segment it runs along
