@@ -7,8 +7,8 @@
 // run `art:check`; the same argument `doc-table.test.ts` makes for itself.
 
 import { describe, expect, it } from "vitest";
-import { contrastRatio } from "../raster.js";
-import { BOARD, KINDS } from "../directions.js";
+import { contrastRatio, rgb } from "../raster.js";
+import { BOARD, KINDS, KIND_HUE } from "../directions.js";
 import { EXEMPT, GATED, GRAPHICAL_FLOOR, gatedResults, graphicalFailures, staleExemptions, tightestPip } from "../graphical-pairs.js";
 
 describe("graphical pairs (WCAG 1.4.11, 3:1)", () => {
@@ -44,6 +44,47 @@ describe("graphical pairs (WCAG 1.4.11, 3:1)", () => {
   // empty reason is a pair somebody skipped rather than decided.
   it("every exemption says why", () => {
     for (const e of EXEMPT) expect(e.why.length, e.what).toBeGreaterThan(40);
+  });
+
+  // `GATED` has a length assertion above and `EXEMPT` had none, so a dropped
+  // exemption row passed every test in this file — which is how `selection` /
+  // each kind fill went missing between §3's seven rows and this file's six.
+  // Keyed on the labels rather than the count: a row swapped for a duplicate
+  // of another keeps the length and is still a pair nobody is measuring.
+  it("carries every exemption §3 writes down, not just the right number of them", () => {
+    expect(EXEMPT.map((e) => e.what)).toEqual([
+      "grid line / board",
+      "hp back / board",
+      "hp low / hp back",
+      "hp full / hp low",
+      "selection / armored fill",
+      "Send active / Send idle",
+      "button / HUD",
+    ]);
+  });
+
+  // The exempt rows are "deliberately under", so each one has to actually be
+  // under. `staleExemptions()` reports the same condition, but only
+  // `art:check` fails on its output; without this, a row that climbed over
+  // the floor is a CLI line nobody reads rather than a red test.
+  it("every exemption is under the floor it is exempt from", () => {
+    const over = EXEMPT.map((e) => ({ what: e.what, ratio: contrastRatio(e.fg, e.bg) }))
+      .filter((r) => r.ratio >= GRAPHICAL_FLOOR)
+      .map((r) => `${r.what} ${r.ratio.toFixed(2)}:1`);
+    expect(over.join("\n")).toBe("");
+  });
+
+  // §3 lists this row at its tightest kind, and the tightest against the art
+  // tool's palette is `armored`. If a palette edit makes another kind lower,
+  // the exempted row stops being the one that bounds the set — and the five
+  // kinds this row stands in for go unmeasured again.
+  it("the exempted selection pair is the tightest of the six kind fills", () => {
+    const ratios = KINDS.map((k) => ({ k, r: contrastRatio(BOARD.nest, rgb(KIND_HUE[k])) }));
+    const tightest = ratios.reduce((a, b) => (b.r < a.r ? b : a));
+    expect(tightest.k).toBe("armored");
+    const exempted = EXEMPT.find((e) => e.what === "selection / armored fill");
+    expect(exempted).toBeDefined();
+    expect(contrastRatio(exempted!.fg, exempted!.bg)).toBeCloseTo(tightest.r, 6);
   });
 
   // The pair closest to the floor, so a palette edit that eats the margin

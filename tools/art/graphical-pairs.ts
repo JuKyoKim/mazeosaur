@@ -105,6 +105,21 @@ export const EXEMPT: readonly (Pair & { readonly why: string })[] = [
     bg: BOARD.hpLow,
     why: "bar length is threat's first channel and hue its second (§3's second-channel table), so green-against-red is not carrying this alone.",
   },
+  // §3 writes this row as "`selection` / each kind fill, 1.86:1 at `raptor`",
+  // and 1.86 is a `KIND_COLOR` number — the client's palette, not the one this
+  // file measures. Against `KIND_HUE` the tightest is `armored` at 1.13:1 and
+  // `raptor` is 1.75:1; two of the six (`tyrant` 5.19, `horned` 4.94) clear the
+  // floor outright, so listing all six here would make `staleExemptions()`
+  // fire on a pair §3 deliberately exempts. One row at the tightest kind is
+  // the same discipline `tightestPip()` uses, and for the same reason: gate the
+  // number the art tool actually draws. Reconciling the two palettes is
+  // ARB-386's, not this file's.
+  {
+    what: "selection / armored fill",
+    fg: BOARD.nest,
+    bg: rgb(KIND_HUE.armored),
+    why: "the mark is a ring and a cell outline, delineated on its *outer* edge against `boardBg` at 11.94:1, and one adjacent side at 3:1 is what 1.4.11 asks for. Listed at the tightest of the six kind fills, as §3 lists it, so a palette edit that lowers the floor further fails here with the kind named.",
+  },
   {
     what: "Send active / Send idle",
     fg: BOARD.buttonActive,
